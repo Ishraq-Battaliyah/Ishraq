@@ -541,8 +541,87 @@ const Admin = (() => {
         return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${m.id}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/3 منجزة</small></button>`;
       }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
     </div>
+    ${bandsPanel()}
     ${sel ? mentorSessions(sel) : ''}`;
   };
+
+  /* ===== إطلاق الدفعة ونطاقات متابعة التعثر ===== */
+  function bandsPanel() {
+    const cohorts = Data.cohorts();
+    if (!cohorts.length) return '';
+    const cid = ui.sessCohort !== 'all' && Data.cohort(ui.sessCohort) ? ui.sessCohort : cohorts[cohorts.length - 1].id;
+    const c = Data.cohort(cid);
+    const L = Bands.launch(cid);
+    const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
+      ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span><button class="btn xs ghost" data-unlaunch="${cid}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button></div>` : ''}</div>
+      ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
+    if (!L) return `<div class="panel bands-panel">${head}
+      <div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
+      <p>عند الضغط على «إطلاق الدفعة» يبدأ حساب المدد: فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12. ويظهر للمرشدين شريط «تم إطلاق الدفعة رسمياً» وتُفتح لهم إضافة المواعيد.</p></div>
+      <button class="btn primary lg" data-launch="${cid}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div></div>`;
+    const mentors = Data.members('mentor', cid);
+    const now = Date.now();
+    const curWeek = Bands.weekOf(now, L.ts);
+    const rows = Bands.SESSIONS.map(n => {
+      const start = Bands.windowStart(L.ts, n);
+      const sts = mentors.map(m => ({ m, st: Bands.status(m, n, now) }));
+      const cols = Bands.LEVELS.map(lv => {
+        const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k);
+        return `<div class="band ${lv.cls}"><header><i class="fa-solid ${lv.icon}"></i><b>${lv.name}</b><small>${lv.period}</small><em>${inBand.length}</em></header>
+          <ul>${inBand.map(({ m, st }) => {
+            const last = lastReminder(m.id, n);
+            return `<li class="${st.added ? 'added' : 'waiting'}"><span class="bm-name" data-sess-mentor="${m.id}" title="عرض جلسات المرشد">${esc(m.name)}</span>
+              <small>${st.added ? `<i class="fa-solid fa-check"></i> أضاف ${fmtTs(st.at)}` : `<i class="fa-solid fa-hourglass-half"></i> لم يُضف — الأسبوع ${st.week}`}${last ? ` · <i class="fa-regular fa-bell"></i> ذُكّر ${fmtTs(last.ts)}` : ''}</small>
+              ${st.added ? '' : `<button class="btn xs ghost" data-remind="${m.id}" data-session="${n}"><i class="fa-solid fa-paper-plane"></i> تذكير</button>`}</li>`;
+          }).join('')}</ul></div>`;
+      }).join('');
+      const pending = sts.filter(x => x.st.notStarted).length;
+      return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4} · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}</small>
+        ${now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}</h3>
+        <div class="bands">${cols}</div></div>`;
+    }).join('');
+    return `<div class="panel bands-panel">${head}
+      <p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${curWeek}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع.</p>
+      ${mentors.length ? rows : emptyState('لا يوجد مرشدون في هذه الدفعة', 'fa-user-tie')}
+      <details class="band-legend"><summary><i class="fa-solid fa-circle-info"></i> مصفوفة المتابعة والإجراء المتبع</summary>
+        <ul>${Bands.LEVELS.map(lv => `<li class="${lv.cls}"><b>${lv.period}</b><span>${lv.rate}</span><em>${lv.name}</em><p>${lv.action}</p></li>`).join('')}</ul></details>
+    </div>`;
+  }
+
+  const lastReminder = (mid, n) => Data.notifications(mid).find(x => x.kind === 'reminder' && x.session === n);
+
+  function remindDialog(mid, n) {
+    const m = Data.member(mid);
+    const st = Bands.status(m, n);
+    if (!m || !st || !st.level) return;
+    const phone = m.whatsapp, email = m.email;
+    openModal({
+      title: `<i class="fa-solid fa-paper-plane"></i> تذكير ${esc(m.name)} — ${sessionName(n)}`, size: 'md',
+      body: `<div class="band-tag ${st.level.cls}"><i class="fa-solid ${st.level.icon}"></i> ${st.level.name} · الأسبوع ${st.week} من فترة الجلسة</div>
+        <p class="muted small">${st.level.action}</p>
+        <form><div class="field"><label>نص التذكير (يمكنك تعديله قبل الإرسال)</label><textarea name="text" rows="7">${esc(Bands.reminderText(m, st))}</textarea></div></form>
+        <div class="remind-share">
+          <button class="btn wa" data-rs="wa" ${phone ? '' : 'disabled title="لا يوجد رقم واتساب"'}><i class="fa-brands fa-whatsapp"></i> واتساب</button>
+          <button class="btn ghost" data-rs="mail" ${email ? '' : 'disabled title="لا يوجد بريد"'}><i class="fa-regular fa-envelope"></i> البريد الإلكتروني</button>
+        </div>`,
+      onOpen: api => api.body.addEventListener('click', e => {
+        const b = e.target.closest('[data-rs]'); if (!b) return;
+        const text = $('[name=text]', api.body).value.trim();
+        const url = b.dataset.rs === 'wa' ? waLink(phone, text) : `mailto:${email}?subject=${encodeURIComponent(`تذكير — ${sessionName(n)} | برنامج إشراق`)}&body=${encodeURIComponent(text)}`;
+        window.open(url, '_blank', 'noopener');
+      }),
+      actions: [
+        { label: '<i class="fa-solid fa-bell"></i> إرسال التنبيه في صفحة المرشد', cls: 'primary', onClick: mm => {
+          const text = $('[name=text]', mm.body).value.trim();
+          if (!text) { toast('اكتب نص التذكير', 'error'); return false; }
+          Data.notify(m.id, text, { icon: st.level.icon, kind: 'reminder', session: n, band: st.level.k, week: st.week });
+          Security.log('إرسال تذكير جلسة', m.name, `${sessionName(n)} — ${st.level.name}`);
+          toast('وصل التنبيه إلى صفحة المرشد');
+        } },
+        { label: 'إغلاق', cls: 'ghost' }
+      ]
+    });
+  }
 
   function statList(all, key) {
     const cat = key === 'hours' ? 'done' : key;
@@ -834,8 +913,8 @@ const Admin = (() => {
       <p>تُنقل بيانات التواصل إلى مسار خاص، وتُنشأ رموز دخول سرية جديدة لكل الأعضاء (مثل <span class="num">M211-7K4Q</span>). تُنزَّل نسخة احتياطية تلقائياً قبل البدء.</p>
       <button class="btn primary sm" data-migrate><i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ الترقية</button></div></div>`;
     const rulesV = Number(Store.get('meta/rulesVersion') || (Store.get('meta/rulesPublished') ? 2 : 0));
-    if (rulesV < Security.RULES_VERSION && Security.isOwner()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>${rulesV ? 'حدّث قواعد الحماية (نظام الصلاحيات)' : 'انشر قواعد الحماية الجديدة'}</b>
-      <p>${rulesV ? 'أُضيف نظام صلاحيات المشرفين، ويحتاج نسخة جديدة من القواعد.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
+    if (rulesV < Security.RULES_VERSION && Security.isOwner()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>${rulesV ? 'حدّث قواعد الحماية' : 'انشر قواعد الحماية الجديدة'}</b>
+      <p>${rulesV ? 'أُضيفت ميزات جديدة (صلاحيات المشرفين وإطلاق الدفعة) تحتاج نسخة جديدة من القواعد.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
       <button class="btn primary sm" data-show-rules><i class="fa-solid fa-copy"></i> عرض القواعد ونسخها</button>
       <button class="btn ghost sm" data-rules-done><i class="fa-solid fa-check"></i> نشرتها</button></div></div>`;
     return '';
@@ -1012,6 +1091,11 @@ const Admin = (() => {
       const fb = t.closest('[data-filter]'); if (fb) { ui[fb.dataset.filter] = fb.dataset.val; return render(root); }
       const st = t.closest('[data-stat]');
       if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+      const la = t.closest('[data-launch]');
+      if (la) return confirmDialog(`إطلاق «${esc(Data.cohort(la.dataset.launch)?.name || '')}» الآن؟ يبدأ من هذه اللحظة حساب مدد الجلسات، ويظهر للمرشدين شريط الإطلاق وتُفتح لهم إضافة المواعيد.`, { ok: 'إطلاق الدفعة' }).then(ok => { if (ok) { Bands.doLaunch(la.dataset.launch); toast('تم إطلاق الدفعة'); } });
+      const ul = t.closest('[data-unlaunch]');
+      if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
+      const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }
       const rm = t.closest('[data-rev-mentor]'); if (rm) { ui.revMentor = ui.revMentor === rm.dataset.revMentor ? null : rm.dataset.revMentor; return render(root); }

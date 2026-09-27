@@ -39,6 +39,8 @@ rules = {
     "events": {".read": True, **w(can('events'))},
     "featured": {".read": True, **w(can('reviews'))},
     "cohorts": {".read": True, **w(can('cohorts'))},
+    # إطلاق الدفعة: يبدأ منه حساب نطاقات متابعة الجلسات
+    "launches": {".read": True, **w(can('sessions'))},
     "meta": {
         ".read": True, **w(IS_FULL),
         "lastBackup": w(IS_ADMIN),

@@ -5,7 +5,7 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured'];
+const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches'];
 const memberPaths = id => [...PUBLIC_PATHS, 'network', 'slots', 'bookings', 'reviews', 'messages', `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`];
 const CONTACT_KEYS = ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram'];
 
@@ -20,7 +20,7 @@ const PERMISSIONS = [
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 3;
+const RULES_VERSION = 4;
 
 const Auth = {
   KEY: 'ishraq-auth',
@@ -444,7 +444,7 @@ const Security = (() => {
   return {
     secure, applyScope, restore, memberLogin, confirmMember, cancelMember, adminLogin, changeMyPassword,
     googleAdminLogin, finishGoogleAdmin, inviteAdmin, inviteKey, cancelInvite, setAdminPerms, removeAdmin, permsSummary,
-    isOwner, isFull, can, log, OWNERS, RULES_VERSION,
+    isOwner, isFull, can, log, adminName, OWNERS, RULES_VERSION,
     createMemberAccount, regenerateCode, deleteMemberAccount, addAdmin, needsMigration, migrate, setFeatured,
     newSecret, emailFor, normCode, authMsg, CONTACT_KEYS
   };

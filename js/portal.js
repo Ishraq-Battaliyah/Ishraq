@@ -17,6 +17,7 @@ const Portal = (() => {
     root.innerHTML = `<div class="dash member-portal ${kind}">
       ${topbar(kind, me)}
       <main class="container dash-main">
+        ${kind === 'mentor' ? mentorAlerts(me) : ''}
         <section class="dash-hello">
           <div>${avatar(me, 'lg')}</div>
           <div><small>${kind === 'mentor' ? 'لوحة تحكم المرشد' : 'لوحة تحكم المستفيد'} · ${esc(Data.cohort(me.cohort)?.name || '')}</small>
@@ -54,6 +55,28 @@ const Portal = (() => {
     </div></header>`;
   }
 
+  /* ===== تنبيهات المرشد: إطلاق الدفعة والتأخر في إضافة المواعيد وتذكيرات الإدارة ===== */
+  function mentorAlerts(me) {
+    if (!Bands.launchedAt(me.cohort)) return '';
+    const out = [];
+    Bands.SESSIONS.map(n => Bands.status(me, n)).forEach(st => {
+      if (!st || st.added || st.notStarted) return;
+      if (st.week === 1) {
+        out.push(`<div class="band-alert band-1"><i class="fa-solid fa-rocket"></i><div><b>${st.n === 1 ? 'تم إطلاق الدفعة رسمياً، سارع بتحديد مواعيد الجلسات' : `بدأت هذا الأسبوع فترة إضافة موعد ${sessionName(st.n)}`}</b>
+          <p>أضف موعد ${sessionName(st.n)} خلال هذا الأسبوع ليحجزه المستفيد.</p></div></div>`);
+      } else {
+        out.push(`<div class="band-alert ${st.level.cls}"><i class="fa-solid ${st.level.icon}"></i><div><b>${sessionName(st.n)} — الأسبوع ${st.week} من فترتها</b><p>${Bands.mentorAlertText(st)}</p></div>
+          <button class="btn sm" data-add-slot-alert="${st.n}"><i class="fa-solid fa-plus"></i> إضافة الموعد</button></div>`);
+      }
+    });
+    Data.notifications(me.id).filter(x => x.kind === 'reminder' && !x.dismissed && Bands.addedAt(me.id, x.session) == null).slice(0, 3).forEach(x => {
+      const lv = Bands.LEVELS[(x.band || 1) - 1] || Bands.LEVELS[0];
+      out.push(`<div class="band-alert ${lv.cls} from-admin"><i class="fa-solid fa-envelope-open-text"></i><div><b>تذكير من إدارة البرنامج — ${sessionName(x.session)}</b><p>${nl2br(x.text)}</p><small>${fmtTs(x.ts)}</small></div>
+        <button class="icon-btn" data-dismiss-rem="${x.id}" title="إخفاء"><i class="fa-solid fa-xmark"></i></button></div>`);
+    });
+    return out.length ? `<div class="band-alerts">${out.join('')}</div>` : '';
+  }
+
   function progressRing(done) {
     const p = Math.min(3, done) / 3;
     const c = 2 * Math.PI * 34;
@@ -63,6 +86,7 @@ const Portal = (() => {
 
   /* ===== المرشد: المواعيد ===== */
   function slotsPanel(me) {
+    const launched = !!Bands.launchedAt(me.cohort);
     const slots = Data.slots(me.id);
     const booked = new Set(Data.bookings({ mentorId: me.id }).filter(b => b.status !== 'absent_mentor' && b.status !== 'absent_mentee').map(b => b.slotId));
     const group = n => {
@@ -76,17 +100,18 @@ const Portal = (() => {
     };
     return `<section class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-calendar-plus"></i> المواعيد</h2>
-      <button class="btn primary" data-add-slot><i class="fa-solid fa-plus"></i> إضافة موعد جديد</button></div>
-      <p class="muted small">حدّد عدة مواعيد لكل جلسة ليختار المستفيد أحدها. يجب ألا يقل الفارق عن 3 أسابيع بين أول موعد مقترح لكل جلسة والجلسة التي تليها.</p>
+      <button class="btn primary" data-add-slot ${launched ? '' : 'disabled'}><i class="fa-solid fa-plus"></i> إضافة موعد جديد</button></div>
+      ${launched ? `<p class="muted small">حدّد عدة مواعيد لكل جلسة ليختار المستفيد أحدها. فترة إضافة موعد الجلسة الأولى الأسابيع 1-4 من إطلاق الدفعة، والثانية 5-8، والثالثة 9-12، ويُفضَّل إضافته في الأسبوع الأول من فترته.</p>`
+        : '<p class="slot-state locked"><i class="fa-solid fa-lock"></i> تُفتح إضافة المواعيد بعد إطلاق الدفعة رسمياً من إدارة البرنامج.</p>'}
       <div class="slot-groups">${[1, 2, 3].map(group).join('')}</div>
     </section>`;
   }
 
-  function openAddSlot(me) {
+  function openAddSlot(me, sessionNum = 1) {
     openModal({
       title: '<i class="fa-solid fa-calendar-plus"></i> إضافة موعد جديد', size: 'md',
       body: `<form class="form-grid">
-        ${fieldInput({ k: 'session', label: 'رقم الجلسة', type: 'select', required: true, options: ['الأولى', 'الثانية', 'الثالثة'] }, 'الأولى')}
+        ${fieldInput({ k: 'session', label: 'رقم الجلسة', type: 'select', required: true, options: ['الأولى', 'الثانية', 'الثالثة'] }, ['الأولى', 'الثانية', 'الثالثة'][sessionNum - 1] || 'الأولى')}
         <div class="field"><label>التاريخ <em>*</em></label><input type="date" name="date" min="${todayISO()}" required></div>
         <div class="field"><label>بداية الجلسة (24 ساعة)</label>${timeSelect('start', '18:00')}</div>
         <div class="field"><label>نهاية الجلسة (24 ساعة)</label>${timeSelect('end', '19:00')}</div>
@@ -104,13 +129,8 @@ const Portal = (() => {
             if (minutesBetween(start, end) <= 0) { toast('وقت النهاية يجب أن يكون بعد وقت البداية', 'error'); return false; }
             const slots = Data.slots(me.id).concat([{ session, date: v.date }]);
             const first = n => slots.filter(s => s.session === n).map(s => s.date).sort()[0];
+            if (!Bands.launchedAt(me.cohort)) { toast('تُفتح إضافة المواعيد بعد إطلاق الدفعة', 'error'); return false; }
             if (session > 1 && !first(session - 1)) { toast(`أضف مواعيد ${sessionName(session - 1)} أولاً`, 'error'); return false; }
-            for (const n of [2, 3]) {
-              if (first(n) && first(n - 1) && daysBetween(first(n - 1), first(n)) < 21) {
-                toast(`يجب ألا يقل الفارق بين أول موعد لـ${sessionName(n - 1)} وأول موعد لـ${sessionName(n)} عن 3 أسابيع`, 'error');
-                return false;
-              }
-            }
             Store.push('slots', { mentorId: me.id, session, date: v.date, start, end, mode: v.mode, summary: v.summary, ts: Date.now() });
             const mentee = Data.menteeOf(me.id);
             mentee && Data.notify(mentee.id, `أضاف مرشدك موعداً جديداً لـ${sessionName(session)}: ${fmtDate(v.date)} ${start}`, { icon: 'fa-calendar-plus' });
@@ -425,6 +445,8 @@ const Portal = (() => {
     $('[data-edit-me]', root)?.addEventListener('click', () => editProfile(me));
     $('[data-download-card]', root)?.addEventListener('click', () => CardImage.download(Data.member(me.id)));
     $('[data-add-slot]', root)?.addEventListener('click', () => openAddSlot(me));
+    $$('[data-add-slot-alert]', root).forEach(b => b.onclick = () => openAddSlot(me, +b.dataset.addSlotAlert));
+    $$('[data-dismiss-rem]', root).forEach(b => b.onclick = () => Store.update(`notifications/${me.id}/${b.dataset.dismissRem}`, { dismissed: true, read: true }));
     $$('[data-del-slot]', root).forEach(b => b.onclick = async () => {
       if (await confirmDialog('حذف هذا الموعد؟', { danger: true, ok: 'حذف' })) Store.remove(`slots/${b.dataset.delSlot}`);
     });
