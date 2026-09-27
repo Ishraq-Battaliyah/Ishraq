@@ -98,6 +98,9 @@ input, textarea { font-family: var(--f-body); }
 .pill.st-done { background: var(--ok); color: #fff; }
 .pill.st-absent-mentor { background: var(--bad); color: #fff; }
 .pill.st-absent-mentee { background: var(--orange); color: #fff; }
+.pill.st-await { background: var(--p-l); color: var(--p-d); box-shadow: inset 0 0 0 1.5px var(--p); }
+.pill.st-await.mine { background: var(--p); color: #fff; }
+.pill.st-overdue { background: #6B7280; color: #fff; }
 .code-chip { display: inline-flex; gap: .4em; align-items: center; direction: ltr; font-family: var(--f-ui); font-weight: 700; letter-spacing: .06em; background: var(--p-dd); color: #fff; padding: .2em .75em; border-radius: 8px; font-size: .85rem; }
 .count { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--p-l); color: var(--p-d); font-size: .8rem; font-weight: 700; vertical-align: middle; margin-inline-start: .3em; }
 
@@ -497,6 +500,12 @@ legend { padding: 0 8px; font-weight: 700; font-family: var(--f-ui); color: var(
 .stat-box.st-absent-mentor b { color: var(--bad); }
 .stat-box.st-absent-mentee { background: var(--orange-l); border-color: #F2CDB0; }
 .stat-box.st-absent-mentee b { color: var(--orange); }
+.stat-box.st-pending { background: #F1F2F5; border-color: #D5D8DF; }
+.stat-box.st-pending b { color: #4B5563; }
+button.stat-box { font: inherit; text-align: start; cursor: pointer; transition: .2s; }
+button.stat-box:hover { transform: translateY(-2px); box-shadow: var(--sh); }
+.stat-box.active { border-color: var(--p-d); box-shadow: 0 0 0 3px var(--p), var(--sh); transform: translateY(-2px); }
+.stat-list { margin: 10px 0 18px; animation: rise .3s both; }
 .stat-box.st-hours { background: var(--p-l); border-color: #D8D1F0; }
 .stat-box.st-hours b { color: var(--p-d); }
 .icon-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }

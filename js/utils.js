@@ -305,9 +305,19 @@ const STATUS = {
   upcoming: { label: 'قادمة', cls: 'st-upcoming' },
   done: { label: 'منجزة', cls: 'st-done' },
   absent_mentor: { label: 'ملغاة لغياب المرشد', cls: 'st-absent-mentor' },
-  absent_mentee: { label: 'ملغاة لغياب المستفيد', cls: 'st-absent-mentee' }
+  absent_mentee: { label: 'ملغاة لغياب المستفيد', cls: 'st-absent-mentee' },
+  // حالات معروضة (لا تُحفظ): تأكيد الإنجاز من طرف واحد، وجلسة انقضى وقتها دون تحديث
+  await_mentor: { label: 'بانتظار تأكيد المرشد', cls: 'st-await' },
+  await_mentee: { label: 'بانتظار تأكيد المستفيد', cls: 'st-await' },
+  overdue: { label: 'انقضاء الوقت', cls: 'st-overdue' }
 };
 const statusPill = s => `<span class="pill ${STATUS[s]?.cls || ''}">${STATUS[s]?.label || s}</span>`;
+// شارة حالة الحجز كما يراها المرشد أو المستفيد أو الإدارة
+function bookingPill(b, viewer) {
+  const ds = Data.displayStatus(b);
+  if (viewer && ds === `await_${viewer}`) return `<span class="pill st-await mine">بانتظار تأكيدك</span>`;
+  return statusPill(ds);
+}
 const MODES = { inperson: 'حضوري', online: 'إلكتروني', both: 'حضوري أو إلكتروني' };
 const sessionName = n => `الجلسة ${ORDINALS[n - 1] || n}`;
 
@@ -340,9 +350,22 @@ const Data = {
     .sort((a, b) => a.session - b.session || (a.date + a.start).localeCompare(b.date + b.start)),
   reviews: filter => Store.list('reviews').filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))
     .sort((a, b) => (a.session || 9) - (b.session || 9) || a.ts - b.ts),
+  // الحالة المعروضة: المنجزة تحتاج تأكيد الطرفين، والقادمة التي انتهى وقتها تصبح «انقضاء الوقت»
+  displayStatus(b) {
+    if (b.status !== 'upcoming') return b.status;
+    if (b.doneByMentor && !b.doneByMentee) return 'await_mentee';
+    if (b.doneByMentee && !b.doneByMentor) return 'await_mentor';
+    if (Date.now() > dateTimeOf(b.date, b.end).getTime()) return 'overdue';
+    return 'upcoming';
+  },
+  // تصنيف الإحصاءات: كل ما انقضى وقته ولم يُحسم يدخل في «بانتظار التحديث»
+  category(b) {
+    const ds = Data.displayStatus(b);
+    return ['overdue', 'await_mentor', 'await_mentee'].includes(ds) ? 'pending' : ds;
+  },
   stats(bookings) {
-    const s = { total: bookings.length, upcoming: 0, done: 0, absent_mentor: 0, absent_mentee: 0, minutes: 0 };
-    bookings.forEach(b => { s[b.status] = (s[b.status] || 0) + 1; if (b.status === 'done') s.minutes += minutesBetween(b.start, b.end); });
+    const s = { total: bookings.length, upcoming: 0, pending: 0, done: 0, absent_mentor: 0, absent_mentee: 0, minutes: 0 };
+    bookings.forEach(b => { const c = Data.category(b); s[c] = (s[c] || 0) + 1; if (c === 'done') s.minutes += minutesBetween(b.start, b.end); });
     s.hours = Math.round(s.minutes / 6) / 10;
     return s;
   },
@@ -385,15 +408,22 @@ const Data = {
   }
 };
 
-function statsBoxes(s, withHours = false) {
-  const box = (v, l, cls, icon) => `<div class="stat-box ${cls}"><i class="fa-solid ${icon}"></i><b>${v}</b><span>${l}</span></div>`;
+const STAT_LABELS = {
+  total: 'إجمالي الجلسات', upcoming: 'الجلسات القادمة', pending: 'بانتظار التحديث', done: 'الجلسات المنجزة',
+  absent_mentor: 'ملغاة لغياب المرشد', absent_mentee: 'ملغاة لغياب المستفيد', hours: 'ساعات إرشادية منجزة'
+};
+// clickable: تجعل المربعات قابلة للضغط لعرض الجلسات المندرجة تحتها
+function statsBoxes(s, withHours = false, { clickable = false, active = null } = {}) {
+  const box = (key, cls, icon) => `<${clickable ? 'button type="button"' : 'div'} class="stat-box ${cls} ${active === key ? 'active' : ''}" ${clickable ? `data-stat="${key}"` : ''}>
+    <i class="fa-solid ${icon}"></i><b>${s[key]}</b><span>${STAT_LABELS[key]}</span></${clickable ? 'button' : 'div'}>`;
   return `<div class="stat-boxes">
-    ${box(s.total, 'إجمالي الجلسات', 'st-total', 'fa-layer-group')}
-    ${box(s.upcoming, 'الجلسات القادمة', 'st-upcoming', 'fa-hourglass-half')}
-    ${box(s.done, 'الجلسات المنجزة', 'st-done', 'fa-circle-check')}
-    ${box(s.absent_mentor, 'ملغاة لغياب المرشد', 'st-absent-mentor', 'fa-user-slash')}
-    ${box(s.absent_mentee, 'ملغاة لغياب المستفيد', 'st-absent-mentee', 'fa-user-xmark')}
-    ${withHours ? box(s.hours, 'ساعات إرشادية منجزة', 'st-hours', 'fa-clock') : ''}
+    ${box('total', 'st-total', 'fa-layer-group')}
+    ${box('upcoming', 'st-upcoming', 'fa-hourglass-half')}
+    ${box('pending', 'st-pending', 'fa-hourglass-end')}
+    ${box('done', 'st-done', 'fa-circle-check')}
+    ${box('absent_mentor', 'st-absent-mentor', 'fa-user-slash')}
+    ${box('absent_mentee', 'st-absent-mentee', 'fa-user-xmark')}
+    ${withHours ? box('hours', 'st-hours', 'fa-clock') : ''}
   </div>`;
 }
 

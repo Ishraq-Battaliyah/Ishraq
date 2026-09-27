@@ -10,7 +10,7 @@ const Admin = (() => {
     { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' }
   ];
-  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
+  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
 
   function render(root) {
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
@@ -455,7 +455,8 @@ const Admin = (() => {
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
       ${cohortFilter('sessCohort')}
-      ${statsBoxes(Data.stats(all), true)}
+      ${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
+      ${ui.sessStat ? statList(all, ui.sessStat) : '<p class="muted small"><i class="fa-solid fa-hand-pointer"></i> اضغط على أي مربع لعرض الجلسات المندرجة تحته.</p>'}
       <h3 class="sub">المرشدون</h3>
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
         const st = Data.stats(Data.bookings({ mentorId: m.id }));
@@ -464,6 +465,19 @@ const Admin = (() => {
     </div>
     ${sel ? mentorSessions(sel) : ''}`;
   };
+
+  function statList(all, key) {
+    const cat = key === 'hours' ? 'done' : key;
+    const list = key === 'total' ? all : all.filter(b => Data.category(b) === cat);
+    const sorted = list.slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    return `<div class="stat-list" id="stat-list">
+      <h3 class="sub"><i class="fa-solid fa-list"></i> ${STAT_LABELS[key]} <span class="count">${list.length}</span></h3>
+      ${sorted.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>المستفيد</th><th>الجلسة</th><th>التاريخ</th><th>الوقت</th><th>الحالة</th></tr></thead><tbody>
+        ${sorted.map(b => `<tr><td data-l="المرشد">${esc(Data.member(b.mentorId)?.name || '—')}</td><td data-l="المستفيد">${esc(Data.member(b.menteeId)?.name || '—')}</td>
+          <td data-l="الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
+      </tbody></table></div>` : emptyState('لا توجد جلسات في هذا التصنيف', 'fa-calendar')}
+    </div>`;
+  }
 
   function mentorSessions(m) {
     const mentee = Data.menteeOf(m.id);
@@ -477,7 +491,7 @@ const Admin = (() => {
       </tbody></table></div>` : '<p class="muted small">لم يعلن المرشد أي مواعيد بعد.</p>'}
       <h3 class="sub"><i class="fa-solid fa-list-check"></i> تحديثات الجلسات</h3>
       ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th></tr></thead><tbody>
-        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${statusPill(b.status)}</td></tr>`).join('')}
+        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يتم حجز أي جلسة بعد.</p>'}
       ${statsBoxes(Data.stats(bks), true)}
     </div>`;
@@ -620,7 +634,7 @@ const Admin = (() => {
     const memberRow = m => [m.code, m.name, m.tagline, Data.cohort(m.cohort)?.name, m.areas, m.whatsapp, m.email, m.linkedin, m.website, m.bio];
     const memberHead = ['رقم العضوية', 'الاسم', 'السطر التعريفي', 'الدفعة', 'المجالات', 'واتساب', 'الإيميل', 'لينكدإن', 'الموقع', 'النبذة'];
     const bookingHead = ['المرشد', 'المستفيد', 'الجلسة', 'التاريخ', 'الوقت', 'النوع', 'الحالة'];
-    const bookingRow = x => [Data.member(x.mentorId)?.name, Data.member(x.menteeId)?.name, sessionName(x.session), fmtDate(x.date), `${x.start} - ${x.end}`, MODES[x.mode], STATUS[x.status]?.label];
+    const bookingRow = x => [Data.member(x.mentorId)?.name, Data.member(x.menteeId)?.name, sessionName(x.session), fmtDate(x.date), `${x.start} - ${x.end}`, MODES[x.mode], STATUS[Data.displayStatus(x)]?.label];
     const reviewHead = ['النوع', 'من', 'الكاتب', 'عن', 'الجلسة', 'التقييم', 'التوصية / المستفاد', 'الحالة', 'التاريخ'];
     const reviewRow = r => [r.type === 'program' ? 'تقييم البرنامج' : r.type === 'final' ? 'ختامي' : 'جلسة', r.from === 'mentor' ? 'مرشد' : 'مستفيد',
       Data.member(r.authorId)?.name || r.authorName, r.type === 'program' ? 'البرنامج' : Data.member(r.targetId)?.name, r.session ? sessionName(r.session) : '', r.text, r.extra || '',
@@ -718,6 +732,8 @@ const Admin = (() => {
       }
       // الجلسات والتقييمات
       const fb = t.closest('[data-filter]'); if (fb) { ui[fb.dataset.filter] = fb.dataset.val; return render(root); }
+      const st = t.closest('[data-stat]');
+      if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }
       const rm = t.closest('[data-rev-mentor]'); if (rm) { ui.revMentor = ui.revMentor === rm.dataset.revMentor ? null : rm.dataset.revMentor; return render(root); }

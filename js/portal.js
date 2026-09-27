@@ -127,7 +127,7 @@ const Portal = (() => {
       const active = Data.activeBooking(me.id, n);
       const prevDone = n === 1 || Data.bookings({ menteeId: me.id }).some(b => b.session === n - 1 && b.status === 'done');
       let inner;
-      if (active) inner = `<div class="slot-state">${statusPill(active.status === 'done' ? 'done' : 'upcoming')} <span>${fmtSlot(active)}</span></div>`;
+      if (active) inner = `<div class="slot-state">${bookingPill(active, 'mentee')} <span>${fmtSlot(active)}</span></div>`;
       else if (!prevDone) inner = `<div class="slot-state locked"><i class="fa-solid fa-lock"></i> يُتاح الحجز بعد إنجاز ${sessionName(n - 1)}</div>`;
       else {
         const list = slots.filter(s => s.session === n && !taken.has(s.id) && dateTimeOf(s.date, s.start) > new Date());
@@ -178,13 +178,18 @@ const Portal = (() => {
       const due = isDue(b);
       let actions = '';
       if (b.status === 'upcoming') {
+        const dis = due ? '' : 'disabled title="يتفعل عند حلول موعد الجلسة"';
+        const confirmedByMe = kind === 'mentor' ? b.doneByMentor : b.doneByMentee;
+        const anyConfirmed = b.doneByMentor || b.doneByMentee;
+        const doneBtn = confirmedByMe ? '' : `<button class="btn xs success" data-bk="done" data-id="${b.id}" ${dis}><i class="fa-solid fa-check"></i> تم إنجاز الجلسة</button>`;
         if (kind === 'mentor') {
-          actions = `<button class="btn xs success" data-bk="done" data-id="${b.id}" ${due ? '' : 'disabled title="يتفعل عند حلول موعد الجلسة"'}><i class="fa-solid fa-check"></i> منجزة</button>
-            <button class="btn xs warn" data-bk="absent_mentee" data-id="${b.id}" ${due ? '' : 'disabled title="يتفعل عند حلول موعد الجلسة"'}><i class="fa-solid fa-user-xmark"></i> ملغاة لغياب المستفيد</button>
-            <button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-clock-rotate-left"></i> تغيير الموعد</button>`;
+          actions = `${doneBtn}
+            <button class="btn xs warn" data-bk="absent_mentee" data-id="${b.id}" ${dis}><i class="fa-solid fa-user-xmark"></i> ملغاة لغياب المستفيد</button>
+            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-clock-rotate-left"></i> تغيير الموعد</button>`}`;
         } else {
-          actions = `<button class="btn xs danger" data-bk="absent_mentor" data-id="${b.id}" ${due ? '' : 'disabled title="يتفعل عند حلول موعد الجلسة"'}><i class="fa-solid fa-user-slash"></i> ملغاة لغياب المرشد</button>
-            <button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-pen"></i> تعديل الحجز</button>`;
+          actions = `${doneBtn}
+            <button class="btn xs danger" data-bk="absent_mentor" data-id="${b.id}" ${dis}><i class="fa-solid fa-user-slash"></i> ملغاة لغياب المرشد</button>
+            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-pen"></i> تعديل الحجز</button>`}`;
         }
         if (b.changedBy === kind && other?.whatsapp) {
           actions += `<a class="btn xs wa" href="${esc(waLink(other.whatsapp, rescheduleText(kind, b)))}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> إشعار ${kind === 'mentor' ? 'المستفيد' : 'المرشد'}</a>`;
@@ -195,7 +200,7 @@ const Portal = (() => {
         <td data-l="الموعد">${fmtDate(b.date)}<br><small>${tRange(b.start, b.end)}</small>${b.changedBy ? `<br><small class="muted"><i class="fa-solid fa-rotate"></i> عُدّل الموعد</small>` : ''}</td>
         <td data-l="النوع">${MODES[b.mode] || ''}</td>
         <td data-l="المحتوى">${esc(b.summary || '—')}</td>
-        <td data-l="الحالة">${statusPill(b.status)}</td>
+        <td data-l="الحالة">${bookingPill(b, kind)}</td>
         <td data-l="" class="row-actions">${actions}</td>
       </tr>`;
     }).join('');
@@ -216,13 +221,35 @@ const Portal = (() => {
     const b = Store.get(`bookings/${id}`);
     if (!b) return;
     if (act === 'resched') return openReschedule(kind, me, other, b);
+    if (!isDue(b) || b.status !== 'upcoming') return;
+    const otherRole = kind === 'mentor' ? 'المستفيد' : 'المرشد';
+    const myRole = kind === 'mentor' ? 'المرشد' : 'المستفيد';
+    if (act === 'done') {
+      // الإنجاز يحتاج تأكيد الطرفين
+      if (!(await confirmDialog(`تأكيد إنجاز ${sessionName(b.session)}؟ ${b.doneByMentor || b.doneByMentee ? '' : `ستُحتسب منجزة بعد تأكيد ${otherRole} أيضاً.`}`))) return;
+      const cur = Store.get(`bookings/${id}`) || b;
+      const upd = { [kind === 'mentor' ? 'doneByMentor' : 'doneByMentee']: Date.now() };
+      const otherConfirmed = kind === 'mentor' ? cur.doneByMentee : cur.doneByMentor;
+      if (otherConfirmed) {
+        Object.assign(upd, { status: 'done', statusTs: Date.now(), statusBy: 'both' });
+        Store.update(`bookings/${id}`, upd);
+        const txt = `تم إنجاز ${sessionName(b.session)} بتأكيد الطرفين: ${kind === 'mentor' ? me.name : other?.name || ''} و${kind === 'mentor' ? other?.name || '' : me.name}`;
+        Data.notify('admin', txt, { icon: 'fa-circle-check' });
+        other && Data.notify(other.id, txt, { icon: 'fa-circle-check' });
+        toast('تم تأكيد الطرفين — الجلسة منجزة');
+      } else {
+        Store.update(`bookings/${id}`, upd);
+        other && Data.notify(other.id, `أكّد ${myRole} ${me.name} إنجاز ${sessionName(b.session)}، فضلاً أكّد الإنجاز من صفحتك`, { icon: 'fa-circle-check' });
+        toast(`تم تسجيل تأكيدك — بانتظار تأكيد ${otherRole}`);
+      }
+      return;
+    }
     const msgs = {
-      done: ['تأكيد إنجاز الجلسة وحضور المستفيد؟', `تم إنجاز ${sessionName(b.session)} بين ${me.name} و${other?.name || ''}`, 'fa-circle-check'],
       absent_mentee: ['تأكيد إلغاء الجلسة لغياب المستفيد؟', `أُلغيت ${sessionName(b.session)} لغياب المستفيد ${other?.name || ''}`, 'fa-user-xmark'],
       absent_mentor: ['تأكيد إلغاء الجلسة لغياب المرشد؟', `أُلغيت ${sessionName(b.session)} لغياب المرشد ${other?.name || ''}`, 'fa-user-slash']
     };
-    if (!msgs[act] || !isDue(b)) return;
-    if (!(await confirmDialog(msgs[act][0], { danger: act !== 'done' }))) return;
+    if (!msgs[act]) return;
+    if (!(await confirmDialog(msgs[act][0], { danger: true }))) return;
     Store.update(`bookings/${id}`, { status: act, statusTs: Date.now(), statusBy: kind });
     Data.notify('admin', msgs[act][1], { icon: msgs[act][2] });
     other && Data.notify(other.id, msgs[act][1], { icon: msgs[act][2] });
