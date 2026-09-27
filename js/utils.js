@@ -126,7 +126,11 @@ function memberCard(m, opts = {}) {
     <header class="mc-head">
       <img class="mc-logo" src="assets/ishraq-logo-white.png" alt="إشراق">
       <div class="mc-meta">
-        ${opts.showCode !== false ? `<span class="code-chip" title="رقم العضوية">${esc(m.code)}</span>` : ''}
+        ${opts.showCode !== false && !opts.secret ? `<span class="code-chip" title="رقم العضوية">${esc(m.code)}</span>` : ''}
+        ${opts.secret ? `<span class="code-chip secret-code" data-secret="${esc(opts.secret)}" title="رمز الدخول (لا يظهر إلا للإدارة)">
+          <span class="sv">${esc(m.code)}-••••</span>
+          <button type="button" class="chip-btn" data-reveal-code title="إظهار / إخفاء"><i class="fa-solid fa-eye"></i></button>
+          <button type="button" class="chip-btn" data-copy-code title="نسخ الرمز"><i class="fa-solid fa-copy"></i></button></span>` : ''}
         <span class="role-chip">${m.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span>
       </div>
     </header>
@@ -470,4 +474,19 @@ function openNotifications(to) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-bell]');
   if (b) openNotifications(b.dataset.bell);
+});
+
+/* رمز الدخول في بطاقات لوحة الإدارة: مخفي افتراضياً مع إظهار ونسخ */
+document.addEventListener('click', async e => {
+  const chip = e.target.closest('.secret-code');
+  if (!chip) return;
+  const code = chip.dataset.secret;
+  if (e.target.closest('[data-reveal-code]')) {
+    const shown = chip.classList.toggle('shown');
+    $('.sv', chip).textContent = shown ? code : code.replace(/-.*/, '-••••');
+    $('[data-reveal-code] i', chip).className = `fa-solid ${shown ? 'fa-eye-slash' : 'fa-eye'}`;
+  }
+  if (e.target.closest('[data-copy-code]')) {
+    try { await navigator.clipboard.writeText(code); toast('تم نسخ رمز الدخول'); } catch { toast('تعذّر النسخ — أظهر الرمز وانسخه يدوياً', 'error'); }
+  }
 });

@@ -450,6 +450,10 @@ input, textarea { font-family: var(--f-body); }
 .mc-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
 .mc-head .code-chip { background: transparent; border: 1.5px solid rgba(255,255,255,.85); color: #fff; }
 .mc-head .role-chip { background: transparent; border: 1.5px solid rgba(255,255,255,.85); }
+.mc-head .secret-code { gap: 2px; padding: .15em .3em .15em .55em; background: rgba(0,0,0,.18); border-style: dashed; }
+.mc-head .secret-code.shown { background: rgba(0,0,0,.3); border-style: solid; }
+.chip-btn { border: 0; background: transparent; color: #fff; cursor: pointer; padding: 0 .3em; font-size: .78rem; opacity: .85; }
+.chip-btn:hover { opacity: 1; }
 .role-chip { color: #fff; font-size: .78rem; font-weight: 700; background: rgba(0,0,0,.15); padding: .15em .75em; border-radius: 999px; }
 .mc-body { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 20px 20px; margin-top: -58px; flex: 1; }
 .mc-body .avatar.xl { box-shadow: 0 0 0 5px #fff, 0 10px 24px -8px rgba(46,37,99,.45); }

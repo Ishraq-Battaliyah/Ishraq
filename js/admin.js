@@ -334,7 +334,7 @@ const Admin = (() => {
       </label>
       <div class="card-grid">
         <button class="add-card" data-add-member="${role}"><i class="fa-solid fa-plus"></i><span>إضافة ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد</span></button>
-        ${list.map(m => memberCard(m, { actions: `<button class="btn xs send-cred" data-send-cred="${m.id}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button><button class="btn xs ghost" data-edit-member="${m.id}"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn xs ghost" data-regen="${m.id}" title="توليد رمز دخول جديد"><i class="fa-solid fa-key"></i> رمز جديد</button><button class="btn xs ghost danger" data-del-member="${m.id}"><i class="fa-solid fa-trash"></i> حذف</button>` })).join('')}
+        ${list.map(m => memberCard(m, { secret: Store.get(`secrets/codes/${m.id}`), actions: `<button class="btn xs send-cred" data-send-cred="${m.id}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button><button class="btn xs ghost" data-edit-member="${m.id}"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn xs ghost" data-regen="${m.id}" title="توليد رمز دخول جديد"><i class="fa-solid fa-key"></i> رمز جديد</button><button class="btn xs ghost danger" data-del-member="${m.id}"><i class="fa-solid fa-trash"></i> حذف</button>` })).join('')}
       </div>
     </div>`;
   }

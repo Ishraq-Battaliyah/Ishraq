@@ -94,6 +94,11 @@ const Store = (() => {
       if (connected) everConnected = true;
       notify();
     });
+    if (CFG.firebase.apiKey && !window.firebase.auth) {
+      // لا نرجع للدخول القديم إذا تعذّر تحميل مكتبة تسجيل الدخول
+      bootMsg('تعذّر تحميل مكتبة تسجيل الدخول.<br><button class="btn primary sm" onclick="location.reload()">إعادة المحاولة</button>');
+      await new Promise(() => {});
+    }
     if (window.firebase.auth && CFG.firebase.apiKey) {
       authApi = app.auth();
       if (CFG.emulators?.auth) authApi.useEmulator(CFG.emulators.auth, { disableWarnings: true });
