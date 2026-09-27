@@ -553,6 +553,11 @@ h3.sub { font-size: 1.05rem; color: var(--ink-2); margin: 20px 0 12px; display: 
 .admin-list li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #FDFCFF; flex-wrap: wrap; }
 .admin-list li > div { flex: 1; min-width: 160px; }
 .admin-list b { font-family: var(--f-display); color: var(--p-dd); }
+.admin-list li.invite { border-style: dashed; background: #fff; }
+.or-sep { display: flex; align-items: center; gap: 10px; margin: 16px 0 12px; color: var(--muted); font-family: var(--f-ui); font-size: .85rem; }
+.or-sep::before, .or-sep::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.google-btn { width: 100%; background: #fff; border-color: var(--line); color: var(--ink); }
+.google-btn svg { flex: 0 0 auto; }
 .admin-list small[dir=ltr] { display: block; color: var(--muted); text-align: right; }
 
 /* ترتيب الأقسام */

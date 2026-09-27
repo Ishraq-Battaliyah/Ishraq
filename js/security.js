@@ -78,6 +78,10 @@ const Security = (() => {
     let session = null;
     if (user) {
       session = await roleFor(user.uid);
+      const viaGoogle = (user.providerData || []).some(p => p.providerId === 'google.com');
+      if (!session && viaGoogle) {
+        try { session = (await finishGoogleAdmin()).session; location.hash = '#/admin'; } catch (e) { setTimeout(() => window.toast && toast(e.message, 'error'), 800); }
+      }
       if (!session) await Store.auth.signOut().catch(() => {});
     }
     Auth.set(session);
@@ -150,6 +154,55 @@ const Security = (() => {
       console.warn(e);
       return false;
     }
+  }
+
+  /* ===== دخول الإدارة بحساب Google (بدعوة مسبقة) ===== */
+  // مفتاح الدعوة: البريد بأحرف صغيرة مع استبدال النقاط بفواصل (النقطة غير مسموحة في مفاتيح القاعدة)
+  const inviteKey = email => String(email || '').trim().toLowerCase().replace(/\./g, ',');
+  const googleProvider = () => { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
+
+  async function googleAdminLogin() {
+    if (!secure()) throw new Error('الدخول بحساب Google يتطلب الوضع الآمن');
+    try { await Store.auth.signInWithPopup(googleProvider()); }
+    catch (e) {
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+        await Store.auth.signInWithRedirect(googleProvider());
+        return new Promise(() => {}); // تنتقل الصفحة إلى Google ثم تعود
+      }
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') throw new Error('أُغلقت نافذة Google قبل إكمال الدخول');
+      if (e.code === 'auth/unauthorized-domain') throw new Error('نطاق الموقع غير مضاف في Firebase ← Authentication ← Settings ← Authorized domains');
+      throw new Error(authMsg(e));
+    }
+    return finishGoogleAdmin();
+  }
+
+  // بعد الدخول بـ Google: مشرف موجود، أو دعوة تُفعَّل، أو أول مشرف
+  async function finishGoogleAdmin() {
+    const user = Store.auth.currentUser;
+    let s = await roleFor(user.uid);
+    if (s?.kind === 'admin') { Auth.set(s); await applyScope(s); return { session: s }; }
+    if (s) { await Store.auth.signOut(); throw new Error('هذا الحساب مرتبط بعضوية وليس بالإدارة'); }
+    const root = firebase.app().database().ref(window.ISHRAQ_CONFIG.dbRoot || 'ishraq');
+    try {
+      await root.child(`admins/${user.uid}`).set({ email: user.email, name: user.displayName || '', addedAt: Date.now(), via: 'google' });
+      s = { kind: 'admin', uid: user.uid };
+      Auth.set(s);
+      await applyScope(s);
+      // الاسم من الدعوة إن لم يكن في حساب Google اسم
+      const inv = (await root.child(`adminInvites/${inviteKey(user.email)}`).once('value').catch(() => null))?.val();
+      if (inv?.name && !user.displayName) Store.set(`admins/${user.uid}/name`, inv.name);
+      Store.remove(`adminInvites/${inviteKey(user.email)}`);
+      return { session: s };
+    } catch (e) {
+      // القواعد تسمح بهذه الكتابة فقط إذا كان البريد مدعواً (أو لا يوجد مشرفون بعد)
+      await Store.auth.signOut();
+      throw new Error(`الحساب ${user.email} غير مدعو للإدارة. اطلب من أحد المشرفين دعوته من تبويب «المشرفون».`);
+    }
+  }
+
+  function inviteAdmin(email, name) {
+    email = String(email || '').trim().toLowerCase();
+    Store.set(`adminInvites/${inviteKey(email)}`, { email, name: name || '', invitedAt: Date.now() });
   }
 
   async function changeMyPassword(current, next) {
@@ -285,6 +338,7 @@ const Security = (() => {
 
   return {
     secure, applyScope, restore, memberLogin, confirmMember, cancelMember, adminLogin, changeMyPassword,
+    googleAdminLogin, finishGoogleAdmin, inviteAdmin, inviteKey,
     createMemberAccount, regenerateCode, deleteMemberAccount, addAdmin, needsMigration, migrate, setFeatured,
     newSecret, emailFor, normCode, authMsg, CONTACT_KEYS
   };

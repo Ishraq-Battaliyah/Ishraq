@@ -679,16 +679,41 @@ const Admin = (() => {
     if (!Security.secure()) return `<div class="panel"><h2><i class="fa-solid fa-user-shield"></i> المشرفون</h2>${emptyState('إدارة عدة مشرفين بحسابات مستقلة تتاح بعد تفعيل الوضع الآمن (Firebase Authentication).', 'fa-lock')}</div>`;
     const me = Store.auth.currentUser;
     const admins = Object.entries(Store.get('admins') || {}).map(([uid, a]) => ({ uid, ...a })).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    const invites = Object.entries(Store.get('adminInvites') || {}).map(([key, i]) => ({ key, ...i }));
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-user-shield"></i> المشرفون <span class="count">${admins.length}</span></h2>
-      <button class="btn primary" data-add-admin><i class="fa-solid fa-plus"></i> إضافة مشرف</button></div>
-      <p class="muted small">لكل مشرف بريد وكلمة سر خاصة به للدخول إلى لوحة الإدارة. إزالة المشرف توقف وصوله فوراً.</p>
+      <div class="head-actions"><button class="btn ghost" data-invite-admin><i class="fa-brands fa-google"></i> دعوة بحساب Google</button>
+      <button class="btn primary" data-add-admin><i class="fa-solid fa-plus"></i> إضافة مشرف ببريد وكلمة سر</button></div></div>
+      <p class="muted small">طريقتان لإضافة مشرف: <b>دعوة بحساب Google</b> (يدخل المشرف بزر «الدخول بحساب Google» ويُفعَّل تلقائياً)، أو <b>بريد وكلمة سر</b> تنشئها له. إزالة المشرف توقف وصوله فوراً.</p>
       <ul class="admin-list">${admins.map(a => `<li><span class="avatar sm"><span class="avatar-fallback"><i class="fa-solid fa-user-shield"></i></span></span>
-        <div><b>${esc(a.name || 'مشرف')}</b>${a.uid === me?.uid ? ' <span class="chip">أنت</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small></div>
+        <div><b>${esc(a.name || 'مشرف')}</b>${a.uid === me?.uid ? ' <span class="chip">أنت</span>' : ''}${a.via === 'google' ? ' <span class="chip"><i class="fa-brands fa-google"></i> Google</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small></div>
         <small class="muted">أُضيف ${a.addedAt ? fmtTs(a.addedAt) : ''}</small>
-        ${a.uid === me?.uid ? '<button class="btn xs ghost" data-my-password><i class="fa-solid fa-key"></i> تغيير كلمة السر</button>' : `<button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button>`}</li>`).join('')}</ul>
+        ${a.uid === me?.uid ? ((me.providerData || []).some(p => p.providerId === 'password') ? '<button class="btn xs ghost" data-my-password><i class="fa-solid fa-key"></i> تغيير كلمة السر</button>' : '<span></span>') : `<button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button>`}</li>`).join('')}</ul>
+      ${invites.length ? `<h3 class="sub"><i class="fa-brands fa-google"></i> دعوات بانتظار أول دخول <span class="count">${invites.length}</span></h3>
+        <ul class="admin-list">${invites.map(i => `<li class="invite"><span class="avatar sm"><span class="avatar-fallback"><i class="fa-regular fa-envelope"></i></span></span>
+          <div><b>${esc(i.name || 'مشرف مدعو')}</b><small dir="ltr">${esc(i.email)}</small></div><small class="muted">دُعي ${fmtTs(i.invitedAt)}</small>
+          <button class="icon-btn danger" data-del-invite="${esc(i.key)}" title="إلغاء الدعوة"><i class="fa-solid fa-xmark"></i></button></li>`).join('')}</ul>` : ''}
     </div>`;
   };
+
+  function inviteAdminDialog() {
+    openModal({
+      title: '<i class="fa-brands fa-google"></i> دعوة مشرف بحساب Google', size: 'sm',
+      body: `<form class="form-grid one">
+        ${fieldInput({ k: 'name', label: 'الاسم', required: true })}
+        ${fieldInput({ k: 'email', label: 'بريد حساب Google (Gmail)', type: 'email', required: true, hint: 'يدخل المشرف من «دخول الإدارة» بزر «الدخول بحساب Google» بنفس هذا البريد، فيُفعَّل تلقائياً.' })}
+      </form>`,
+      actions: [{
+        label: 'إرسال الدعوة', cls: 'primary', onClick: m => {
+          const f = $('form', m.body);
+          if (!validateForm(f)) return false;
+          const v = readForm(f);
+          Security.inviteAdmin(v.email, v.name);
+          toast('تمت الدعوة — أخبر المشرف بالدخول بحساب Google');
+        }
+      }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
 
   function addAdminDialog() {
     openModal({
@@ -892,6 +917,8 @@ const Admin = (() => {
       if (t.closest('[data-show-rules]')) return showRules();
       if (t.closest('[data-rules-done]')) return Store.set('meta/rulesPublished', Date.now());
       if (t.closest('[data-add-admin]')) return addAdminDialog();
+      if (t.closest('[data-invite-admin]')) return inviteAdminDialog();
+      const di2 = t.closest('[data-del-invite]'); if (di2) return Store.remove(`adminInvites/${di2.dataset.delInvite}`);
       if (t.closest('[data-my-password]')) return myPasswordDialog();
       const da = t.closest('[data-del-admin]');
       if (da) return confirmDialog('إزالة هذا المشرف؟ لن يستطيع الدخول إلى لوحة الإدارة بعد الآن.', { danger: true, ok: 'إزالة' }).then(ok => ok && Store.remove(`admins/${da.dataset.delAdmin}`));
