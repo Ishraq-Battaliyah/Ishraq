@@ -286,7 +286,7 @@ function exportPDF(title, html) {
   w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title>
     <base href="${base}">
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/style.css"></head>
     <body class="print-doc"><header class="print-head"><img src="assets/ishraq-logo.png" alt=""><div><h1>${esc(title)}</h1><small>${fmtTs(Date.now())}</small></div></header>${html}
     <script>setTimeout(()=>{window.print();},900)<\/script></body></html>`);

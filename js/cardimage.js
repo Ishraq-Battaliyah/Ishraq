@@ -9,8 +9,9 @@ const CardImage = (() => {
   const C = {
     ink: '#2E2563', ink2: '#4E4B63', muted: '#7C7A8E', p: '#8776C4', pd: '#5B4A9E', pl: '#EEEBF8', line: '#E6E3F0'
   };
-  const HEAD_FONT = "'Tajawal', 'Dubai', sans-serif";
-  const BODY_FONT = "'Dubai', 'IBM Plex Sans Arabic', 'Tajawal', sans-serif";
+  const HEAD_FONT = "'Cairo', 'Noto Sans Arabic', sans-serif";              // العناوين والأسماء
+  const UI_FONT = "'IBM Plex Sans Arabic', 'Noto Sans Arabic', sans-serif";  // الشارات والوسوم والسطور الصغيرة
+  const BODY_FONT = "'Noto Sans Arabic', 'IBM Plex Sans Arabic', sans-serif"; // النص المقروء
 
   function loadImage(src, cors) {
     return new Promise(res => {
@@ -70,7 +71,8 @@ const CardImage = (() => {
         document.fonts.load(`800 30px ${HEAD_FONT}`, 'إشراق'),
         document.fonts.load(`700 18px ${HEAD_FONT}`, 'إشراق'),
         document.fonts.load(`400 17px ${BODY_FONT}`, 'إشراق'),
-        document.fonts.load(`600 20px ${BODY_FONT}`, 'إشراق')
+        document.fonts.load(`600 15px ${UI_FONT}`, 'إشراق'),
+        document.fonts.load(`700 16px ${UI_FONT}`, 'إشراق')
       ]);
       await document.fonts.ready;
     } catch { /* ignore */ }
@@ -90,7 +92,7 @@ const CardImage = (() => {
     meas.font = `400 17px ${BODY_FONT}`;
     const bioLines = wrap(meas, m.bio, innerW);
     const areas = String(m.areas || '').split(/[،,\n]/).map(s => s.trim()).filter(Boolean);
-    meas.font = `600 15px ${BODY_FONT}`;
+    meas.font = `600 15px ${UI_FONT}`;
     const chipH = 34, chipGap = 8, chipPad = 16;
     const rows = [];
     let row = [], rowW = 0;
@@ -144,7 +146,7 @@ const CardImage = (() => {
     }
     // الصفة (يسار) بإطار أبيض مفرغ
     const role = m.role === 'mentor' ? 'مرشد' : 'مستفيد';
-    ctx.font = `700 16px ${HEAD_FONT}`;
+    ctx.font = `700 16px ${UI_FONT}`;
     const rw = ctx.measureText(role).width + 32;
     roundRect(ctx, 22, 22, rw, 34, 17);
     ctx.lineWidth = 1.8; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
@@ -194,10 +196,10 @@ const CardImage = (() => {
     // المجالات
     if (rows.length) {
       y += 30;
-      ctx.fillStyle = C.muted; ctx.font = `500 14px ${BODY_FONT}`;
+      ctx.fillStyle = C.muted; ctx.font = `500 14px ${UI_FONT}`;
       ctx.fillText(m.role === 'mentor' ? 'مجالات الإرشاد' : 'مجالات الاهتمام', cx, y);
       y += 12;
-      ctx.font = `600 15px ${BODY_FONT}`;
+      ctx.font = `600 15px ${UI_FONT}`;
       rows.forEach(r => {
         let x = cx + r.w / 2;                // من اليمين إلى اليسار
         r.items.forEach(it => {
@@ -215,7 +217,7 @@ const CardImage = (() => {
     ctx.fillStyle = '#FBFAFE'; ctx.fillRect(0, fy, W, 52);
     ctx.fillStyle = C.line; ctx.fillRect(0, fy, W, 1);
     const cohort = Data.cohort(m.cohort);
-    ctx.fillStyle = C.muted; ctx.font = `600 14px ${BODY_FONT}`;
+    ctx.fillStyle = C.muted; ctx.font = `600 14px ${UI_FONT}`;
     ctx.fillText(`إشراق | معك لمستقبل طموح${cohort ? ' · ' + cohort.name + ' ' + cohort.year : ''}`, cx, fy + 32);
 
     ctx.restore();
