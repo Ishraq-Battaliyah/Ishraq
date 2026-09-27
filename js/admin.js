@@ -601,6 +601,38 @@ const Admin = (() => {
     </div>`;
   }
 
+  // بيانات الجلسات التجريبية لأعضاء الدفعة: المواعيد والحجوزات وتقييمات الطرفين
+  function trialData(cid) {
+    const ids = new Set(Data.members(null, cid).map(m => m.id));
+    const mine = x => ids.has(x.mentorId) || ids.has(x.menteeId) || ids.has(x.authorId) || ids.has(x.targetId);
+    return {
+      slots: Store.list('slots').filter(x => ids.has(x.mentorId)),
+      bookings: Store.list('bookings').filter(mine),
+      reviews: Store.list('reviews').filter(mine)
+    };
+  }
+
+  async function launchCohort(cid) {
+    const c = Data.cohort(cid);
+    const d = trialData(cid);
+    const total = d.slots.length + d.bookings.length + d.reviews.length;
+    if (total && !(Security.can('sessions') && Security.can('reviews'))) return toast('مسح بيانات الجلسات التجريبية يتطلب صلاحية «الجلسات» و«التقييمات»', 'error');
+    const msg = `إطلاق «${esc(c?.name || '')}» الآن؟ يبدأ من هذه اللحظة حساب مدد الجلسات، ويظهر للمرشدين شريط الإطلاق وتُفتح لهم إضافة المواعيد.`
+      + (total ? `<br><br><b class="danger-text"><i class="fa-solid fa-broom"></i> سيُمسح قبل الإطلاق كل المحتوى التجريبي لهذه الدفعة:</b>
+        <span class="wipe-list"><span>• ${d.slots.length} موعد مقترح من المرشدين</span><span>• ${d.bookings.length} جلسة محجوزة أو منجزة</span><span>• ${d.reviews.length} تقييم (من المرشدين والمستفيدين وتقييمات البرنامج)</span></span>
+        <small class="muted">تُنزَّل نسخة احتياطية تلقائياً قبل المسح، ولا يمكن التراجع عن المسح من المنصة.</small>` : '');
+    if (!(await confirmDialog(msg, { ok: total ? 'مسح البيانات التجريبية وإطلاق الدفعة' : 'إطلاق الدفعة', danger: !!total }))) return;
+    if (total) {
+      downloadBackup(true);
+      d.slots.forEach(x => Store.remove(`slots/${x.id}`));
+      d.bookings.forEach(x => Store.remove(`bookings/${x.id}`));
+      d.reviews.forEach(x => { Store.remove(`reviews/${x.id}`); if (Store.get(`featured/${x.id}`) != null) Store.remove(`featured/${x.id}`); });
+      Security.log('مسح بيانات الجلسات التجريبية', c?.name || cid, `${d.slots.length} موعد، ${d.bookings.length} جلسة، ${d.reviews.length} تقييم`);
+    }
+    Bands.doLaunch(cid);
+    toast(total ? 'تم مسح البيانات التجريبية وإطلاق الدفعة' : 'تم إطلاق الدفعة');
+  }
+
   // تفاصيل المرشد داخل النطاق: الحالة وآخر تذكير وزر التذكير
   function bandMentorDialog(mid, n) {
     const m = Data.member(mid);
@@ -1125,8 +1157,7 @@ const Admin = (() => {
       const fb = t.closest('[data-filter]'); if (fb) { ui[fb.dataset.filter] = fb.dataset.val; return render(root); }
       const st = t.closest('[data-stat]');
       if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
-      const la = t.closest('[data-launch]');
-      if (la) return confirmDialog(`إطلاق «${esc(Data.cohort(la.dataset.launch)?.name || '')}» الآن؟ يبدأ من هذه اللحظة حساب مدد الجلسات، ويظهر للمرشدين شريط الإطلاق وتُفتح لهم إضافة المواعيد.`, { ok: 'إطلاق الدفعة' }).then(ok => { if (ok) { Bands.doLaunch(la.dataset.launch); toast('تم إطلاق الدفعة'); } });
+      const la = t.closest('[data-launch]'); if (la) return launchCohort(la.dataset.launch);
       const ul = t.closest('[data-unlaunch]');
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
       const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }

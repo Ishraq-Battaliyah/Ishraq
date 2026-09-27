@@ -961,3 +961,5 @@ textarea { resize: vertical; min-height: 80px; }
 .band .bp b { white-space: normal; overflow: visible; line-height: 1.35; }
 .band .bp .avatar { flex: none; }
 .band ul { min-height: 44px; }
+.danger-text { color: var(--bad); }
+.wipe-list { display: grid; gap: 4px; margin: 8px 0; padding: 10px 14px; border-radius: 10px; background: var(--bad-l); font-size: .9rem; }
