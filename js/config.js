@@ -22,7 +22,7 @@ window.ISHRAQ_CONFIG = {
   // يبقى المشرف مسجلاً على جهازه، ويُطلب منه الدخول من جديد بعد هذه المدة دون أي نشاط
   adminIdleHours: 72,
   // Firebase App Check (اختياري): ضع هنا مفتاح موقع reCAPTCHA v3 بعد إنشائه، ثم فعّل الإلزام من Firebase Console
-  appCheckKey: '',
+  appCheckKey: '6LdVgtItAAAAAH5oPc8kIPaIRTVm8laqes23t8dY',
   // رابط المنصة الذي يُرسل للأعضاء في رسالة معلومات الدخول
   siteUrl: 'https://hussain-al-hajji.github.io/Ishraq/'
 };

@@ -88,7 +88,7 @@ const Store = (() => {
     // Firebase App Check: يثبت أن الطلبات صادرة من موقع المنصة (يحدّ من الإغراق الآلي)
     if (CFG.appCheckKey && !CFG.emulators) {
       try {
-        if (!window.firebase.appCheck) await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-check-compat.js`);
+        if (!window.firebase.appCheck) await Promise.race([loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-check-compat.js`), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
         app.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(CFG.appCheckKey), true);
       } catch (e) { console.warn('App Check', e); }
     }
