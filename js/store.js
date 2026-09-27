@@ -197,8 +197,9 @@ const Store = (() => {
   const get = path => getIn(state, path);
   const list = path => Object.values(get(path) || {}).filter(Boolean);
   const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
+  const dump = () => JSON.parse(JSON.stringify(state || {}));
 
-  return { init, get, list, set, update, remove, push, newId, subscribe, seedOnce,
+  return { init, get, list, set, update, remove, push, newId, subscribe, seedOnce, dump,
     get mode() { return mode; }, get lastError() { return lastError; },
     get connected() { return connected; }, get everConnected() { return everConnected; }, get pending() { return pending; } };
 })();

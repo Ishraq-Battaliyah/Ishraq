@@ -25,6 +25,7 @@ const Admin = (() => {
           <div class="kpis">${kpis()}</div>
         </section>
         ${dbWarning()}
+        ${backupBar()}
         <nav class="admin-tabs">${TABS.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${t.id}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
         <div class="tab-panel">${ui.tab ? (P[ui.tab] ? P[ui.tab]() : '') : `<div class="tab-hint">${emptyState('اضغط على أي تبويب لعرض تفاصيله، واضغط عليه مرة أخرى لإخفائها.', 'fa-hand-pointer')}</div>`}</div>
       </main>
@@ -39,6 +40,55 @@ const Admin = (() => {
       ? 'قاعدة البيانات غير مُعدّة، والتعديلات تُحفظ في هذا المتصفح فقط ولن تظهر للزوار. أضف رابط Firebase في <code>js/config.js</code>.'
       : `آخر عملية حفظ رُفضت من قاعدة البيانات (${esc(e.message)}). تأكد من قواعد Firebase ← Realtime Database ← Rules ثم أعد المحاولة.`;
     return `<div class="db-warning"><i class="fa-solid fa-triangle-exclamation"></i><p>${msg}</p></div>`;
+  }
+
+  /* ===== النسخ الاحتياطي ===== */
+  function backupBar() {
+    const last = Store.get('meta/lastBackup');
+    const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
+    const due = days === null || days >= 7;
+    return `<div class="backup-bar ${due ? 'due' : ''}">
+      <div><i class="fa-solid ${due ? 'fa-triangle-exclamation' : 'fa-shield-halved'}"></i>
+        <span>${last ? `آخر نسخة احتياطية: <b class="num">${fmtTs(last)}</b>${due ? ` — مضى <span class="num">${days}</span> يوماً، يُنصح بأخذ نسخة جديدة` : ''}` : 'لم تُؤخذ نسخة احتياطية بعد — يُنصح بأخذ نسخة أسبوعياً'}</span></div>
+      <div class="head-actions">
+        <button class="btn sm primary" data-backup><i class="fa-solid fa-download"></i> نسخة احتياطية</button>
+        <label class="btn sm ghost"><i class="fa-solid fa-upload"></i> استرجاع نسخة<input type="file" accept=".json,application/json" data-restore hidden></label>
+      </div>
+    </div>`;
+  }
+
+  function backupFile() {
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+    return `ishraq-backup-${stamp}.json`;
+  }
+
+  function downloadBackup(silent) {
+    const data = Store.dump();
+    const payload = { app: 'ishraq', version: 1, exportedAt: new Date().toISOString(), data };
+    download(backupFile(), JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+    if (!silent) { Store.set('meta/lastBackup', Date.now()); toast('تم تنزيل النسخة الاحتياطية'); }
+  }
+
+  async function restoreBackup(file) {
+    let json;
+    try { json = JSON.parse(await file.text()); } catch { return toast('الملف غير صالح أو ليس ملف JSON', 'error'); }
+    // يقبل ملف المنصة، أو ملف «Export JSON» من Firebase Console (كامل أو لمسار ishraq)
+    const data = json?.app === 'ishraq' ? json.data : json?.ishraq && typeof json.ishraq === 'object' ? json.ishraq : json;
+    if (!data || typeof data !== 'object' || !(data.content || data.members || data.meta)) return toast('هذا الملف لا يحتوي على بيانات منصة إشراق', 'error');
+    const count = k => Object.keys(data[k] || {}).length;
+    const when = json.exportedAt ? fmtTs(Date.parse(json.exportedAt)) : 'غير معروف';
+    const ok = await confirmDialog(`<b>استرجاع نسخة بتاريخ ${when}</b><br><br>
+      تحتوي على: <span class="num">${count('members')}</span> عضواً، <span class="num">${count('bookings')}</span> جلسة، <span class="num">${count('reviews')}</span> تقييماً، <span class="num">${count('interests')}</span> مهتماً، <span class="num">${count('events')}</span> فعالية، و<span class="num">${Object.keys(data.content?.sections || {}).length}</span> قسماً في الصفحة الرئيسية.<br><br>
+      سيتم <b>استبدال كل البيانات الحالية</b> بمحتوى هذه النسخة. ستُنزَّل نسخة من البيانات الحالية تلقائياً قبل الاسترجاع للاحتياط.`,
+      { danger: true, ok: 'استرجاع', title: 'استرجاع نسخة احتياطية' });
+    if (!ok) return;
+    downloadBackup(true);
+    const current = Store.dump();
+    Object.keys(current).forEach(k => { if (!(k in data)) Store.remove(k); });
+    Object.entries(data).forEach(([k, v]) => { if (k !== 'meta') Store.set(k, v); });
+    Store.set('meta', { ...(data.meta || {}), seeded: data.meta?.seeded || Date.now(), eventsSection: true, lastBackup: current.meta?.lastBackup || null, restoredAt: Date.now() });
+    toast('تم استرجاع النسخة الاحتياطية');
   }
 
   function kpis() {
@@ -723,6 +773,7 @@ const Admin = (() => {
         const m = Data.member(dm.dataset.delMember);
         return confirmDialog(`حذف بطاقة «${esc(m.name)}» (${m.code})؟ سيتم أيضاً إلغاء تعيينه في الشبكة.`, { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.removeMember(m.id); ui.netCohort = null; } });
       }
+      if (t.closest('[data-backup]')) return downloadBackup();
       const tpl = t.closest('[data-csv-template]'); if (tpl) return csvTemplate(tpl.dataset.csvTemplate);
       const un = t.closest('[data-unassign]'); if (un) { delete ui.netDraft[un.dataset.unassign]; return render(root); }
       if (t.closest('[data-save-net]')) {
@@ -769,6 +820,7 @@ const Admin = (() => {
       const t = e.target;
       if (t.matches('[data-net]')) { ui.netDraft[t.dataset.net] = t.value; return render(root); }
       if (t.matches('[data-feature]')) return Store.set(`reviews/${t.dataset.feature}/featured`, t.checked);
+      if (t.matches('[data-restore]') && t.files[0]) { const f = t.files[0]; t.value = ''; return restoreBackup(f); }
       if (t.matches('.dropzone input[type=file]') && t.files[0]) importCSV(t.files[0], t.closest('[data-drop]').dataset.drop, ui.cohort);
     };
 
