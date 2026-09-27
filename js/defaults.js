@@ -216,12 +216,13 @@ function migrateEventsSection() {
   Store.set('meta/eventsSection', true);
 }
 
-function seedDatabase() {
+// المحتوى الافتراضي لقاعدة بيانات جديدة فارغة (يُكتب مرة واحدة فقط ولا يكتب فوق بيانات موجودة)
+function defaultData() {
   const sections = {};
   defaultSections().forEach(s => { const id = Store.newId(); sections[id] = { ...s, id }; });
   const form = {};
   DEFAULT_FORM_FIELDS.forEach(f => { form[f.id] = f; });
-  Store.update('', {
+  return {
     content: { sections },
     form: { fields: form },
     cohorts: {
@@ -233,6 +234,6 @@ function seedDatabase() {
       body: 'باب التسجيل في الدفعة القادمة من إشراق مفتوح الآن.',
       button: 'سجّل اهتمامك', frequency: 'session'
     },
-    meta: { seeded: true, seededAt: Date.now(), eventsSection: true }
-  });
+    meta: { eventsSection: true }
+  };
 }

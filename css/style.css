@@ -106,7 +106,16 @@ input, textarea { font-family: var(--f-body); }
 
 /* ===== التحميل ===== */
 .boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 50; }
-.boot img { width: 110px; animation: pulse 1.4s ease-in-out infinite; }
+.boot { align-content: center; gap: 18px; text-align: center; padding: 20px; }
+.boot img { width: 110px; animation: pulse 1.4s ease-in-out infinite; margin: 0 auto; }
+.boot span { font-family: var(--f-ui); color: var(--muted); max-width: 360px; line-height: 1.9; }
+.boot span .btn { margin-top: 10px; }
+#conn-bar { position: fixed; z-index: 150; top: 0; inset-inline: 0; padding: 10px 16px; text-align: center; font-family: var(--f-ui); font-weight: 700; font-size: .92rem; color: #fff; transform: translateY(-100%); transition: transform .3s; }
+#conn-bar.show { transform: none; }
+#conn-bar.offline { background: var(--bad); }
+#conn-bar.saving { background: var(--p-d); }
+#conn-bar.online { background: var(--ok); }
+#conn-bar i { margin-inline-end: 6px; }
 @keyframes pulse { 50% { transform: scale(.92); opacity: .6; } }
 
 /* ==========================================================

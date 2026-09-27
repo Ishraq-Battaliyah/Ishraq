@@ -61,9 +61,32 @@
   }
 
   const mode = await Store.init();
-  if (!Store.get('meta/seeded')) seedDatabase();
+  if (!Store.get('meta/seeded')) await Store.seedOnce(defaultData);
   else migrateEventsSection();
-  if (mode === 'local-fallback') toast('تعذّر الاتصال بقاعدة البيانات، يتم العمل محلياً مؤقتاً', 'error');
+
+  // شريط حالة الاتصال: يظهر عند انقطاع الاتصال أو وجود تعديلات لم تُحفظ بعد
+  const bar = document.createElement('div');
+  bar.id = 'conn-bar';
+  document.body.appendChild(bar);
+  let wasOffline = false;
+  const updateBar = () => {
+    if (mode !== 'firebase') return;
+    const offline = !Store.connected && Store.everConnected;
+    if (offline) {
+      wasOffline = true;
+      bar.className = 'show offline';
+      bar.innerHTML = `<i class="fa-solid fa-wifi"></i> انقطع الاتصال بقاعدة البيانات${Store.pending ? ` — ${Store.pending} تعديل بانتظار الحفظ، لا تغلق الصفحة حتى يعود الاتصال` : ' — جارٍ إعادة الاتصال...'}`;
+    } else if (Store.pending > 0 && wasOffline) {
+      bar.className = 'show saving';
+      bar.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> جارٍ حفظ التعديلات...';
+    } else if (wasOffline) {
+      wasOffline = false;
+      bar.className = 'show online';
+      bar.innerHTML = '<i class="fa-solid fa-circle-check"></i> عاد الاتصال وتم حفظ كل التعديلات';
+      setTimeout(() => { if (!wasOffline) bar.className = ''; }, 3000);
+    }
+  };
+  Store.subscribe(updateBar);
 
   document.getElementById('boot')?.remove();
   render(false);

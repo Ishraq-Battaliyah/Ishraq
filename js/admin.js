@@ -36,7 +36,7 @@ const Admin = (() => {
     const e = Store.lastError;
     if (Store.mode === 'firebase' && !e) return '';
     const msg = Store.mode !== 'firebase'
-      ? 'تعذّر الاتصال بقاعدة البيانات، والتعديلات تُحفظ في هذا المتصفح فقط ولن تظهر للزوار. تأكد من نشر قواعد <code>database.rules.json</code> في Firebase Console ← Realtime Database ← Rules ثم أعد تحميل الصفحة.'
+      ? 'قاعدة البيانات غير مُعدّة، والتعديلات تُحفظ في هذا المتصفح فقط ولن تظهر للزوار. أضف رابط Firebase في <code>js/config.js</code>.'
       : `آخر عملية حفظ رُفضت من قاعدة البيانات (${esc(e.message)}). تأكد من قواعد Firebase ← Realtime Database ← Rules ثم أعد المحاولة.`;
     return `<div class="db-warning"><i class="fa-solid fa-triangle-exclamation"></i><p>${msg}</p></div>`;
   }

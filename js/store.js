@@ -1,4 +1,4 @@
-/* طبقة البيانات: Firebase Realtime Database مع بديل محلي (localStorage) */
+/* طبقة البيانات: Firebase Realtime Database (أو localStorage عند عدم إعداد Firebase) */
 const Store = (() => {
   const CFG = window.ISHRAQ_CONFIG || {};
   const LOCAL_KEY = 'ishraq-db-v1';
@@ -55,21 +55,62 @@ const Store = (() => {
     });
   }
 
+  let connected = false;
+  let everConnected = false;
+  let pending = 0;
+
+  function bootMsg(html) {
+    const el = document.querySelector('#boot span');
+    if (el) el.innerHTML = html;
+  }
+
+  async function loadFirebaseSdk() {
+    // محاولات متكررة لتحميل مكتبة Firebase قبل الاستسلام
+    for (let i = 0; i < 3; i++) {
+      try {
+        if (!window.firebase) await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-compat.js`);
+        if (!window.firebase?.database) await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-database-compat.js`);
+        return;
+      } catch (e) { await new Promise(r => setTimeout(r, 1500 * (i + 1))); }
+    }
+    throw new Error('sdk');
+  }
+
   async function initFirebase() {
-    await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-compat.js`);
-    await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-database-compat.js`);
+    try { await loadFirebaseSdk(); }
+    catch {
+      bootMsg('تعذّر تحميل مكتبة الاتصال بقاعدة البيانات.<br><button class="btn primary sm" onclick="location.reload()">إعادة المحاولة</button>');
+      // لا نعمل محلياً أبداً عند إعداد Firebase حتى لا تضيع التعديلات أو تُكتب بيانات افتراضية فوق الحقيقية
+      await new Promise(() => {});
+    }
     const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(CFG.firebase);
-    rootRef = app.database().ref(CFG.dbRoot || 'ishraq');
-    await new Promise((resolve, reject) => {
+    const db = app.database();
+    rootRef = db.ref(CFG.dbRoot || 'ishraq');
+    db.ref('.info/connected').on('value', snap => {
+      connected = !!snap.val();
+      if (connected) everConnected = true;
+      notify();
+    });
+    const slow = setTimeout(() => bootMsg('جارٍ الاتصال بقاعدة البيانات... الاتصال بطيء، يرجى الانتظار'), 5000);
+    const retry = setTimeout(() => bootMsg('ما زال الاتصال بقاعدة البيانات جارياً...<br><button class="btn primary sm" onclick="location.reload()">إعادة المحاولة</button>'), 25000);
+    // ننتظر أول نسخة حقيقية من البيانات دون مهلة، ولا ننتقل للعمل المحلي
+    await new Promise(resolve => {
       let first = true;
-      const t = setTimeout(() => first && reject(new Error('timeout')), 12000);
       rootRef.on('value', snap => {
         state = snap.val() || {};
-        if (first) { first = false; clearTimeout(t); resolve(); }
+        if (first) { first = false; resolve(); }
         notify();
-      }, err => { if (first) { clearTimeout(t); reject(err); } else console.error(err); });
+      }, err => {
+        console.error(err);
+        bootMsg(`تعذّرت قراءة قاعدة البيانات (${err.code || err.message}). تحقق من قواعد Firebase.<br><button class="btn primary sm" onclick="location.reload()">إعادة المحاولة</button>`);
+      });
     });
+    clearTimeout(slow); clearTimeout(retry);
     mode = 'firebase';
+    // تنبيه قبل إغلاق الصفحة إذا وُجدت تعديلات لم تصل للقاعدة بعد
+    window.addEventListener('beforeunload', e => {
+      if (pending > 0) { e.preventDefault(); e.returnValue = ''; }
+    });
   }
 
   function initLocal() {
@@ -80,20 +121,34 @@ const Store = (() => {
       notify();
     });
     mode = 'local';
+    connected = true;
   }
 
   async function init() {
-    if (CFG.firebase && CFG.firebase.databaseURL) {
-      try { await initFirebase(); return mode; }
-      catch (e) {
-        console.error('Firebase unavailable, falling back to local storage', e);
-        initLocal();
-        mode = 'local-fallback';
-        return mode;
-      }
-    }
+    if (CFG.firebase && CFG.firebase.databaseURL) { await initFirebase(); return mode; }
     initLocal();
     return mode;
+  }
+
+  function track(promise) {
+    pending++;
+    notify();
+    return promise.then(() => { lastError = null; }, writeFailed).finally(() => { pending = Math.max(0, pending - 1); notify(); });
+  }
+
+  // تعبئة المحتوى الافتراضي مرة واحدة فقط، ولا تكتب فوق أي بيانات موجودة
+  async function seedOnce(buildDefaults) {
+    if (get('meta/seeded')) return;
+    if (rootRef) {
+      const res = await rootRef.child('meta/seeded').transaction(cur => (cur ? undefined : Date.now()));
+      if (!res.committed) return;
+    }
+    const data = buildDefaults();
+    Object.entries(data).forEach(([k, v]) => {
+      if (k === 'meta') Object.entries(v).forEach(([mk, mv]) => { if (get(`meta/${mk}`) == null) set(`meta/${mk}`, mv); });
+      else if (get(k) == null) set(k, v);
+    });
+    if (!rootRef) set('meta/seeded', Date.now());
   }
 
   let lastError = null;
@@ -102,7 +157,7 @@ const Store = (() => {
     console.error(err);
     lastError = { message: err.message || String(err), ts: Date.now() };
     window.toast && toast('لم يتم الحفظ في قاعدة البيانات: ' + lastError.message, 'error');
-    rootRef.once('value').then(snap => { state = snap.val() || {}; notify(); }).catch(() => notify());
+    if (rootRef) rootRef.once('value').then(snap => { state = snap.val() || {}; notify(); }).catch(() => notify());
   }
 
   function set(path, val) {
@@ -110,7 +165,8 @@ const Store = (() => {
     state = setIn(state, path, val);
     if (rootRef) {
       const p = parts(path).join('/');
-      (p ? rootRef.child(p) : rootRef).set(val).catch(writeFailed);
+      if (!p) throw new Error('refusing to overwrite database root');
+      track(rootRef.child(p).set(val));
     } else saveLocal();
     notify();
   }
@@ -120,7 +176,8 @@ const Store = (() => {
     Object.entries(obj).forEach(([k, v]) => { state = setIn(state, parts(path).concat(k).join('/'), v); });
     if (rootRef) {
       const p = parts(path).join('/');
-      (p ? rootRef.child(p) : rootRef).update(obj).catch(writeFailed);
+      if (!p) throw new Error('refusing to update database root');
+      track(rootRef.child(p).update(obj));
     } else saveLocal();
     notify();
   }
@@ -141,5 +198,7 @@ const Store = (() => {
   const list = path => Object.values(get(path) || {}).filter(Boolean);
   const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
 
-  return { init, get, list, set, update, remove, push, newId, subscribe, get mode() { return mode; }, get lastError() { return lastError; } };
+  return { init, get, list, set, update, remove, push, newId, subscribe, seedOnce,
+    get mode() { return mode; }, get lastError() { return lastError; },
+    get connected() { return connected; }, get everConnected() { return everConnected; }, get pending() { return pending; } };
 })();
