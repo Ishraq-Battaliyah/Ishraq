@@ -89,7 +89,9 @@ const Store = (() => {
     if (CFG.appCheckKey && !CFG.emulators) {
       try {
         if (!window.firebase.appCheck) await Promise.race([loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-check-compat.js`), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
-        app.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(CFG.appCheckKey), true);
+        // Fraud Defense (reCAPTCHA Enterprise) هو المزوّد المعتمد، وreCAPTCHA v3 الكلاسيكي أُوقف
+        const P = CFG.appCheckProvider === 'v3' ? firebase.appCheck.ReCaptchaV3Provider : firebase.appCheck.ReCaptchaEnterpriseProvider;
+        app.appCheck().activate(new P(CFG.appCheckKey), true);
       } catch (e) { console.warn('App Check', e); }
     }
     const db = app.database();

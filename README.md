@@ -16,7 +16,7 @@
 | `firebase` | إعدادات مشروع Firebase (`apiKey`, `authDomain`, `databaseURL`, `projectId`, `appId`). وجود `apiKey` يفعّل **الوضع الآمن**. اجعلها `null` للعمل محلياً على المتصفح فقط. |
 | `dbRoot` | المسار الجذري للبيانات داخل القاعدة (`ishraq`). |
 | `ownerEmails` | الحسابات الرئيسية الثلاثة (صلاحية كاملة وإدارة المشرفين). |
-| `appCheckKey` | مفتاح موقع reCAPTCHA v3 لتفعيل Firebase App Check (اختياري). |
+| `appCheckKey` | مفتاح موقع Fraud Defense (reCAPTCHA Enterprise) لتفعيل Firebase App Check (اختياري). |
 | `siteUrl` | رابط المنصة المرسل للأعضاء في رسالة معلومات الدخول. |
 
 ## الأمان والدخول

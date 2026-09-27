@@ -3,7 +3,7 @@
  * firebase: إعدادات Firebase Realtime Database. اجعلها null للعمل محلياً
  *           (تُحفظ البيانات في متصفح الجهاز فقط).
  * dbRoot:   المسار الجذري للبيانات داخل قاعدة البيانات.
- * appCheckKey: مفتاح موقع reCAPTCHA v3 لتفعيل Firebase App Check (اختياري، يحدّ من الطلبات الآلية).
+ * appCheckKey: مفتاح موقع Fraud Defense (reCAPTCHA Enterprise) لتفعيل Firebase App Check (اختياري، يحدّ من الطلبات الآلية).
  */
 window.ISHRAQ_CONFIG = {
   // إعدادات تطبيق الويب من Firebase Console (ليست سرية؛ الحماية عبر قواعد القاعدة وتسجيل الدخول)
@@ -23,6 +23,8 @@ window.ISHRAQ_CONFIG = {
   adminIdleHours: 72,
   // Firebase App Check (اختياري): ضع هنا مفتاح موقع reCAPTCHA v3 بعد إنشائه، ثم فعّل الإلزام من Firebase Console
   appCheckKey: '6LdVgtItAAAAAH5oPc8kIPaIRTVm8laqes23t8dY',
+  // مزوّد App Check: 'enterprise' (Fraud Defense، الافتراضي) أو 'v3' (reCAPTCHA الكلاسيكي)
+  appCheckProvider: 'enterprise',
   // رابط المنصة الذي يُرسل للأعضاء في رسالة معلومات الدخول
   siteUrl: 'https://hussain-al-hajji.github.io/Ishraq/'
 };
