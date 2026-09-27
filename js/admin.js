@@ -18,7 +18,9 @@ const Admin = (() => {
   const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', events: 'events', announce: 'announce', interests: 'interests' };
   const tabAllowed = id => (id === 'admins' ? Security.isOwner() : Security.can(TAB_PERM[id]));
 
+  let lastRoot = null;
   function render(root) {
+    lastRoot = root;
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
@@ -552,40 +554,72 @@ const Admin = (() => {
     const cid = ui.sessCohort !== 'all' && Data.cohort(ui.sessCohort) ? ui.sessCohort : cohorts[cohorts.length - 1].id;
     const c = Data.cohort(cid);
     const L = Bands.launch(cid);
+    const mentors = Data.members('mentor', cid);
+    const now = Date.now();
+    const person = m => `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>`;
     const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
       ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span><button class="btn xs ghost" data-unlaunch="${cid}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button></div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
-    if (!L) return `<div class="panel bands-panel">${head}
-      <div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
+    const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
+      : `<div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
       <p>عند الضغط على «إطلاق الدفعة» يبدأ حساب المدد: فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12. ويظهر للمرشدين شريط «تم إطلاق الدفعة رسمياً» وتُفتح لهم إضافة المواعيد.</p></div>
-      <button class="btn primary lg" data-launch="${cid}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div></div>`;
-    const mentors = Data.members('mentor', cid);
-    const now = Date.now();
-    const curWeek = Bands.weekOf(now, L.ts);
+      <button class="btn primary lg" data-launch="${cid}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div>`;
+
+    // إحصائية إضافة المواعيد
+    const addedFor = n => mentors.filter(m => Bands.addedAt(m.id, n) != null);
+    const none = mentors.filter(m => Bands.SESSIONS.every(n => Bands.addedAt(m.id, n) == null));
+    const boxes = [
+      ...Bands.SESSIONS.map(n => ({ k: 's' + n, label: `أضافوا مواعيد ${sessionName(n)}`, icon: 'fa-calendar-check', yes: addedFor(n), no: mentors.filter(m => Bands.addedAt(m.id, n) == null), noLabel: `لم يضيفوا ${sessionName(n)}` })),
+      { k: 'none', label: 'لم يضيفوا أي موعد', icon: 'fa-calendar-xmark', yes: none, no: [], warn: true }
+    ];
+    const open = boxes.find(x => x.k === ui.bandStat);
+    const stats = `<div class="add-stats">${boxes.map(x => `<button class="add-stat ${x.warn ? 'warn' : ''} ${ui.bandStat === x.k ? 'active' : ''}" data-band-stat="${x.k}">
+        <i class="fa-solid ${x.icon}"></i><b>${x.yes.length}<small>/${mentors.length}</small></b><span>${x.label}</span><i class="fa-solid fa-chevron-down arrow"></i></button>`).join('')}</div>
+      ${open ? `<div class="add-stat-list"><h4>${open.label} <span class="count">${open.yes.length}</span></h4>
+        ${open.yes.length ? `<div class="bp-list">${open.yes.map(person).join('')}</div>` : '<p class="muted small">لا أحد</p>'}
+        ${open.no.length ? `<hr><h4 class="muted">${open.noLabel} <span class="count">${open.no.length}</span></h4><div class="bp-list faded">${open.no.map(person).join('')}</div>` : ''}</div>` : ''}`;
+
     const rows = Bands.SESSIONS.map(n => {
-      const start = Bands.windowStart(L.ts, n);
-      const sts = mentors.map(m => ({ m, st: Bands.status(m, n, now) }));
+      const start = L ? Bands.windowStart(L.ts, n) : null;
+      const sts = L ? mentors.map(m => ({ m, st: Bands.status(m, n, now) })) : [];
       const cols = Bands.LEVELS.map(lv => {
         const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k);
         return `<div class="band ${lv.cls}"><header><i class="fa-solid ${lv.icon}"></i><b>${lv.name}</b><small>${lv.period}</small><em>${inBand.length}</em></header>
-          <ul>${inBand.map(({ m, st }) => {
-            const last = lastReminder(m.id, n);
-            return `<li class="${st.added ? 'added' : 'waiting'}"><span class="bm-name" data-sess-mentor="${m.id}" title="عرض جلسات المرشد">${esc(m.name)}</span>
-              <small>${st.added ? `<i class="fa-solid fa-check"></i> أضاف ${fmtTs(st.at)}` : `<i class="fa-solid fa-hourglass-half"></i> لم يُضف — الأسبوع ${st.week}`}${last ? ` · <i class="fa-regular fa-bell"></i> ذُكّر ${fmtTs(last.ts)}` : ''}</small>
-              ${st.added ? '' : `<button class="btn xs ghost" data-remind="${m.id}" data-session="${n}"><i class="fa-solid fa-paper-plane"></i> تذكير</button>`}</li>`;
-          }).join('')}</ul></div>`;
+          <ul>${inBand.map(({ m, st }) => `<li class="${st.added ? 'added' : 'waiting'}" data-band-mentor="${m.id}" data-session="${n}" title="${st.added ? 'أضاف الموعد' : 'لم يُضف الموعد بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
       }).join('');
       const pending = sts.filter(x => x.st.notStarted).length;
-      return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4} · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}</small>
-        ${now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}</h3>
+      return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4}${start ? ` · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}` : ''}</small>
+        ${start && now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}</h3>
         <div class="bands">${cols}</div></div>`;
     }).join('');
-    return `<div class="panel bands-panel">${head}
-      <p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${curWeek}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع.</p>
-      ${mentors.length ? rows : emptyState('لا يوجد مرشدون في هذه الدفعة', 'fa-user-tie')}
+    return `<div class="panel bands-panel">${head}${launchBox}
+      <h3 class="sub"><i class="fa-solid fa-chart-simple"></i> إضافة المرشدين للمواعيد</h3>
+      ${mentors.length ? stats : emptyState('لا يوجد مرشدون في هذه الدفعة', 'fa-user-tie')}
+      ${rows}
       <details class="band-legend"><summary><i class="fa-solid fa-circle-info"></i> مصفوفة المتابعة والإجراء المتبع</summary>
         <ul>${Bands.LEVELS.map(lv => `<li class="${lv.cls}"><b>${lv.period}</b><span>${lv.rate}</span><em>${lv.name}</em><p>${lv.action}</p></li>`).join('')}</ul></details>
     </div>`;
+  }
+
+  // تفاصيل المرشد داخل النطاق: الحالة وآخر تذكير وزر التذكير
+  function bandMentorDialog(mid, n) {
+    const m = Data.member(mid);
+    const st = m && Bands.status(m, n);
+    if (!st || !st.level) return;
+    const last = lastReminder(mid, n);
+    openModal({
+      title: `${sessionName(n)} — ${esc(m.name)}`, size: 'sm',
+      body: `<div class="bp big">${avatar(m, 'lg')}<b>${esc(m.name)}</b></div>
+        <div class="band-tag ${st.level.cls}"><i class="fa-solid ${st.level.icon}"></i> ${st.level.name}</div>
+        <p>${st.added ? `<i class="fa-solid fa-check"></i> أضاف أول موعد في ${fmtTs(st.at)} (الأسبوع ${st.week} من فترة الجلسة)` : `<i class="fa-solid fa-hourglass-half"></i> لم يُضف موعداً بعد — الأسبوع ${st.week} من فترة الجلسة`}</p>
+        ${last ? `<p class="muted small"><i class="fa-regular fa-bell"></i> آخر تذكير: ${fmtTs(last.ts)}</p>` : ''}
+        <p class="muted small">${st.level.action}</p>`,
+      actions: [
+        ...(st.added ? [] : [{ label: '<i class="fa-solid fa-paper-plane"></i> إرسال تذكير', cls: 'primary', onClick: () => { setTimeout(() => remindDialog(mid, n), 220); } }]),
+        { label: '<i class="fa-solid fa-calendar-days"></i> جلسات المرشد', cls: 'ghost', onClick: () => { ui.sessMentor = mid; lastRoot && render(lastRoot); setTimeout(() => $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }), 300); } },
+        { label: 'إغلاق', cls: 'ghost' }
+      ]
+    });
   }
 
   const lastReminder = (mid, n) => Data.notifications(mid).find(x => x.kind === 'reminder' && x.session === n);
@@ -1095,6 +1129,8 @@ const Admin = (() => {
       if (la) return confirmDialog(`إطلاق «${esc(Data.cohort(la.dataset.launch)?.name || '')}» الآن؟ يبدأ من هذه اللحظة حساب مدد الجلسات، ويظهر للمرشدين شريط الإطلاق وتُفتح لهم إضافة المواعيد.`, { ok: 'إطلاق الدفعة' }).then(ok => { if (ok) { Bands.doLaunch(la.dataset.launch); toast('تم إطلاق الدفعة'); } });
       const ul = t.closest('[data-unlaunch]');
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
+      const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }
+      const bmn = t.closest('[data-band-mentor]'); if (bmn) return bandMentorDialog(bmn.dataset.bandMentor, Number(bmn.dataset.session));
       const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }
