@@ -340,7 +340,7 @@ input, textarea { font-family: var(--f-body); }
 .ev-fields { display: grid; gap: 12px; }
 .ev-form .field label { color: rgba(255,255,255,.9); }
 .ev-form .field label em { color: #FFD66B; }
-.ev-form input:not([type=hidden]) { background: rgba(255,255,255,.96); border-color: transparent; }
+.ev-form input:not([type=hidden]) { background: rgba(255,255,255,.96); border-color: transparent; color: var(--ink); }
 .ev-q p { margin: 0 0 8px; font-weight: 600; font-family: var(--f-ui); }
 .ev-q p small { opacity: .75; font-weight: 400; }
 .ev-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -368,6 +368,18 @@ input, textarea { font-family: var(--f-body); }
 .ev-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ev-admin .ev-regs { padding: 6px 16px 16px; border-top: 1px dashed var(--line); animation: rise .3s both; }
 .source-chip { margin-top: 4px; background: var(--b-l); color: var(--b-d); }
+.aud-chip { background: var(--bg); color: var(--ink-2); border: 1px solid var(--line); }
+.aud-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.aud-options .radio i { color: var(--p); width: 18px; }
+.ev-portal-panel { border-color: #D8D1F0; background: linear-gradient(180deg, #FBFAFF, #fff); }
+.ev-portal { box-shadow: var(--sh); }
+.ev-portal .ev-info { padding: 26px 28px; }
+.ev-portal .ev-reg { padding: 26px 24px; }
+.ev-registered { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 20px 0; }
+.ev-registered > i { font-size: 3rem; color: #fff; }
+.ev-registered h4 { margin: 0; justify-content: center; }
+.ev-registered small { opacity: .85; }
+@media (max-width: 560px) { .aud-options { grid-template-columns: 1fr; } }
 
 .sp-picker { position: relative; }
 .sp-current { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: .55em .9em; min-height: 52px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; text-align: start; }

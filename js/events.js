@@ -18,7 +18,30 @@ const Events = (() => {
   const endsAt = e => dateTimeOf(e.date, e.start).getTime() + (+e.duration || 60) * 60000;
   const isOver = e => Date.now() > endsAt(e);
   const all = () => Store.list('events').sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
-  const upcomingPublished = () => all().filter(e => e.published !== false && !isOver(e));
+  // الجمهور المستهدف: public (الصفحة الرئيسية) أو community / mentors / mentees مع دفعة محددة أو كل الدفعات
+  const AUDIENCES = {
+    public: { label: 'الجمهور العام', icon: 'fa-globe' },
+    community: { label: 'مجتمع إشراق', icon: 'fa-people-group' },
+    mentors: { label: 'المرشدون', icon: 'fa-user-tie' },
+    mentees: { label: 'المستفيدون', icon: 'fa-user-graduate' }
+  };
+  const audienceOf = e => (AUDIENCES[e.audience] ? e.audience : 'public');
+  const latestCohort = () => Data.cohorts().slice(-1)[0];
+  function audienceLabel(e) {
+    const a = audienceOf(e);
+    if (a === 'public') return AUDIENCES.public.label;
+    const c = e.audienceCohort && e.audienceCohort !== 'all' ? Data.cohort(e.audienceCohort) : null;
+    return `${AUDIENCES[a].label} — ${c ? c.name : 'كل الدفعات'}`;
+  }
+  function isForMember(e, m) {
+    const a = audienceOf(e);
+    if (a === 'public' || !m) return false;
+    if (a === 'mentors' && m.role !== 'mentor') return false;
+    if (a === 'mentees' && m.role !== 'mentee') return false;
+    return !e.audienceCohort || e.audienceCohort === 'all' || e.audienceCohort === m.cohort;
+  }
+  const targetMembers = e => Store.list('members').filter(m => isForMember(e, m));
+  const upcomingPublished = () => all().filter(e => e.published !== false && !isOver(e) && audienceOf(e) === 'public');
   const regs = eventId => Store.list('eventRegs').filter(r => r.eventId === eventId).sort((a, b) => b.ts - a.ts);
 
   function speakerOf(e) {
@@ -92,6 +115,13 @@ const Events = (() => {
     const eventId = form.dataset.eventForm;
     const ev = eventId === 'general' ? null : Store.get(`events/${eventId}`);
     if (ev && (ev.published === false || isOver(ev))) return toast('انتهى التسجيل في هذه الفعالية', 'error');
+    const member = form.dataset.member ? Data.member(form.dataset.member) : null;
+    if (member) {
+      if (regs(eventId).some(r => r.memberId === member.id)) return toast('أنت مسجّل في هذه الفعالية مسبقاً');
+      Store.push('eventRegs', { eventId, memberId: member.id, role: member.role, code: member.code, name: v.name, phone: v.phone, email: v.email, interest: '', ts: Date.now() });
+      Data.notify('admin', `تسجيل جديد في فعالية «${ev.title}»: ${member.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${v.name}`, { icon: 'fa-ticket' });
+      return toast('تم تسجيل حضورك في الفعالية');
+    }
     Store.push('eventRegs', { eventId, name: v.name, phone: v.phone, email: v.email, interest: v.interest || '', ts: Date.now() });
     // المهتمون بالانضمام يُضافون إلى تبويب «المهتمون»
     if (v.interest === 'mentor' || v.interest === 'mentee') {
@@ -127,16 +157,72 @@ const Events = (() => {
     submit(f);
   });
 
+  /* ================= صفحات المرشد والمستفيد ================= */
+  function portalSection(me) {
+    const list = all().filter(e => e.published !== false && !isOver(e) && isForMember(e, me));
+    if (!list.length) return '';
+    const card = e => {
+      const sp = speakerOf(e);
+      const mine = regs(e.id).find(r => r.memberId === me.id);
+      const locUrl = String(e.locationUrl || '').trim();
+      return `<article class="ev-card ev-portal">
+        <div class="ev-info">
+          <span class="ev-badge"><i class="fa-solid ${AUDIENCES[audienceOf(e)].icon}"></i> ${esc(e.kind || 'ورشة عمل')} · ${esc(audienceLabel(e))}</span>
+          <h3 class="ev-title">${esc(e.title)}</h3>
+          ${e.about ? `<p class="ev-about">${nl2br(e.about)}</p>` : ''}
+          <ul class="ev-meta">
+            <li><i class="fa-regular fa-calendar"></i><span><small>اليوم والتاريخ</small><b>${fmtDate(e.date)}</b></span></li>
+            <li><i class="fa-regular fa-clock"></i><span><small>الوقت</small><b>${tRange(e.start, endTime(e))}</b></span></li>
+            <li><i class="fa-solid fa-hourglass-half"></i><span><small>المدة</small><b>${durLabel(e.duration)}</b></span></li>
+            ${e.location ? `<li><i class="fa-solid fa-location-dot"></i><span><small>الموقع</small><b>${locUrl ? `<a href="${esc(locUrl)}" target="_blank" rel="noopener">${esc(e.location)} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : esc(e.location)}</b></span></li>` : ''}
+          </ul>
+          ${sp ? `<div class="ev-speaker"><small class="ev-label">المتحدث</small><div class="ev-sp-head">${avatar(sp, 'lg')}<div><b>${esc(sp.name)}</b>${sp.tagline ? `<span>${esc(sp.tagline)}</span>` : ''}</div></div>${sp.bio ? `<p class="ev-sp-bio">${nl2br(sp.bio)}</p>` : ''}</div>` : ''}
+        </div>
+        <div class="ev-reg">
+          ${mine
+            ? `<div class="ev-registered"><i class="fa-solid fa-circle-check"></i><h4>أنت مسجّل في هذه الفعالية</h4><small>سجّلت بتاريخ ${fmtTs(mine.ts)}</small>
+                <button class="btn sm outline-light" data-ev-unreg="${mine.id}"><i class="fa-solid fa-xmark"></i> إلغاء التسجيل</button></div>`
+            : `<h4><i class="fa-solid fa-ticket"></i> سجّل حضورك</h4>
+              <form class="ev-form" data-event-form="${esc(e.id)}" data-member="${esc(me.id)}" novalidate>
+                <div class="ev-fields">
+                  ${fieldInput({ k: 'name', label: 'الاسم', required: true }, me.name || '')}
+                  ${fieldInput({ k: 'phone', label: 'الجوال', type: 'tel', required: true }, me.whatsapp || '')}
+                  ${fieldInput({ k: 'email', label: 'الإيميل', type: 'email', required: true }, me.email || '')}
+                </div>
+                <button class="btn primary lg ev-submit" type="submit"><i class="fa-solid fa-paper-plane"></i> سجّل حضوري</button>
+              </form>`}
+        </div>
+      </article>`;
+    };
+    return `<section class="panel ev-portal-panel"><h2><i class="fa-solid fa-person-chalkboard"></i> فعاليات لك <span class="count">${list.length}</span></h2>
+      <p class="muted small">فعاليات وورش عمل موجهة لك من إدارة البرنامج.</p>
+      <div class="ev-list">${list.map(card).join('')}</div></section>`;
+  }
+
+  document.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-ev-unreg]');
+    if (!b) return;
+    const r = Store.get(`eventRegs/${b.dataset.evUnreg}`);
+    const me = Auth.current();
+    if (!r || !me || r.memberId !== me.id) return;
+    if (await confirmDialog('إلغاء تسجيلك في هذه الفعالية؟', { danger: true, ok: 'إلغاء التسجيل', cancel: 'رجوع' })) {
+      Store.remove(`eventRegs/${r.id}`);
+      const e = Store.get(`events/${r.eventId}`);
+      Data.notify('admin', `ألغى ${r.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${r.name} تسجيله في فعالية «${e?.title || ''}»`, { icon: 'fa-ticket' });
+      toast('تم إلغاء التسجيل');
+    }
+  });
+
   /* ================= لوحة الإدارة ================= */
   const rerender = () => { const r = document.getElementById('app'); if (Auth.current()?.kind === 'admin') Admin.render(r); };
 
   function regsTable(list, key) {
     if (!list.length) return emptyState('لا توجد تسجيلات بعد', 'fa-ticket');
-    return `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الاسم</th><th>الجوال</th><th>الإيميل</th><th>مهتم بالانضمام</th><th>تاريخ التسجيل</th><th></th></tr></thead><tbody>
+    return `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الاسم</th><th>الجوال</th><th>الإيميل</th><th>الصفة / الاهتمام</th><th>تاريخ التسجيل</th><th></th></tr></thead><tbody>
       ${list.map(r => `<tr class="${r.seen ? '' : 'new'}"><td data-l="الاسم"><b>${esc(r.name)}</b></td>
         <td data-l="الجوال"><a href="${esc(waLink(r.phone))}" target="_blank" rel="noopener" dir="ltr"><i class="fa-brands fa-whatsapp"></i> ${esc(r.phone)}</a></td>
         <td data-l="الإيميل"><a href="mailto:${esc(r.email)}" dir="ltr">${esc(r.email)}</a></td>
-        <td data-l="مهتم بالانضمام">${r.interest ? `<span class="chip ${r.interest}">${INTEREST[r.interest].label}</span>` : '—'}</td>
+        <td data-l="الصفة / الاهتمام">${r.memberId ? `<span class="chip ${r.role}">${r.role === 'mentor' ? 'مرشد' : 'مستفيد'} · <span class="num">${esc(r.code || '')}</span></span>` : r.interest ? `<span class="chip ${r.interest}">مهتم: ${INTEREST[r.interest].label}</span>` : '—'}</td>
         <td data-l="تاريخ التسجيل"><small>${fmtTs(r.ts)}</small></td>
         <td><button class="icon-btn danger" data-ev-delreg="${r.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
     </tbody></table></div>`;
@@ -152,14 +238,14 @@ const Events = (() => {
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-person-chalkboard"></i> الفعاليات وورش العمل</h2>
         <div class="head-actions">${exportBar('events')}<button class="btn primary" data-ev-add><i class="fa-solid fa-plus"></i> إضافة فعالية</button></div></div>
-      <p class="muted small">تظهر الفعاليات المنشورة القادمة في قسم «فعالية قادمة» بالصفحة الرئيسية مع نموذج تسجيل الحضور. «إخفاء الإعلان» يوقف ظهوره والتسجيل فيه دون حذفه، والفعالية التي انتهى موعدها تختفي من الصفحة الرئيسية تلقائياً.</p>
+      <p class="muted small">فعاليات «الجمهور العام» تظهر في قسم «فعالية قادمة» بالصفحة الرئيسية، وفعاليات مجتمع إشراق أو المرشدين أو المستفيدين تظهر في صفحات الفئة المختارة فقط، مع نموذج تسجيل الحضور. «إخفاء الإعلان» يوقف ظهوره والتسجيل فيه دون حذفه، والفعالية التي انتهى موعدها تختفي من الصفحة الرئيسية تلقائياً.</p>
       ${list.length ? `<div class="ev-admin-list">${list.map(e => {
         const sp = speakerOf(e);
         const r = regs(e.id);
         const open = ui.open.has(e.id);
         return `<div class="ev-admin ${open ? 'open' : ''} ${e.published === false ? 'is-hidden' : ''}">
           <div class="ev-admin-head">
-            <div class="ev-admin-info"><div class="ev-admin-title"><b>${esc(e.title)}</b> ${status(e)}</div>
+            <div class="ev-admin-info"><div class="ev-admin-title"><b>${esc(e.title)}</b> ${status(e)} <span class="chip aud-chip"><i class="fa-solid ${AUDIENCES[audienceOf(e)].icon}"></i> ${esc(audienceLabel(e))}</span></div>
               <small><i class="fa-regular fa-calendar"></i> ${fmtDate(e.date)} · ${tRange(e.start, endTime(e))} · ${durLabel(e.duration)}${e.location ? ` · <i class="fa-solid fa-location-dot"></i> ${esc(e.location)}` : ''}</small>
               ${sp ? `<div class="ev-admin-sp">${miniMember(sp)}</div>` : ''}</div>
             <div class="ev-admin-actions">
@@ -243,6 +329,13 @@ const Events = (() => {
         <div class="field"><label>المدة</label><select name="duration">${DURATIONS.map(([v, l]) => `<option value="${v}" ${+e.duration === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         ${fieldInput({ k: 'location', label: 'الموقع', placeholder: 'مثال: قاعة الجمعية، أو عن بُعد عبر Zoom' }, e.location || '')}
         ${fieldInput({ k: 'locationUrl', label: 'رابط الموقع أو الاجتماع (اختياري)', type: 'url', wide: true }, e.locationUrl || '')}
+        <fieldset class="wide aud-fields"><legend>الجمهور المستهدف</legend>
+          <div class="aud-options">${Object.entries(AUDIENCES).map(([k, a]) => `<label class="radio"><input type="radio" name="audience" value="${k}" ${audienceOf(e) === k ? 'checked' : ''}><span><i class="fa-solid ${a.icon}"></i> ${k === 'community' ? 'مجتمع إشراق (المرشدون والمستفيدون)' : k === 'public' ? 'الجمهور العام (الصفحة الرئيسية)' : a.label + ' فقط'}</span></label>`).join('')}</div>
+          <div class="field aud-cohort" ${audienceOf(e) === 'public' ? 'hidden' : ''}><label>الدفعة</label>
+            <select name="audienceCohort">${Data.cohorts().slice().reverse().map((c, i) => `<option value="${c.id}" ${(e.audienceCohort || latestCohort()?.id) === c.id ? 'selected' : ''}>${esc(c.name)} ${c.year}${i === 0 ? ' (الدفعة الحالية)' : ''}</option>`).join('')}
+              <option value="all" ${e.audienceCohort === 'all' ? 'selected' : ''}>كل الدفعات (الحالية والسابقة)</option></select>
+            <small class="hint">يظهر الإعلان في صفحات الفئة المختارة فقط، ويسجلون حضورهم من هناك، ولا يظهر في الصفحة الرئيسية.</small></div>
+        </fieldset>
         ${speakerPicker(e)}
       </form>`,
       actions: [{
@@ -253,16 +346,27 @@ const Events = (() => {
           const data = {
             title: v.title, kind: v.kind, about: v.about, date: v.date, start: readTime(f, 'start'), duration: +v.duration,
             location: v.location, locationUrl: v.locationUrl, published: !!v.published,
+            audience: v.audience || 'public', audienceCohort: (v.audience || 'public') === 'public' ? '' : v.audienceCohort,
             speakerType: v.speakerType || '', speakerId: v.speakerType === 'mentor' ? v.speakerId : '',
             speaker: v.speakerType === 'other' ? { name: v.sp_name, tagline: v.sp_tagline, bio: v.sp_bio, photo: v.sp_photo } : null
           };
           if (data.speakerType === 'other' && !data.speaker.name) { toast('اكتب اسم المتحدث', 'error'); return false; }
+          const wasTargeted = e.id ? targetMembers(e).map(x => x.id) : [];
           if (e.id) Store.update(`events/${e.id}`, data);
           else Store.push('events', { ...data, ts: Date.now() });
+          // إشعار الأعضاء المستهدفين الجدد بالفعالية
+          if (data.published && data.audience !== 'public') {
+            targetMembers(data).filter(x => !wasTargeted.includes(x.id))
+              .forEach(x => Data.notify(x.id, `فعالية جديدة لك: «${data.title}» — ${fmtDate(data.date)}، سجّل حضورك من صفحتك`, { icon: 'fa-person-chalkboard' }));
+          }
           toast('تم حفظ الفعالية');
         }
       }, { label: 'إلغاء', cls: 'ghost' }],
-      onOpen: m => wirePicker(m.body)
+      onOpen: m => {
+        wirePicker(m.body);
+        const sync = () => { $('.aud-cohort', m.body).hidden = ($('[name=audience]:checked', m.body)?.value || 'public') === 'public'; };
+        $$('[name=audience]', m.body).forEach(r => r.addEventListener('change', sync));
+      }
     });
   }
 
@@ -289,13 +393,13 @@ const Events = (() => {
 
   function exportData(key) {
     const [, id] = key.split(':');
-    const headers = ['الاسم', 'الجوال', 'الإيميل', 'مهتم بالانضمام', 'تاريخ التسجيل'];
-    const rows = list => list.map(r => [r.name, r.phone, r.email, r.interest ? INTEREST[r.interest].label : '', fmtTs(r.ts)]);
+    const headers = ['الاسم', 'الجوال', 'الإيميل', 'الصفة / الاهتمام', 'رقم العضوية', 'تاريخ التسجيل'];
+    const rows = list => list.map(r => [r.name, r.phone, r.email, r.memberId ? (r.role === 'mentor' ? 'مرشد' : 'مستفيد') : r.interest ? `مهتم: ${INTEREST[r.interest].label}` : '', r.code || '', fmtTs(r.ts)]);
     if (key === 'events') {
       return {
         title: 'الفعاليات وورش العمل',
-        headers: ['العنوان', 'النوع', 'التاريخ', 'الوقت', 'المدة', 'الموقع', 'المتحدث', 'الحالة', 'عدد المسجلين'],
-        rows: all().map(e => [e.title, e.kind, fmtDate(e.date), `${e.start} - ${endTime(e)}`, durLabel(e.duration), e.location, speakerOf(e)?.name || '',
+        headers: ['العنوان', 'النوع', 'الجمهور المستهدف', 'التاريخ', 'الوقت', 'المدة', 'الموقع', 'المتحدث', 'الحالة', 'عدد المسجلين'],
+        rows: all().map(e => [e.title, e.kind, audienceLabel(e), fmtDate(e.date), `${e.start} - ${endTime(e)}`, durLabel(e.duration), e.location, speakerOf(e)?.name || '',
           e.published === false ? 'مخفي' : isOver(e) ? 'انتهت' : 'منشور', regs(e.id).length])
       };
     }
@@ -306,5 +410,5 @@ const Events = (() => {
 
   const unseen = () => Store.list('eventRegs').filter(r => !r.seen).length;
 
-  return { section, panel, exportData, unseen };
+  return { section, panel, portalSection, exportData, unseen };
 })();
