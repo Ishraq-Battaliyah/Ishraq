@@ -35,9 +35,9 @@ const Admin = (() => {
         </section>
         ${securityBanner()}
         ${dbWarning()}
-        ${backupBar()}
+        ${Security.isFull() ? backupBar() : ''}
         ${tabs.length ? '' : `<div class="panel">${emptyState('لم تُمنح لحسابك أي صلاحيات بعد. تواصل مع أحد الحسابات الرئيسية.', 'fa-user-lock')}</div>`}
-        <nav class="admin-tabs">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${t.id}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
+        <nav class="admin-tabs">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${esc(t.id)}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
         <div class="tab-panel">${ui.tab ? (P[ui.tab] ? P[ui.tab]() : '') : `<div class="tab-hint">${emptyState('اضغط على أي تبويب لعرض تفاصيله، واضغط عليه مرة أخرى لإخفائها.', 'fa-hand-pointer')}</div>`}</div>
       </main>
     </div>`;
@@ -62,7 +62,8 @@ const Admin = (() => {
       <div><i class="fa-solid ${due ? 'fa-triangle-exclamation' : 'fa-shield-halved'}"></i>
         <span>${last ? `آخر نسخة احتياطية: <b class="num">${fmtTs(last)}</b>${due ? ` — مضى <span class="num">${days}</span> يوماً، يُنصح بأخذ نسخة جديدة` : ''}` : 'لم تُؤخذ نسخة احتياطية بعد — يُنصح بأخذ نسخة أسبوعياً'}</span></div>
       <div class="head-actions">
-        <button class="btn sm primary" data-backup><i class="fa-solid fa-download"></i> نسخة احتياطية</button>
+        <button class="btn sm primary" data-backup title="بدون رموز دخول الأعضاء"><i class="fa-solid fa-download"></i> نسخة احتياطية</button>
+        ${Security.isOwner() ? '<button class="btn sm ghost" data-backup-full title="تتضمن رموز دخول الأعضاء — احفظها في مكان آمن"><i class="fa-solid fa-key"></i> نسخة مع رموز الدخول</button>' : ''}
         ${Security.isFull() ? '<label class="btn sm ghost"><i class="fa-solid fa-upload"></i> استرجاع نسخة<input type="file" accept=".json,application/json" data-restore hidden></label>' : ''}
       </div>
     </div>`;
@@ -74,8 +75,10 @@ const Admin = (() => {
     return `ishraq-backup-${stamp}.json`;
   }
 
-  function downloadBackup(silent) {
+  // النسخة الاحتياطية لا تتضمن رموز دخول الأعضاء إلا بطلب صريح من حساب رئيسي
+  function downloadBackup(silent, withSecrets = false) {
     const data = Store.dump();
+    if (!withSecrets) delete data.secrets;
     const payload = { app: 'ishraq', version: 1, exportedAt: new Date().toISOString(), data };
     download(backupFile(), JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
     if (!silent) { Store.set('meta/lastBackup', Date.now()); toast('تم تنزيل النسخة الاحتياطية'); }
@@ -87,6 +90,8 @@ const Admin = (() => {
     // يقبل ملف المنصة، أو ملف «Export JSON» من Firebase Console (كامل أو لمسار ishraq)
     const data = json?.app === 'ishraq' ? json.data : json?.ishraq && typeof json.ishraq === 'object' ? json.ishraq : json;
     if (!data || typeof data !== 'object' || !(data.content || data.members || data.meta)) return toast('هذا الملف لا يحتوي على بيانات منصة إشراق', 'error');
+    // نسخة من قبل ترقية الأمان تعيد بيانات التواصل إلى البطاقات العامة وتفقد حسابات الدخول
+    if (Store.get('meta/securityVersion') && !data.meta?.securityVersion) return toast('هذه النسخة من قبل ترقية الأمان ولا يمكن استرجاعها في الوضع الآمن، لأنها تعيد بيانات التواصل إلى البطاقات العامة', 'error');
     const count = k => Object.keys(data[k] || {}).length;
     const when = json.exportedAt ? fmtTs(Date.parse(json.exportedAt)) : 'غير معروف';
     const ok = await confirmDialog(`<b>استرجاع نسخة بتاريخ ${when}</b><br><br>
@@ -98,7 +103,9 @@ const Admin = (() => {
     const current = Store.dump();
     // بيانات المشرفين وصلاحياتهم لا تُستبدل عند الاسترجاع
     const KEEP = ['meta', 'admins', 'adminInvites', 'adminLog'];
-    Object.keys(current).forEach(k => { if (!(k in data) && !KEEP.includes(k)) Store.remove(k); });
+    // حسابات الدخول والتواصل تبقى كما هي إن لم تكن في الملف (النسخ العادية لا تتضمن الرموز)
+    const PRESERVE = ['secrets', 'uids', 'contacts', 'counters', 'pairs', 'approvedReviews', 'launches'];
+    Object.keys(current).forEach(k => { if (!(k in data) && !KEEP.includes(k) && !PRESERVE.includes(k)) Store.remove(k); });
     Object.entries(data).forEach(([k, v]) => { if (!KEEP.includes(k)) Store.set(k, v); });
     Store.set('meta', { ...(data.meta || {}), seeded: data.meta?.seeded || Date.now(), eventsSection: true, lastBackup: current.meta?.lastBackup || null, restoredAt: Date.now(), rulesVersion: current.meta?.rulesVersion || null, securityVersion: current.meta?.securityVersion || data.meta?.securityVersion || null });
     Security.log('استرجاع نسخة احتياطية', file.name || '');
@@ -124,7 +131,7 @@ const Admin = (() => {
         <div class="head-actions">${exportBar('content')}<a class="btn ghost" href="#/" target="_blank"><i class="fa-solid fa-eye"></i> معاينة</a>
         <button class="btn primary" data-add-section><i class="fa-solid fa-plus"></i> إضافة قسم</button></div></div>
       <p class="muted small"><i class="fa-solid fa-arrows-up-down"></i> اسحب الأقسام وأفلتها لتغيير ترتيب عرضها (بما فيها الترويسة والتذييل)، أو استخدم الأسهم.</p>
-      <ul class="sortable" data-sortable>${secs.map((s, i) => `<li draggable="true" data-id="${s.id}" class="${s.visible === false ? 'is-hidden' : ''}">
+      <ul class="sortable" data-sortable>${secs.map((s, i) => `<li draggable="true" data-id="${esc(s.id)}" class="${s.visible === false ? 'is-hidden' : ''}">
         <span class="drag"><i class="fa-solid fa-grip-vertical"></i></span>
         <span class="sec-ic"><i class="fa-solid ${SECTION_TYPES[s.type]?.icon || 'fa-square'}"></i></span>
         <div class="sec-info"><b>${typeLabel(s.type)}</b><small>${preview(s)}</small></div>
@@ -148,7 +155,7 @@ const Admin = (() => {
       <p class="muted small">يحتوي النموذج دائماً على اختيار «مرشد / مستفيد». أضف ما تحتاجه من حقول: بيانات التواصل، الخبرات، روابط السير الذاتية والملفات والمصادر (كروابط دون رفع ملفات). تظهر الردود في تبويب «المهتمون».</p>
       <ul class="sortable fields" data-sortable-fields>
         <li class="locked"><span class="drag"><i class="fa-solid fa-lock"></i></span><div class="sec-info"><b>مرشد أو مستفيد</b><small>اختيار إلزامي</small></div></li>
-        ${fields.map(f => `<li draggable="true" data-id="${f.id}"><span class="drag"><i class="fa-solid fa-grip-vertical"></i></span>
+        ${fields.map(f => `<li draggable="true" data-id="${esc(f.id)}"><span class="drag"><i class="fa-solid fa-grip-vertical"></i></span>
         <div class="sec-info"><b>${esc(f.label)} ${f.required ? '<em class="req">*</em>' : ''}</b><small>${types[f.type] || f.type}</small></div>
         <div class="sec-actions"><button class="icon-btn" data-edit-field title="تعديل"><i class="fa-solid fa-pen"></i></button>
         <button class="icon-btn danger" data-del-field title="حذف"><i class="fa-solid fa-trash"></i></button></div></li>`).join('')}
@@ -164,7 +171,7 @@ const Admin = (() => {
       title: f.id ? 'تعديل حقل' : 'إضافة حقل', size: 'sm',
       body: `<form class="form-grid one">
         ${fieldInput({ k: 'label', label: 'عنوان الحقل', required: true }, f.label || '')}
-        <div class="field"><label>نوع الحقل</label><select name="type">${types.map(([v, l]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>نوع الحقل</label><select name="type">${types.map(([v, l]) => `<option value="${esc(v)}" ${f.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         ${fieldInput({ k: 'options', label: 'الخيارات (سطر لكل خيار) — لقائمة الاختيار', type: 'textarea', rows: 3 }, f.options || '')}
         ${fieldInput({ k: 'placeholder', label: 'نص إرشادي داخل الحقل (اختياري)' }, f.placeholder || '')}
         ${fieldInput({ k: 'required', label: 'حقل إلزامي', type: 'checkbox' }, f.required)}
@@ -188,11 +195,11 @@ const Admin = (() => {
     const T = SECTION_TYPES[s.type] || { fields: ['title', 'body'] };
     const itemFields = T.items || [];
     let items = JSON.parse(JSON.stringify(s.items || []));
-    const itemRow = (it, i) => `<div class="item-row" data-i="${i}">
+    const itemRow = (it, i) => `<div class="item-row" data-i="${esc(i)}">
       <div class="item-fields">${itemFields.map(k => ITEM_META[k][1] === 'checkbox'
-        ? `<label class="check"><input type="checkbox" data-k="${k}" ${it[k] ? 'checked' : ''}><span>${ITEM_META[k][0]}</span></label>`
-        : ITEM_META[k][1] === 'textarea' ? `<label><small>${ITEM_META[k][0]}</small><textarea data-k="${k}" rows="2">${esc(it[k] || '')}</textarea></label>`
-          : `<label><small>${ITEM_META[k][0]}</small><input data-k="${k}" value="${esc(it[k] || '')}" ${k === 'icon' ? 'dir="ltr"' : ''}></label>`).join('')}</div>
+        ? `<label class="check"><input type="checkbox" data-k="${esc(k)}" ${it[k] ? 'checked' : ''}><span>${ITEM_META[k][0]}</span></label>`
+        : ITEM_META[k][1] === 'textarea' ? `<label><small>${ITEM_META[k][0]}</small><textarea data-k="${esc(k)}" rows="2">${esc(it[k] || '')}</textarea></label>`
+          : `<label><small>${ITEM_META[k][0]}</small><input data-k="${esc(k)}" value="${esc(it[k] || '')}" ${k === 'icon' ? 'dir="ltr"' : ''}></label>`).join('')}</div>
       <div class="item-ctl"><button type="button" class="icon-btn" data-imove="-1"><i class="fa-solid fa-arrow-up"></i></button>
       <button type="button" class="icon-btn" data-imove="1"><i class="fa-solid fa-arrow-down"></i></button>
       <button type="button" class="icon-btn danger" data-idel><i class="fa-solid fa-trash"></i></button></div></div>`;
@@ -207,7 +214,7 @@ const Admin = (() => {
     const body = `<form class="form-grid one sec-form">
       ${T.fields.map(k => fieldInput({ k, label: FIELD_META[k][0], type: FIELD_META[k][1] }, s[k] || '')).join('')}
       ${T.social ? `<fieldset class="social-fields"><legend>حسابات التواصل الاجتماعي (تظهر كأيقونات عند إضافة الرابط)</legend>
-        <div class="form-grid">${SOCIALS.map(x => `<div class="field"><label><i class="${x.icon}"></i> ${x.label}</label><input name="social_${x.k}" dir="ltr" value="${esc(s.social?.[x.k] || '')}" placeholder="${x.k === 'email' ? 'name@example.com' : x.k === 'whatsapp' ? '9665xxxxxxxx' : 'https://'}"></div>`).join('')}</div></fieldset>` : ''}
+        <div class="form-grid">${SOCIALS.map(x => `<div class="field"><label><i class="${esc(x.icon)}"></i> ${x.label}</label><input name="social_${x.k}" dir="ltr" value="${esc(s.social?.[x.k] || '')}" placeholder="${x.k === 'email' ? 'name@example.com' : x.k === 'whatsapp' ? '9665xxxxxxxx' : 'https://'}"></div>`).join('')}</div></fieldset>` : ''}
       ${itemFields.length ? `<fieldset><legend>العناصر</legend><div class="items-list"></div>
         <button type="button" class="btn ghost sm" data-iadd><i class="fa-solid fa-plus"></i> إضافة عنصر</button>
         ${itemFields.includes('icon') ? '<small class="hint">أسماء الأيقونات من <a href="https://fontawesome.com/search?o=r&m=free&s=solid" target="_blank" rel="noopener">Font Awesome</a> مثل fa-star أو fa-user-tie</small>' : ''}</fieldset>` : ''}
@@ -220,7 +227,7 @@ const Admin = (() => {
         label: 'حفظ', cls: 'primary', onClick: m => {
           const form = $('.sec-form', m.body);
           const v = {};
-          T.fields.forEach(k => { const el = $(`[name="${k}"]`, form); v[k] = el ? el.value.trim() : ''; });
+          T.fields.forEach(k => { const el = $(`[name="${esc(k)}"]`, form); v[k] = el ? el.value.trim() : ''; });
           if (T.social) { v.social = {}; SOCIALS.forEach(x => { v.social[x.k] = $(`[name="social_${x.k}"]`, form).value.trim(); }); }
           if (itemFields.length) v.items = readItems(m);
           if (s.id) Store.update(`content/sections/${s.id}`, v);
@@ -261,7 +268,7 @@ const Admin = (() => {
     const opts = Object.entries(SECTION_TYPES).filter(([k, t]) => !(t.single && existing.has(k)));
     const mm = openModal({
       title: 'إضافة قسم جديد', size: 'md',
-      body: `<div class="type-grid">${opts.map(([k, t]) => `<button class="type-card" data-type="${k}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span></button>`).join('')}</div>`
+      body: `<div class="type-grid">${opts.map(([k, t]) => `<button class="type-card" data-type="${esc(k)}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span></button>`).join('')}</div>`
     });
     $$('[data-type]', mm.el).forEach(b => b.onclick = () => {
       mm.close();
@@ -315,10 +322,10 @@ const Admin = (() => {
       <div class="panel-head"><h2><i class="fa-solid fa-people-group"></i> أفواج أعضاء المبادرة</h2>
       <button class="btn primary" data-add-cohort><i class="fa-solid fa-plus"></i> إضافة دفعة جديدة</button></div>
       <div class="cohort-list">${cohorts.map(c => `<div class="cohort ${ui.cohort === c.id ? 'open' : ''}">
-        <div class="cohort-row"><button class="cohort-btn" data-cohort="${c.id}"><i class="fa-solid fa-users"></i> ${esc(c.name)} <span class="year">${c.year}</span>
+        <div class="cohort-row"><button class="cohort-btn" data-cohort="${esc(c.id)}"><i class="fa-solid fa-users"></i> ${esc(c.name)} <span class="year">${esc(c.year)}</span>
           <small>${Data.members('mentor', c.id).length} مرشد · ${Data.members('mentee', c.id).length} مستفيد</small><i class="fa-solid fa-chevron-down caret"></i></button>
-          <button class="icon-btn" data-edit-cohort="${c.id}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
-          <button class="icon-btn danger" data-del-cohort="${c.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></div>
+          <button class="icon-btn" data-edit-cohort="${esc(c.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
+          <button class="icon-btn danger" data-del-cohort="${esc(c.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></div>
         ${ui.cohort === c.id ? cohortBody(c) : ''}
       </div>`).join('')}</div>
     </div>`;
@@ -327,7 +334,7 @@ const Admin = (() => {
   function cohortBody(c) {
     const subs = [['mentor', 'معلومات المرشدين', 'fa-user-tie'], ['mentee', 'معلومات المستفيدين', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project']];
     return `<div class="cohort-body">
-      <div class="sub-tabs">${subs.map(([k, l, i]) => `<button class="${ui.sub === k ? 'active' : ''}" data-sub="${k}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
+      <div class="sub-tabs">${subs.map(([k, l, i]) => `<button class="${ui.sub === k ? 'active' : ''}" data-sub="${esc(k)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
       ${ui.sub === 'mentor' || ui.sub === 'mentee' ? membersBlock(c, ui.sub) : ''}
       ${ui.sub === 'network' ? networkBlock(c) : ''}
     </div>`;
@@ -335,18 +342,19 @@ const Admin = (() => {
 
   function membersBlock(c, role) {
     const list = Data.members(role, c.id);
+    const full = Security.isFull();
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
     return `<div class="members-block">
       <div class="block-head"><h3>${label} — ${esc(c.name)} <span class="count">${list.length}</span></h3>
         <div class="head-actions">${exportBar(`members:${c.id}:${role}`)}
-        <button class="btn ghost sm" data-csv-template="${role}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button></div></div>
-      <label class="dropzone" data-drop="${role}">
+        <button class="btn ghost sm" data-csv-template="${esc(role)}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button></div></div>
+      <label class="dropzone" data-drop="${esc(role)}">
         <input type="file" accept=".csv,text/csv" hidden>
         <i class="fa-solid fa-cloud-arrow-up"></i><span>اسحب ملف CSV وأفلته هنا لإضافة ${label} دفعة واحدة، أو اضغط لاختيار الملف</span>
       </label>
       <div class="card-grid">
-        <button class="add-card" data-add-member="${role}"><i class="fa-solid fa-plus"></i><span>إضافة ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد</span></button>
-        ${list.map(m => memberCard(m, { secret: Store.get(`secrets/codes/${m.id}`), actions: `<button class="btn xs send-cred" data-send-cred="${m.id}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button><button class="btn xs ghost" data-edit-member="${m.id}"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn xs ghost" data-regen="${m.id}" title="توليد رمز دخول جديد"><i class="fa-solid fa-key"></i> رمز جديد</button><button class="btn xs ghost danger" data-del-member="${m.id}"><i class="fa-solid fa-trash"></i> حذف</button>` })).join('')}
+        <button class="add-card" data-add-member="${esc(role)}"><i class="fa-solid fa-plus"></i><span>إضافة ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد</span></button>
+        ${list.map(m => { const id = esc(m.id); return memberCard(m, { secret: Store.get(`secrets/codes/${m.id}`), actions: `${full ? `<button class="btn xs send-cred" data-send-cred="${esc(id)}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button>` : ''}<button class="btn xs ghost" data-edit-member="${esc(id)}"><i class="fa-solid fa-pen"></i> تعديل</button>${full ? `<button class="btn xs ghost" data-regen="${esc(id)}" title="توليد رمز دخول جديد"><i class="fa-solid fa-key"></i> رمز جديد</button>` : ''}<button class="btn xs ghost danger" data-del-member="${esc(id)}"><i class="fa-solid fa-trash"></i> حذف</button>` }); }).join('')}
       </div>
     </div>`;
   }
@@ -365,7 +373,7 @@ const Admin = (() => {
   }
 
   async function importCSV(file, role, cohortId) {
-    const text = await file.text();
+    const text = await readTextFile(file);
     const rows = parseCSV(text);
     if (rows.length < 2) return toast('الملف فارغ أو غير صالح', 'error');
     const head = rows[0].map(h => h.trim());
@@ -400,7 +408,7 @@ const Admin = (() => {
     const fields = PROFILE_FIELDS.map(f => ({ ...f, label: typeof f.label === 'object' ? f.label[role] : f.label, wide: f.type === 'textarea' || f.k === 'photo' }));
     openModal({
       title: `<i class="fa-solid fa-plus"></i> ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد <span class="code-chip">${preview}</span>`, size: 'lg',
-      body: `<form class="form-grid"><p class="wide muted small">رقم العضوية يتولد آلياً، ويُنشأ للعضو رمز دخول سري (مثل <span class="num">${preview}-7K4Q</span>) يصله عبر «مشاركة البطاقة ومعلومات الدخول».</p>${fields.map(f => fieldInput(f)).join('')}</form>`,
+      body: `<form class="form-grid"><p class="wide muted small">رقم العضوية يتولد آلياً، ويُنشأ للعضو رمز دخول سري (مثل <span class="num">${preview}-7K4Q9P</span>) يصله عبر «مشاركة البطاقة ومعلومات الدخول».</p>${fields.map(f => fieldInput(f)).join('')}</form>`,
       actions: [{
         label: 'حفظ البطاقة', cls: 'primary', onClick: async m => {
           const f = $('form', m.body);
@@ -491,8 +499,8 @@ const Admin = (() => {
         const cur = draft[m.id] || '';
         const opts = mentees.filter(x => !used.has(x.id) || x.id === cur);
         return `<li>${miniMember(m)}<i class="fa-solid fa-xmark net-x"></i>
-          <div class="net-pick"><select data-net="${m.id}"><option value="">— اختر المستفيد —</option>${opts.map(x => `<option value="${x.id}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)} (${x.code})</option>`).join('')}</select>
-          ${cur ? `<button class="icon-btn danger" data-unassign="${m.id}" title="إلغاء التعيين"><i class="fa-solid fa-link-slash"></i></button>` : ''}</div></li>`;
+          <div class="net-pick"><select data-net="${esc(m.id)}"><option value="">— اختر المستفيد —</option>${opts.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)} (${x.code})</option>`).join('')}</select>
+          ${cur ? `<button class="icon-btn danger" data-unassign="${esc(m.id)}" title="إلغاء التعيين"><i class="fa-solid fa-link-slash"></i></button>` : ''}</div></li>`;
       }).join('')}</ul>
       <p class="muted small">المستفيدون غير المعيّنين: ${mentees.filter(x => !used.has(x.id)).map(x => esc(x.name)).join('، ') || 'لا يوجد'}</p>`}
     </div>`;
@@ -523,7 +531,7 @@ const Admin = (() => {
 
   /* =============== 3) الجلسات =============== */
   function cohortFilter(key) {
-    return `<div class="chip-filter">${[{ id: 'all', name: 'كل الدفعات' }, ...Data.cohorts()].map(c => `<button class="${ui[key] === c.id ? 'active' : ''}" data-filter="${key}" data-val="${c.id}">${esc(c.name)}</button>`).join('')}</div>`;
+    return `<div class="chip-filter">${[{ id: 'all', name: 'كل الدفعات' }, ...Data.cohorts()].map(c => `<button class="${ui[key] === c.id ? 'active' : ''}" data-filter="${esc(key)}" data-val="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>`;
   }
   const inCohort = (key, m) => ui[key] === 'all' || m.cohort === ui[key];
 
@@ -540,7 +548,7 @@ const Admin = (() => {
       <h3 class="sub">المرشدون</h3>
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
         const st = Data.stats(Data.bookings({ mentorId: m.id }));
-        return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${m.id}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/3 منجزة</small></button>`;
+        return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/3 منجزة</small></button>`;
       }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
     </div>
     ${bandsPanel()}
@@ -558,12 +566,12 @@ const Admin = (() => {
     const now = Date.now();
     const person = m => `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>`;
     const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
-      ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span><button class="btn xs ghost" data-unlaunch="${cid}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button></div>` : ''}</div>
+      ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span><button class="btn xs ghost" data-unlaunch="${esc(cid)}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button></div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
     const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
       : `<div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
       <p>عند الضغط على «إطلاق الدفعة» يبدأ حساب المدد: فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12. ويظهر للمرشدين شريط «تم إطلاق الدفعة رسمياً» وتُفتح لهم إضافة المواعيد.</p></div>
-      <button class="btn primary lg" data-launch="${cid}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div>`;
+      <button class="btn primary lg" data-launch="${esc(cid)}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div>`;
 
     // إحصائية إضافة المواعيد
     const addedFor = n => mentors.filter(m => Bands.addedAt(m.id, n) != null);
@@ -573,7 +581,7 @@ const Admin = (() => {
       { k: 'none', label: 'لم يضيفوا أي موعد', icon: 'fa-calendar-xmark', yes: none, no: [], warn: true }
     ];
     const open = boxes.find(x => x.k === ui.bandStat);
-    const stats = `<div class="add-stats">${boxes.map(x => `<button class="add-stat ${x.warn ? 'warn' : ''} ${ui.bandStat === x.k ? 'active' : ''}" data-band-stat="${x.k}">
+    const stats = `<div class="add-stats">${boxes.map(x => `<button class="add-stat ${x.warn ? 'warn' : ''} ${ui.bandStat === x.k ? 'active' : ''}" data-band-stat="${esc(x.k)}">
         <i class="fa-solid ${x.icon}"></i><b>${x.yes.length}<small>/${mentors.length}</small></b><span>${x.label}</span><i class="fa-solid fa-chevron-down arrow"></i></button>`).join('')}</div>
       ${open ? `<div class="add-stat-list"><h4>${open.label} <span class="count">${open.yes.length}</span></h4>
         ${open.yes.length ? `<div class="bp-list">${open.yes.map(person).join('')}</div>` : '<p class="muted small">لا أحد</p>'}
@@ -585,7 +593,7 @@ const Admin = (() => {
       const cols = Bands.LEVELS.map(lv => {
         const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k);
         return `<div class="band ${lv.cls}"><header><i class="fa-solid ${lv.icon}"></i><b>${lv.name}</b><small>${lv.period}</small><em>${inBand.length}</em></header>
-          <ul>${inBand.map(({ m, st }) => `<li class="${st.added ? 'added' : 'waiting'}" data-band-mentor="${m.id}" data-session="${n}" title="${st.added ? 'أضاف الموعد' : 'لم يُضف الموعد بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
+          <ul>${inBand.map(({ m, st }) => `<li class="${st.added ? 'added' : 'waiting'}" data-band-mentor="${esc(m.id)}" data-session="${esc(n)}" title="${st.added ? 'أضاف الموعد' : 'لم يُضف الموعد بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
       }).join('');
       const pending = sts.filter(x => x.st.notStarted).length;
       return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4}${start ? ` · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}` : ''}</small>
@@ -597,7 +605,7 @@ const Admin = (() => {
       ${mentors.length ? stats : emptyState('لا يوجد مرشدون في هذه الدفعة', 'fa-user-tie')}
       ${rows}
       <details class="band-legend"><summary><i class="fa-solid fa-circle-info"></i> مصفوفة المتابعة والإجراء المتبع</summary>
-        <ul>${Bands.LEVELS.map(lv => `<li class="${lv.cls}"><b>${lv.period}</b><span>${lv.rate}</span><em>${lv.name}</em><p>${lv.action}</p></li>`).join('')}</ul></details>
+        <ul>${Bands.LEVELS.map(lv => `<li class="${esc(lv.cls)}"><b>${lv.period}</b><span>${lv.rate}</span><em>${lv.name}</em><p>${lv.action}</p></li>`).join('')}</ul></details>
     </div>`;
   }
 
@@ -626,7 +634,7 @@ const Admin = (() => {
       downloadBackup(true);
       d.slots.forEach(x => Store.remove(`slots/${x.id}`));
       d.bookings.forEach(x => Store.remove(`bookings/${x.id}`));
-      d.reviews.forEach(x => { Store.remove(`reviews/${x.id}`); if (Store.get(`featured/${x.id}`) != null) Store.remove(`featured/${x.id}`); });
+      d.reviews.forEach(x => { Data.unpublishReview(x); Store.remove(`reviews/${x.id}`); if (Store.get(`featured/${x.id}`) != null) Store.remove(`featured/${x.id}`); });
       Security.log('مسح بيانات الجلسات التجريبية', c?.name || cid, `${d.slots.length} موعد، ${d.bookings.length} جلسة، ${d.reviews.length} تقييم`);
     }
     Bands.doLaunch(cid);
@@ -732,7 +740,7 @@ const Admin = (() => {
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
         const mentee = Data.menteeOf(m.id);
         const pend = Data.reviews().filter(r => r.mentorId === m.id && r.status === 'pending' && r.type !== 'program').length;
-        return `<button class="person ${ui.revMentor === m.id ? 'active' : ''}" data-rev-mentor="${m.id}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small><i class="fa-solid fa-user-graduate"></i> ${esc(mentee?.name || 'غير معيّن')}</small>${pend ? `<em class="badge">${pend}</em>` : ''}</button>`;
+        return `<button class="person ${ui.revMentor === m.id ? 'active' : ''}" data-rev-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small><i class="fa-solid fa-user-graduate"></i> ${esc(mentee?.name || 'غير معيّن')}</small>${pend ? `<em class="badge">${pend}</em>` : ''}</button>`;
       }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
     </div>
     ${sel ? pairReviews(sel) : ''}
@@ -742,8 +750,8 @@ const Admin = (() => {
       ${program.length ? `<ul class="review-list admin-reviews">${program.map(r => {
         const a = Data.member(r.authorId);
         return `<li class="review ${r.featured ? 'featured' : ''}"><header>${miniMember(a)}<span class="chip">${r.from === 'mentor' ? 'مرشد' : 'مستفيد'}</span><small>${fmtTs(r.ts)}</small></header>
-          <p>${nl2br(r.text)}</p><footer><label class="switch"><input type="checkbox" data-feature="${r.id}" ${r.featured ? 'checked' : ''}><span></span> عرض في الصفحة الرئيسية</label>
-          <button class="icon-btn danger" data-del-review="${r.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></footer></li>`;
+          <p>${nl2br(r.text)}</p><footer><label class="switch"><input type="checkbox" data-feature="${esc(r.id)}" ${r.featured ? 'checked' : ''}><span></span> عرض في الصفحة الرئيسية</label>
+          <button class="icon-btn danger" data-del-review="${esc(r.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></footer></li>`;
       }).join('')}</ul>` : emptyState('لا توجد تقييمات للبرنامج بعد', 'fa-comment-slash')}
     </div>`;
   };
@@ -759,8 +767,8 @@ const Admin = (() => {
         <span class="pill ${r.status === 'approved' ? 'st-done' : r.status === 'rejected' ? 'st-absent-mentor' : 'st-upcoming'}">${r.status === 'approved' ? 'معتمد' : r.status === 'rejected' ? 'غير معتمد' : 'بانتظار الاعتماد'}</span></header>
         <p>${nl2br(r.text)}</p>${r.extra ? `<p class="extra"><b>${from === 'mentor' ? 'التوصية' : 'المستفاد'}:</b> ${nl2br(r.extra)}</p>` : ''}
         <footer><small>${fmtTs(r.ts)}</small><span>
-          <button class="btn xs success" data-approve="${r.id}" ${r.status === 'approved' ? 'disabled' : ''}><i class="fa-solid fa-check"></i> اعتماد وعرض للطرف الآخر</button>
-          <button class="btn xs ghost danger" data-reject="${r.id}" ${r.status === 'rejected' ? 'disabled' : ''}><i class="fa-solid fa-ban"></i> عدم العرض</button></span></footer></li>`).join('')}</ul>` : '<p class="muted small">لا توجد تقييمات بعد.</p>'}</div>`;
+          <button class="btn xs success" data-approve="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}><i class="fa-solid fa-check"></i> اعتماد وعرض للطرف الآخر</button>
+          <button class="btn xs ghost danger" data-reject="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}><i class="fa-solid fa-ban"></i> عدم العرض</button></span></footer></li>`).join('')}</ul>` : '<p class="muted small">لا توجد تقييمات بعد.</p>'}</div>`;
     };
     return `<div class="panel"><div class="panel-head"><h2>${miniMember(m)} <i class="fa-solid fa-arrows-left-right muted"></i> ${miniMember(mentee)}</h2></div>
       <div class="review-grid">${block('mentee', `تقييمات المستفيد للمرشد`)}${block('mentor', `تقييمات المرشد للمستفيد`)}</div></div>`;
@@ -771,12 +779,12 @@ const Admin = (() => {
     const msgs = Store.list('messages').sort((a, b) => b.ts - a.ts);
     const inbox = Store.list('inbox').sort((a, b) => b.ts - a.ts);
     const target = x => x.target === 'member' ? (Data.member(x.memberId)?.name || 'عضو محذوف') : { all_mentors: 'كل المرشدين', all_mentees: 'كل المستفيدين', all: 'كل المرشدين والمستفيدين' }[x.target];
-    const composer = (kind, title, icon, select) => `<form class="composer" data-compose="${kind}">
+    const composer = (kind, title, icon, select) => `<form class="composer" data-compose="${esc(kind)}">
       <h3><i class="fa-solid ${icon}"></i> ${title}</h3>${select}
       <input name="title" placeholder="عنوان الرسالة / التنبيه (اختياري)">
       <textarea name="body" rows="3" required placeholder="نص الرسالة"></textarea>
       <button class="btn primary sm" type="submit"><i class="fa-solid fa-paper-plane"></i> نشر الرسالة</button></form>`;
-    const opt = role => Data.members(role).map(m => `<option value="${m.id}">${esc(m.name)} (${m.code})</option>`).join('');
+    const opt = role => Data.members(role).map(m => `<option value="${esc(m.id)}">${esc(m.name)} (${esc(m.code)})</option>`).join('');
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-paper-plane"></i> إرسال رسالة / تنبيه</h2></div>
       <div class="composers">
@@ -788,12 +796,12 @@ const Admin = (() => {
     <div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-list"></i> الرسائل المنشورة</h2>${exportBar('messages')}</div>
       ${msgs.length ? `<ul class="msg-list">${msgs.map(x => `<li><i class="fa-solid fa-bullhorn"></i><div><span class="chip">إلى: ${esc(target(x))}</span>${x.title ? `<b>${esc(x.title)}</b>` : ''}<p>${nl2br(x.body)}</p><small>${fmtTs(x.ts)}</small></div>
-        <button class="icon-btn danger" data-del-msg="${x.id}" title="مسح"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل منشورة', 'fa-envelope')}
+        <button class="icon-btn danger" data-del-msg="${esc(x.id)}" title="مسح"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل منشورة', 'fa-envelope')}
     </div>
     <div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-inbox"></i> رسائل واردة من الأعضاء</h2>${exportBar('inbox')}</div>
       ${inbox.length ? `<ul class="msg-list">${inbox.map(x => `<li class="${x.read ? '' : 'unread'}"><i class="fa-solid fa-envelope"></i><div><b>${esc(x.fromName)}</b> <span class="chip">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span><p>${nl2br(x.body)}</p><small>${fmtTs(x.ts)}</small></div>
-        <button class="icon-btn danger" data-del-inbox="${x.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل واردة', 'fa-inbox')}
+        <button class="icon-btn danger" data-del-inbox="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل واردة', 'fa-inbox')}
     </div>`;
   };
 
@@ -862,8 +870,8 @@ const Admin = (() => {
         <div><b>${esc(a.name || 'مشرف')}</b>${a.via === 'google' ? ' <span class="chip"><i class="fa-brands fa-google"></i> Google</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small>${permChips(a)}</div>
         ${roleBadge(a)}
         <div class="admin-meta"><small class="muted">أُضيف ${a.addedAt ? fmtTs(a.addedAt) : ''}</small>${byLine(a.invitedBy || a.addedBy)}</div>
-        <button class="btn xs ghost" data-perms="${a.uid}"><i class="fa-solid fa-sliders"></i> الصلاحيات</button>
-        <button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button></li>`).join('')}</ul>` : '<p class="muted small">لا يوجد مشرفون إضافيون بعد.</p>'}
+        <button class="btn xs ghost" data-perms="${esc(a.uid)}"><i class="fa-solid fa-sliders"></i> الصلاحيات</button>
+        <button class="icon-btn danger" data-del-admin="${esc(a.uid)}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button></li>`).join('')}</ul>` : '<p class="muted small">لا يوجد مشرفون إضافيون بعد.</p>'}
       ${invites.length ? `<h3 class="sub"><i class="fa-brands fa-google"></i> دعوات بانتظار أول دخول <span class="count">${invites.length}</span></h3>
         <ul class="admin-list">${invites.map(i => `<li class="invite"><span class="avatar sm"><span class="avatar-fallback"><i class="fa-regular fa-envelope"></i></span></span>
           <div><b>${esc(i.name || 'مشرف مدعو')}</b><small dir="ltr">${esc(i.email)}</small>${permChips(i)}</div>${roleBadge(i)}
@@ -1023,11 +1031,11 @@ const Admin = (() => {
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-user-plus"></i> المسجلون في نموذج الاهتمام <span class="count">${all.length}</span></h2>
       <div class="head-actions">${exportBar('interests')}<button class="btn ghost sm" data-goto-form><i class="fa-solid fa-clipboard-list"></i> تعديل حقول النموذج</button></div></div>
-      <div class="chip-filter">${[['all', 'الكل'], ['mentor', 'مرشد'], ['mentee', 'مستفيد']].map(([k, l]) => `<button class="${ui.intRole === k ? 'active' : ''}" data-int-role="${k}">${l} <span>${k === 'all' ? all.length : all.filter(x => x.role === k).length}</span></button>`).join('')}</div>
+      <div class="chip-filter">${[['all', 'الكل'], ['mentor', 'مرشد'], ['mentee', 'مستفيد']].map(([k, l]) => `<button class="${ui.intRole === k ? 'active' : ''}" data-int-role="${esc(k)}">${l} <span>${k === 'all' ? all.length : all.filter(x => x.role === k).length}</span></button>`).join('')}</div>
       ${list.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>التاريخ</th><th>الصفة</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead><tbody>
-        ${list.map(x => `<tr class="${x.seen ? '' : 'new'}"><td data-l="التاريخ"><small>${fmtTs(x.ts)}</small>${x.source ? `<br><span class="chip source-chip"><i class="fa-solid fa-person-chalkboard"></i> ${esc(x.source)}</span>` : ''}</td><td data-l="الصفة"><span class="chip ${x.role}">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span></td>
+        ${list.map(x => `<tr class="${x.seen ? '' : 'new'}"><td data-l="التاريخ"><small>${fmtTs(x.ts)}</small>${x.source ? `<br><span class="chip source-chip"><i class="fa-solid fa-person-chalkboard"></i> ${esc(x.source)}</span>` : ''}</td><td data-l="الصفة"><span class="chip ${esc(x.role)}">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span></td>
           ${fields.map(f => `<td data-l="${esc(f.label)}">${cell(f, x.answers?.[f.id])}</td>`).join('')}
-          <td><button class="icon-btn danger" data-del-interest="${x.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
+          <td><button class="icon-btn danger" data-del-interest="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
       </tbody></table></div>` : emptyState('لا توجد تسجيلات بعد', 'fa-user-plus')}
     </div>`;
   };
@@ -1129,12 +1137,13 @@ const Admin = (() => {
       const dm = t.closest('[data-del-member]');
       if (dm) {
         const m = Data.member(dm.dataset.delMember);
-        return confirmDialog(`حذف بطاقة «${esc(m.name)}» (${m.code})؟ سيتم أيضاً إلغاء تعيينه في الشبكة.`, { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.removeMember(m.id); ui.netCohort = null; } });
+        return confirmDialog(`حذف بطاقة «${esc(m.name)}» (${esc(m.code)})؟ سيتم أيضاً إلغاء تعيينه في الشبكة.`, { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.removeMember(m.id); ui.netCohort = null; } });
       }
       if (t.closest('[data-backup]')) return downloadBackup();
+      if (t.closest('[data-backup-full]')) return confirmDialog('تنزيل نسخة تتضمن رموز دخول جميع الأعضاء؟ احفظ الملف في مكان آمن ولا ترسله لأحد.', { ok: 'تنزيل' }).then(ok => ok && downloadBackup(false, true));
       if (t.closest('[data-migrate]')) return runMigration();
       if (t.closest('[data-show-rules]')) return showRules();
-      if (t.closest('[data-rules-done]')) { Store.update('meta', { rulesPublished: Date.now(), rulesVersion: Security.RULES_VERSION }); return Security.log('نشر قواعد الحماية', `الإصدار ${Security.RULES_VERSION}`); }
+      if (t.closest('[data-rules-done]')) { Store.update('meta', { rulesPublished: Date.now(), rulesVersion: Security.RULES_VERSION }); Data.backfill(); return Security.log('نشر قواعد الحماية', `الإصدار ${Security.RULES_VERSION}`); }
       if (t.closest('[data-add-admin]')) return addAdminDialog();
       if (t.closest('[data-invite-admin]')) return inviteAdminDialog();
       const di2 = t.closest('[data-del-invite]'); if (di2) return confirmDialog('إلغاء هذه الدعوة؟', { danger: true, ok: 'إلغاء الدعوة', cancel: 'رجوع' }).then(ok => ok && Security.cancelInvite(di2.dataset.delInvite));
@@ -1148,6 +1157,7 @@ const Admin = (() => {
         const clean = {}; Object.entries(ui.netDraft).forEach(([k, v]) => { if (v) clean[k] = v; });
         const before = Store.get(`network/${ui.cohort}`) || {};
         Store.set(`network/${ui.cohort}`, clean);
+        Data.syncPairs(ui.cohort);
         Object.entries(clean).forEach(([mid, bid]) => {
           if (before[mid] !== bid) { Data.notify(mid, `تم تعيين المستفيد ${Data.member(bid)?.name} لك`, { icon: 'fa-handshake' }); Data.notify(bid, `تم تعيين المرشد ${Data.member(mid)?.name} لك`, { icon: 'fa-handshake' }); }
         });
@@ -1169,13 +1179,15 @@ const Admin = (() => {
       const ap = t.closest('[data-approve]');
       if (ap) {
         const r = Store.get(`reviews/${ap.dataset.approve}`);
+        if (!r) return;
         Store.update(`reviews/${r.id}`, { status: 'approved', decidedAt: Date.now() });
+        Data.publishReview({ ...r, status: 'approved', decidedAt: Date.now() });
         r.targetId && Data.notify(r.targetId, `وصلك تقييم جديد من ${r.from === 'mentor' ? 'المرشد' : 'المستفيد'} ${Data.member(r.authorId)?.name || ''}`, { icon: 'fa-star' });
         Data.notify(r.authorId, 'تم اعتماد تقييمك من الإدارة', { icon: 'fa-circle-check' });
         return toast('تم اعتماد التقييم');
       }
-      const rj = t.closest('[data-reject]'); if (rj) return Store.update(`reviews/${rj.dataset.reject}`, { status: 'rejected', decidedAt: Date.now() });
-      const dr = t.closest('[data-del-review]'); if (dr) return confirmDialog('حذف هذا التقييم؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Store.remove(`reviews/${dr.dataset.delReview}`); Store.remove(`featured/${dr.dataset.delReview}`); } });
+      const rj = t.closest('[data-reject]'); if (rj) { Data.unpublishReview(Store.get(`reviews/${rj.dataset.reject}`)); return Store.update(`reviews/${rj.dataset.reject}`, { status: 'rejected', decidedAt: Date.now() }); }
+      const dr = t.closest('[data-del-review]'); if (dr) return confirmDialog('حذف هذا التقييم؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.unpublishReview(Store.get(`reviews/${dr.dataset.delReview}`)); Store.remove(`reviews/${dr.dataset.delReview}`); if (Store.get(`featured/${dr.dataset.delReview}`) != null) Store.remove(`featured/${dr.dataset.delReview}`); } });
       // الرسائل
       const dmsg = t.closest('[data-del-msg]'); if (dmsg) return confirmDialog('مسح هذه الرسالة؟ ستختفي من صفحات الأعضاء.', { danger: true, ok: 'مسح' }).then(ok => ok && Store.remove(`messages/${dmsg.dataset.delMsg}`));
       const di = t.closest('[data-del-inbox]'); if (di) return Store.remove(`inbox/${di.dataset.delInbox}`);
@@ -1206,7 +1218,7 @@ const Admin = (() => {
         if (!v.body || !v.to) return validateForm(f);
         const kind = f.dataset.compose;
         const msg = kind === 'group' ? { target: v.to } : { target: 'member', memberId: v.to };
-        Store.push('messages', { ...msg, title: v.title, body: v.body, ts: Date.now() });
+        Store.push('messages', { ...msg, aud: Data.messageAud(msg), title: v.title, body: v.body, ts: Date.now() });
         const recipients = kind === 'group' ? Data.members(v.to === 'all_mentors' ? 'mentor' : v.to === 'all_mentees' ? 'mentee' : null) : [Data.member(v.to)];
         recipients.forEach(m => m && Data.notify(m.id, `رسالة جديدة من الإدارة${v.title ? ': ' + v.title : ''}`, { icon: 'fa-envelope' }));
         toast('تم نشر الرسالة');

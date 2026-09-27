@@ -71,6 +71,8 @@
     housekeepingDone = true;
     if (!Store.get('meta/seeded')) await Store.seedOnce(defaultData);
     else migrateEventsSection();
+    // ترقية البيانات للبنية الجديدة بعد نشر القواعد الحديثة (أو دائماً في الوضع المحلي)
+    if (!Security.secure() || Number(Store.get('meta/rulesVersion') || 0) >= Security.RULES_VERSION) Data.backfill();
   }
   await housekeeping();
   window.addEventListener('hashchange', housekeeping);

@@ -85,6 +85,13 @@ const Store = (() => {
       await new Promise(() => {});
     }
     const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(CFG.firebase);
+    // Firebase App Check: يثبت أن الطلبات صادرة من موقع المنصة (يحدّ من الإغراق الآلي)
+    if (CFG.appCheckKey && !CFG.emulators) {
+      try {
+        if (!window.firebase.appCheck) await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-check-compat.js`);
+        app.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(CFG.appCheckKey), true);
+      } catch (e) { console.warn('App Check', e); }
+    }
     const db = app.database();
     // للاختبار فقط: الاتصال بمحاكيات Firebase المحلية عند تحديدها في الإعدادات
     if (CFG.emulators?.database) { const [h, p] = CFG.emulators.database.split(':'); db.useEmulator(h, +p); }
@@ -119,22 +126,39 @@ const Store = (() => {
   const listeners = new Map();   // path -> ref
   let scopeKey = null;
 
-  function listen(path) {
-    if (listeners.has(path) || !rootRef) return Promise.resolve();
-    const ref = path ? rootRef.child(path) : rootRef;
-    listeners.set(path, ref);
+  // استعلام: {path, child, equalTo} يجلب فقط السجلات المطابقة (تفرضه قواعد الحماية لكل عضو)
+  const queryData = new Map();   // key -> {path, data}
+  const qkey = q => `${q.path}?${q.child}=${q.equalTo}`;
+  function mergeQueries(path) {
+    const merged = {};
+    queryData.forEach(q => { if (q.path === path) Object.assign(merged, q.data || {}); });
+    state = setIn(state, path, Object.keys(merged).length ? merged : null);
+  }
+
+  function listen(spec) {
+    if (!rootRef) return Promise.resolve();
+    const isQ = typeof spec === 'object' && spec;
+    const key = isQ ? qkey(spec) : spec;
+    if (listeners.has(key)) return Promise.resolve();
+    const path = isQ ? spec.path : spec;
+    let ref = path ? rootRef.child(path) : rootRef;
+    if (isQ) { ref = ref.orderByChild(spec.child).equalTo(spec.equalTo); queryData.set(key, { path, data: {} }); }
+    listeners.set(key, { ref, isQ, path });
+    const apply = v => {
+      if (isQ) { queryData.get(key).data = v || {}; mergeQueries(path); }
+      else if (path) state = setIn(state, path, v); else state = v || {};
+    };
     return new Promise(resolve => {
       let first = true;
       ref.on('value', snap => {
-        const v = snap.val();
-        if (path) state = setIn(state, path, v); else state = v || {};
+        apply(snap.val());
         if (first) { first = false; resolve(); }
         notify();
       }, err => {
         // مسار غير مسموح لهذا الدور: نتركه فارغاً ولا نعلّق التحميل
-        console.warn('read denied', path, err && err.code);
-        listeners.delete(path);
-        if (path) state = setIn(state, path, null);
+        console.warn('read denied', key, err && err.code);
+        listeners.delete(key);
+        if (isQ) { queryData.delete(key); mergeQueries(path); } else if (path) state = setIn(state, path, null);
         if (first) { first = false; resolve(); }
         notify();
       });
@@ -142,11 +166,12 @@ const Store = (() => {
   }
 
   function unlistenAll() {
-    listeners.forEach(ref => ref.off());
+    listeners.forEach(l => l.ref.off());
     listeners.clear();
+    queryData.clear();
   }
 
-  // paths: قائمة المسارات، أو [''] لقراءة كل البيانات (الإدارة)
+  // paths: قائمة المسارات أو الاستعلامات، أو [''] لقراءة كل البيانات (الإدارة الكاملة)
   async function setScope(key, paths) {
     if (mode !== 'firebase') { scopeKey = key; return; }
     if (scopeKey === key) return;
@@ -223,8 +248,9 @@ const Store = (() => {
     console.error(err);
     lastError = { message: err.message || String(err), ts: Date.now() };
     window.toast && toast('لم يتم الحفظ في قاعدة البيانات: ' + lastError.message, 'error');
-    if (rootRef) listeners.forEach((ref, path) => ref.once('value').then(snap => {
-      if (path) state = setIn(state, path, snap.val()); else state = snap.val() || {};
+    if (rootRef) listeners.forEach((l, key) => l.ref.once('value').then(snap => {
+      if (l.isQ) { const q = queryData.get(key); if (q) { q.data = snap.val() || {}; mergeQueries(l.path); } }
+      else if (l.path) state = setIn(state, l.path, snap.val()); else state = snap.val() || {};
       notify();
     }).catch(() => {}));
   }
@@ -253,6 +279,16 @@ const Store = (() => {
 
   const remove = path => set(path, null);
 
+  // زيادة ذرّية لعدّاد (أرقام العضوية) حتى لا يحصل مشرفان على الرقم نفسه
+  async function transaction(path, fn) {
+    if (!rootRef) { const v = fn(get(path)); set(path, v); return v; }
+    const res = await rootRef.child(parts(path).join('/')).transaction(fn);
+    if (!res.committed) throw new Error('transaction aborted');
+    const v = res.snapshot.val();
+    state = setIn(state, path, v); notify();
+    return v;
+  }
+
   function newId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
@@ -264,11 +300,15 @@ const Store = (() => {
   }
 
   const get = path => getIn(state, path);
-  const list = path => Object.values(get(path) || {}).filter(Boolean);
+  // حماية إضافية: تجاهل المفاتيح التي تحوي رموز HTML، ورقم السجل غير الآمن يُستبدل بمفتاحه
+  const SAFE_KEY = /^[^"'<>&\s`]+$/;
+  const list = path => Object.entries(get(path) || {})
+    .filter(([k, v]) => v && SAFE_KEY.test(k))
+    .map(([k, v]) => (typeof v === 'object' && v.id != null && !SAFE_KEY.test(String(v.id)) ? { ...v, id: k } : v));
   const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
   const dump = () => JSON.parse(JSON.stringify(state || {}));
 
-  return { init, get, list, set, update, remove, push, newId, subscribe, seedOnce, dump, setScope, watch, readOnce, secondaryAuth,
+  return { init, get, list, set, update, remove, push, transaction, newId, subscribe, seedOnce, dump, setScope, watch, readOnce, secondaryAuth,
     get auth() { return authApi; }, get hasAuth() { return !!authApi; }, get scope() { return scopeKey; },
     get mode() { return mode; }, get lastError() { return lastError; },
     get connected() { return connected; }, get everConnected() { return everConnected; }, get pending() { return pending; } };

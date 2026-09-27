@@ -55,7 +55,7 @@ const Events = (() => {
 
   /* ================= الصفحة الرئيسية ================= */
   function regForm(eventId) {
-    const choice = k => `<button type="button" class="ev-choice" data-ev-interest="${k}" aria-pressed="false">
+    const choice = k => `<button type="button" class="ev-choice" data-ev-interest="${esc(k)}" aria-pressed="false">
       <i class="fa-solid ${INTEREST[k].icon}"></i><b>${INTEREST[k].label}</b><small>${INTEREST[k].desc}</small></button>`;
     return `<form class="ev-form" data-event-form="${esc(eventId)}" novalidate>
       <div class="ev-fields">
@@ -182,7 +182,7 @@ const Events = (() => {
         <div class="ev-reg">
           ${mine
             ? `<div class="ev-registered"><i class="fa-solid fa-circle-check"></i><h4>أنت مسجّل في هذه الفعالية</h4><small>سجّلت بتاريخ ${fmtTs(mine.ts)}</small>
-                <button class="btn sm outline-light" data-ev-unreg="${e.id}"><i class="fa-solid fa-xmark"></i> إلغاء التسجيل</button></div>`
+                <button class="btn sm outline-light" data-ev-unreg="${esc(e.id)}"><i class="fa-solid fa-xmark"></i> إلغاء التسجيل</button></div>`
             : `<h4><i class="fa-solid fa-ticket"></i> سجّل حضورك</h4>
               <form class="ev-form" data-event-form="${esc(e.id)}" data-member="${esc(me.id)}" novalidate>
                 <div class="ev-fields">
@@ -226,9 +226,9 @@ const Events = (() => {
       ${list.map(r => `<tr class="${r.seen ? '' : 'new'}"><td data-l="الاسم"><b>${esc(r.name)}</b></td>
         <td data-l="الجوال"><a href="${esc(waLink(r.phone))}" target="_blank" rel="noopener" dir="ltr"><i class="fa-brands fa-whatsapp"></i> ${esc(r.phone)}</a></td>
         <td data-l="الإيميل"><a href="mailto:${esc(r.email)}" dir="ltr">${esc(r.email)}</a></td>
-        <td data-l="الصفة / الاهتمام">${r.memberId ? `<span class="chip ${r.role}">${r.role === 'mentor' ? 'مرشد' : 'مستفيد'} · <span class="num">${esc(r.code || '')}</span></span>` : r.interest ? `<span class="chip ${r.interest}">مهتم: ${INTEREST[r.interest].label}</span>` : '—'}</td>
+        <td data-l="الصفة / الاهتمام">${r.memberId ? `<span class="chip ${esc(r.role)}">${r.role === 'mentor' ? 'مرشد' : 'مستفيد'} · <span class="num">${esc(r.code || '')}</span></span>` : r.interest ? `<span class="chip ${esc(r.interest)}">مهتم: ${(INTEREST[r.interest]?.label ?? esc(r.interest))}</span>` : '—'}</td>
         <td data-l="تاريخ التسجيل"><small>${fmtTs(r.ts)}</small></td>
-        <td><button class="icon-btn danger" data-ev-delreg="${r.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
+        <td><button class="icon-btn danger" data-ev-delreg="${esc(r.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
     </tbody></table></div>`;
   }
 
@@ -253,10 +253,10 @@ const Events = (() => {
               <small><i class="fa-regular fa-calendar"></i> ${fmtDate(e.date)} · ${tRange(e.start, endTime(e))} · ${durLabel(e.duration)}${e.location ? ` · <i class="fa-solid fa-location-dot"></i> ${esc(e.location)}` : ''}</small>
               ${sp ? `<div class="ev-admin-sp">${miniMember(sp)}</div>` : ''}</div>
             <div class="ev-admin-actions">
-              <button class="btn sm ${open ? 'primary' : 'ghost'}" data-ev-toggle="${e.id}"><i class="fa-solid fa-users"></i> المسجلون <span class="count">${r.length}</span></button>
-              <button class="btn sm ghost" data-ev-vis="${e.id}"><i class="fa-solid ${e.published === false ? 'fa-eye' : 'fa-eye-slash'}"></i> ${e.published === false ? 'إظهار الإعلان' : 'إخفاء الإعلان'}</button>
-              <button class="icon-btn" data-ev-edit="${e.id}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
-              <button class="icon-btn danger" data-ev-del="${e.id}" title="حذف"><i class="fa-solid fa-trash"></i></button>
+              <button class="btn sm ${open ? 'primary' : 'ghost'}" data-ev-toggle="${esc(e.id)}"><i class="fa-solid fa-users"></i> المسجلون <span class="count">${r.length}</span></button>
+              <button class="btn sm ghost" data-ev-vis="${esc(e.id)}"><i class="fa-solid ${e.published === false ? 'fa-eye' : 'fa-eye-slash'}"></i> ${e.published === false ? 'إظهار الإعلان' : 'إخفاء الإعلان'}</button>
+              <button class="icon-btn" data-ev-edit="${esc(e.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-btn danger" data-ev-del="${esc(e.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>
           ${open ? `<div class="ev-regs"><div class="block-head"><h3>المسجلون في «${esc(e.title)}» <span class="count">${r.length}</span></h3>${exportBar(`event:${e.id}`)}</div>${regsTable(r)}</div>` : ''}
@@ -281,7 +281,7 @@ const Events = (() => {
         <div class="sp-panel" hidden>
           <div class="sp-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="ابحث باسم المرشد أو مجاله..." autocomplete="off"></div>
           <ul class="sp-list">
-            ${mentors.map(m => `<li data-sp-id="${m.id}" data-q="${esc((m.name + ' ' + (m.tagline || '') + ' ' + (m.areas || '')).toLowerCase())}">${miniMember(m)}<small class="sp-cohort">${esc(Data.cohort(m.cohort)?.name || '')}</small></li>`).join('')}
+            ${mentors.map(m => `<li data-sp-id="${esc(m.id)}" data-q="${esc((m.name + ' ' + (m.tagline || '') + ' ' + (m.areas || '')).toLowerCase())}">${miniMember(m)}<small class="sp-cohort">${esc(Data.cohort(m.cohort)?.name || '')}</small></li>`).join('')}
             ${mentors.length ? '' : '<li class="sp-empty">لا يوجد مرشدون مسجلون بعد</li>'}
             <li data-sp-other class="sp-other-opt"><i class="fa-solid fa-user-pen"></i> <b>آخر</b> <small>متحدث من خارج مرشدي المنصة</small></li>
             <li data-sp-none class="sp-none-opt"><i class="fa-solid fa-ban"></i> بدون متحدث</li>
@@ -330,13 +330,13 @@ const Events = (() => {
         ${fieldInput({ k: 'about', label: 'نبذة عن الفعالية', type: 'textarea', rows: 4, wide: true }, e.about || '')}
         <div class="field"><label>التاريخ <em>*</em></label><input type="date" name="date" value="${esc(e.date || '')}" required></div>
         <div class="field"><label>ساعة البداية (24 ساعة)</label>${timeSelect('start', e.start || '19:00')}</div>
-        <div class="field"><label>المدة</label><select name="duration">${DURATIONS.map(([v, l]) => `<option value="${v}" ${+e.duration === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>المدة</label><select name="duration">${DURATIONS.map(([v, l]) => `<option value="${esc(v)}" ${+e.duration === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         ${fieldInput({ k: 'location', label: 'الموقع', placeholder: 'مثال: قاعة الجمعية، أو عن بُعد عبر Zoom' }, e.location || '')}
         ${fieldInput({ k: 'locationUrl', label: 'رابط الموقع أو الاجتماع (اختياري)', type: 'url', wide: true }, e.locationUrl || '')}
         <fieldset class="wide aud-fields"><legend>الجمهور المستهدف</legend>
-          <div class="aud-options">${Object.entries(AUDIENCES).map(([k, a]) => `<label class="radio"><input type="radio" name="audience" value="${k}" ${audienceOf(e) === k ? 'checked' : ''}><span><i class="fa-solid ${a.icon}"></i> ${k === 'community' ? 'مجتمع إشراق (المرشدون والمستفيدون)' : k === 'public' ? 'الجمهور العام (الصفحة الرئيسية)' : a.label + ' فقط'}</span></label>`).join('')}</div>
+          <div class="aud-options">${Object.entries(AUDIENCES).map(([k, a]) => `<label class="radio"><input type="radio" name="audience" value="${esc(k)}" ${audienceOf(e) === k ? 'checked' : ''}><span><i class="fa-solid ${a.icon}"></i> ${k === 'community' ? 'مجتمع إشراق (المرشدون والمستفيدون)' : k === 'public' ? 'الجمهور العام (الصفحة الرئيسية)' : a.label + ' فقط'}</span></label>`).join('')}</div>
           <div class="field aud-cohort" ${audienceOf(e) === 'public' ? 'hidden' : ''}><label>الدفعة</label>
-            <select name="audienceCohort">${Data.cohorts().slice().reverse().map((c, i) => `<option value="${c.id}" ${(e.audienceCohort || latestCohort()?.id) === c.id ? 'selected' : ''}>${esc(c.name)} ${c.year}${i === 0 ? ' (الدفعة الحالية)' : ''}</option>`).join('')}
+            <select name="audienceCohort">${Data.cohorts().slice().reverse().map((c, i) => `<option value="${esc(c.id)}" ${(e.audienceCohort || latestCohort()?.id) === c.id ? 'selected' : ''}>${esc(c.name)} ${esc(c.year)}${i === 0 ? ' (الدفعة الحالية)' : ''}</option>`).join('')}
               <option value="all" ${e.audienceCohort === 'all' ? 'selected' : ''}>كل الدفعات (الحالية والسابقة)</option></select>
             <small class="hint">يظهر الإعلان في صفحات الفئة المختارة فقط، ويسجلون حضورهم من هناك، ولا يظهر في الصفحة الرئيسية.</small></div>
         </fieldset>
@@ -402,7 +402,7 @@ const Events = (() => {
   function exportData(key) {
     const [, id] = key.split(':');
     const headers = ['الاسم', 'الجوال', 'الإيميل', 'الصفة / الاهتمام', 'رقم العضوية', 'تاريخ التسجيل'];
-    const rows = list => list.map(r => [r.name, r.phone, r.email, r.memberId ? (r.role === 'mentor' ? 'مرشد' : 'مستفيد') : r.interest ? `مهتم: ${INTEREST[r.interest].label}` : '', r.code || '', fmtTs(r.ts)]);
+    const rows = list => list.map(r => [r.name, r.phone, r.email, r.memberId ? (r.role === 'mentor' ? 'مرشد' : 'مستفيد') : r.interest ? `مهتم: ${(INTEREST[r.interest]?.label ?? esc(r.interest))}` : '', r.code || '', fmtTs(r.ts)]);
     if (key === 'events') {
       return {
         title: 'الفعاليات وورش العمل',

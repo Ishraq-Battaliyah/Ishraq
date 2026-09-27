@@ -66,13 +66,13 @@ const Portal = (() => {
           <p>أضف موعد ${sessionName(st.n)} خلال هذا الأسبوع ليحجزه المستفيد.</p></div></div>`);
       } else {
         out.push(`<div class="band-alert ${st.level.cls}"><i class="fa-solid ${st.level.icon}"></i><div><b>${sessionName(st.n)} — الأسبوع ${st.week} من فترتها</b><p>${Bands.mentorAlertText(st)}</p></div>
-          <button class="btn sm" data-add-slot-alert="${st.n}"><i class="fa-solid fa-plus"></i> إضافة الموعد</button></div>`);
+          <button class="btn sm" data-add-slot-alert="${esc(st.n)}"><i class="fa-solid fa-plus"></i> إضافة الموعد</button></div>`);
       }
     });
     Data.notifications(me.id).filter(x => x.kind === 'reminder' && !x.dismissed && Bands.addedAt(me.id, x.session) == null).slice(0, 3).forEach(x => {
       const lv = Bands.LEVELS[(x.band || 1) - 1] || Bands.LEVELS[0];
       out.push(`<div class="band-alert ${lv.cls} from-admin"><i class="fa-solid fa-envelope-open-text"></i><div><b>تذكير من إدارة البرنامج — ${sessionName(x.session)}</b><p>${nl2br(x.text)}</p><small>${fmtTs(x.ts)}</small></div>
-        <button class="icon-btn" data-dismiss-rem="${x.id}" title="إخفاء"><i class="fa-solid fa-xmark"></i></button></div>`);
+        <button class="icon-btn" data-dismiss-rem="${esc(x.id)}" title="إخفاء"><i class="fa-solid fa-xmark"></i></button></div>`);
     });
     return out.length ? `<div class="band-alerts">${out.join('')}</div>` : '';
   }
@@ -80,7 +80,7 @@ const Portal = (() => {
   function progressRing(done) {
     const p = Math.min(3, done) / 3;
     const c = 2 * Math.PI * 34;
-    return `<div class="ring"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="ring-bg"/><circle cx="40" cy="40" r="34" class="ring-fg" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}"/></svg>
+    return `<div class="ring"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="ring-bg"/><circle cx="40" cy="40" r="34" class="ring-fg" stroke-dasharray="${esc(c)}" stroke-dashoffset="${c * (1 - p)}"/></svg>
       <div><b>${Math.min(3, done)}/3</b><small>جلسات منجزة</small></div></div>`;
   }
 
@@ -95,7 +95,7 @@ const Portal = (() => {
         ${list.length ? `<ul class="slot-list">${list.map(s => `<li class="${booked.has(s.id) ? 'booked' : ''}">
           <div><b><i class="fa-regular fa-calendar"></i> ${fmtDate(s.date)}</b><span><i class="fa-regular fa-clock"></i> ${tRange(s.start, s.end)}</span>
           <span class="chip">${MODES[s.mode] || ''}</span>${s.summary ? `<p>${esc(s.summary)}</p>` : ''}</div>
-          ${booked.has(s.id) ? '<span class="pill st-done">محجوز</span>' : `<button class="icon-btn danger" data-del-slot="${s.id}" title="حذف"><i class="fa-solid fa-trash"></i></button>`}
+          ${booked.has(s.id) ? '<span class="pill st-done">محجوز</span>' : `<button class="icon-btn danger" data-del-slot="${esc(s.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button>`}
         </li>`).join('')}</ul>` : '<p class="muted small">لا توجد مواعيد مقترحة</p>'}</div>`;
     };
     return `<section class="panel">
@@ -158,7 +158,7 @@ const Portal = (() => {
         inner = list.length ? `<ul class="slot-list">${list.map(s => `<li>
           <div><b><i class="fa-regular fa-calendar"></i> ${fmtDate(s.date)}</b><span><i class="fa-regular fa-clock"></i> ${tRange(s.start, s.end)}</span>
           <span class="chip">${MODES[s.mode] || ''}</span>${s.summary ? `<p>${esc(s.summary)}</p>` : ''}</div>
-          <button class="btn sm primary" data-book="${s.id}"><i class="fa-solid fa-check"></i> احجز</button></li>`).join('')}</ul>`
+          <button class="btn sm primary" data-book="${esc(s.id)}"><i class="fa-solid fa-check"></i> احجز</button></li>`).join('')}</ul>`
           : '<p class="muted small">لا توجد مواعيد متاحة حالياً لهذه الجلسة</p>';
       }
       return `<div class="slot-group ${active ? 'is-booked' : ''}"><h3>${sessionName(n)}</h3>${inner}</div>`;
@@ -205,15 +205,15 @@ const Portal = (() => {
         const dis = due ? '' : 'disabled title="يتفعل عند حلول موعد الجلسة"';
         const confirmedByMe = kind === 'mentor' ? b.doneByMentor : b.doneByMentee;
         const anyConfirmed = b.doneByMentor || b.doneByMentee;
-        const doneBtn = confirmedByMe ? '' : `<button class="btn xs success" data-bk="done" data-id="${b.id}" ${dis}><i class="fa-solid fa-check"></i> تم إنجاز الجلسة</button>`;
+        const doneBtn = confirmedByMe ? '' : `<button class="btn xs success" data-bk="done" data-id="${esc(b.id)}" ${dis}><i class="fa-solid fa-check"></i> تم إنجاز الجلسة</button>`;
         if (kind === 'mentor') {
           actions = `${doneBtn}
-            <button class="btn xs warn" data-bk="absent_mentee" data-id="${b.id}" ${dis}><i class="fa-solid fa-user-xmark"></i> ملغاة لغياب المستفيد</button>
-            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-clock-rotate-left"></i> تغيير الموعد</button>`}`;
+            <button class="btn xs warn" data-bk="absent_mentee" data-id="${esc(b.id)}" ${dis}><i class="fa-solid fa-user-xmark"></i> ملغاة لغياب المستفيد</button>
+            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${esc(b.id)}"><i class="fa-solid fa-clock-rotate-left"></i> تغيير الموعد</button>`}`;
         } else {
           actions = `${doneBtn}
-            <button class="btn xs danger" data-bk="absent_mentor" data-id="${b.id}" ${dis}><i class="fa-solid fa-user-slash"></i> ملغاة لغياب المرشد</button>
-            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${b.id}"><i class="fa-solid fa-pen"></i> تعديل الحجز</button>`}`;
+            <button class="btn xs danger" data-bk="absent_mentor" data-id="${esc(b.id)}" ${dis}><i class="fa-solid fa-user-slash"></i> ملغاة لغياب المرشد</button>
+            ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${esc(b.id)}"><i class="fa-solid fa-pen"></i> تعديل الحجز</button>`}`;
         }
         if (b.changedBy === kind && other?.whatsapp) {
           actions += `<a class="btn xs wa" href="${esc(waLink(other.whatsapp, rescheduleText(kind, b)))}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> إشعار ${kind === 'mentor' ? 'المستفيد' : 'المرشد'}</a>`;
@@ -288,9 +288,9 @@ const Portal = (() => {
       title: kind === 'mentor' ? 'تغيير موعد الجلسة' : 'تعديل الحجز', size: 'md',
       body: `<form class="form-grid">
         <p class="wide muted">الموعد الحالي: <b>${fmtSlot(b)}</b></p>
-        ${alt.length ? `<div class="field wide"><label>اختر موعداً آخر من المواعيد المتاحة</label><div class="radio-col">${alt.map(s => `<label class="radio"><input type="radio" name="alt" value="${s.id}"><span>${fmtSlot(s)} · ${MODES[s.mode]}</span></label>`).join('')}
+        ${alt.length ? `<div class="field wide"><label>اختر موعداً آخر من المواعيد المتاحة</label><div class="radio-col">${alt.map(s => `<label class="radio"><input type="radio" name="alt" value="${esc(s.id)}"><span>${fmtSlot(s)} · ${MODES[s.mode]}</span></label>`).join('')}
           <label class="radio"><input type="radio" name="alt" value="custom" checked><span>اقتراح موعد آخر</span></label></div></div>` : ''}
-        <div class="field custom-when"><label>التاريخ الجديد</label><input type="date" name="date" min="${todayISO()}" value="${b.date}"></div>
+        <div class="field custom-when"><label>التاريخ الجديد</label><input type="date" name="date" min="${todayISO()}" value="${esc(b.date)}"></div>
         <div class="field custom-when"><label>البداية (24 ساعة)</label>${timeSelect('start', b.start)}</div>
         <div class="field custom-when"><label>النهاية (24 ساعة)</label>${timeSelect('end', b.end)}</div>
       </form>`,
@@ -300,7 +300,7 @@ const Portal = (() => {
             const f = $('form', m.body);
             const v = readForm(f);
             let upd;
-            if (v.alt && v.alt !== 'custom') {
+            if (v.alt && v.alt !== 'custom' && Store.get(`slots/${v.alt}`)) {
               const s = Store.get(`slots/${v.alt}`);
               upd = { slotId: s.id, date: s.date, start: s.start, end: s.end, summary: s.summary || b.summary };
             } else {
@@ -450,7 +450,7 @@ const Portal = (() => {
     $$('[data-del-slot]', root).forEach(b => b.onclick = async () => {
       if (await confirmDialog('حذف هذا الموعد؟', { danger: true, ok: 'حذف' })) Store.remove(`slots/${b.dataset.delSlot}`);
     });
-    $$('[data-book]', root).forEach(b => b.onclick = () => openBook(me, Store.get(`slots/${b.dataset.book}`)));
+    $$('[data-book]', root).forEach(b => b.onclick = () => { const sl = Store.get(`slots/${b.dataset.book}`); if (sl) openBook(me, sl); });
     $$('[data-bk]', root).forEach(b => b.onclick = () => bookingAction(kind, me, other, b.dataset.id, b.dataset.bk));
     const rf = $('[data-review-form]', root);
     rf && rf.addEventListener('submit', e => {

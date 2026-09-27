@@ -6,7 +6,24 @@
  */
 
 const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches'];
-const memberPaths = id => [...PUBLIC_PATHS, 'network', 'slots', 'bookings', 'reviews', 'messages', `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`];
+// العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
+const q = (path, child, equalTo) => ({ path, child, equalTo });
+function memberPaths(id, role, partner) {
+  const mentorId = role === 'mentor' ? id : partner;
+  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`,
+    q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
+    q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id),
+    ...(mentorId ? [q('slots', 'mentorId', mentorId)] : []), ...(partner ? [`contacts/${partner}`] : [])];
+}
+// المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
+const PERM_PATHS = {
+  content: [], announce: [], interests: ['interests'],
+  cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
+  sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots'],
+  reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
+  messages: ['messages', 'inbox', 'network', 'pairs'],
+  events: ['eventRegs', 'myRegs']
+};
 const CONTACT_KEYS = ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram'];
 
 // الصلاحيات الجزئية للمشرفين (يجب أن تطابق PERMS في tools/build_rules.py)
@@ -20,7 +37,7 @@ const PERMISSIONS = [
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 4;
+const RULES_VERSION = 5;
 
 const Auth = {
   KEY: 'ishraq-auth',
@@ -41,7 +58,7 @@ const Security = (() => {
   const secure = () => Store.hasAuth;
   const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 
-  function randomSuffix(n = 4) {
+  function randomSuffix(n = 6) {
     const a = new Uint32Array(n);
     (window.crypto || window.msCrypto).getRandomValues(a);
     return Array.from(a, x => ALPHABET[x % ALPHABET.length]).join('');
@@ -106,8 +123,18 @@ const Security = (() => {
     if (Store.mode !== 'firebase') return;
     if (!secure()) return Store.setScope('all', ['']);
     if (!session) return Store.setScope('public', PUBLIC_PATHS);
-    if (session.kind === 'admin') return Store.setScope('admin', ['']);
-    return Store.setScope(`member:${session.id}`, memberPaths(session.id));
+    if (session.kind === 'admin') {
+      if (isFull()) return Store.setScope('admin', ['']);
+      const u = currentUser();
+      if (!Store.get(`admins/${u.uid}`)) await Store.setScope(`admin-rec:${u.uid}`, [...PUBLIC_PATHS, `admins/${u.uid}`]);
+      if (isFull()) return Store.setScope('admin', ['']);
+      const perms = Object.keys(adminRec()?.perms || {}).filter(k => adminRec().perms[k]).sort();
+      const paths = new Set([...PUBLIC_PATHS, `admins/${u.uid}`, 'notifications']);
+      perms.forEach(k => (PERM_PATHS[k] || []).forEach(p => paths.add(p)));
+      return Store.setScope(`admin:${u.uid}:${perms.join(',')}`, [...paths]);
+    }
+    const partner = await Store.readOnce(`pairs/${session.id}`);
+    return Store.setScope(`member:${session.id}`, memberPaths(session.id, session.kind, partner));
   }
 
   async function roleFor(uid) {
@@ -184,7 +211,10 @@ const Security = (() => {
   /* ===== دخول الإدارة ===== */
   async function adminLogin(email, password) {
     if (!secure()) {
-      if (toEnDigits(password).trim() !== String(window.ISHRAQ_CONFIG.adminCode || '2026')) throw new Error('الرمز السري غير صحيح');
+      // الوضع السابق للتجربة المحلية فقط: يعمل عند تحديد adminCode في الإعدادات
+      const code = window.ISHRAQ_CONFIG.adminCode;
+      if (!code) throw new Error('الدخول بالرمز غير متاح؛ فعّل Firebase Authentication');
+      if (toEnDigits(password).trim() !== String(code)) throw new Error('الرمز السري غير صحيح');
       Auth.set({ kind: 'admin' });
       await applyScope(Auth.current());
       return { session: Auth.current() };
@@ -226,11 +256,8 @@ const Security = (() => {
     await persist('admin');
     try { await Store.auth.signInWithPopup(googleProvider()); }
     catch (e) {
-      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
-        touch(); // حتى لا تُعدّ العودة من Google جلسة منتهية
-        await Store.auth.signInWithRedirect(googleProvider());
-        return new Promise(() => {}); // تنتقل الصفحة إلى Google ثم تعود
-      }
+      // إعادة التوجيه لا تعمل حين يختلف نطاق الموقع عن authDomain في المتصفحات الحديثة، لذلك نكتفي بالنافذة المنبثقة
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') throw new Error('المتصفح منع نافذة Google. اسمح بالنوافذ المنبثقة لهذا الموقع ثم أعد المحاولة');
       if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') throw new Error('أُغلقت نافذة Google قبل إكمال الدخول');
       if (e.code === 'auth/unauthorized-domain') throw new Error('نطاق الموقع غير مضاف في Firebase ← Authentication ← Settings ← Authorized domains');
       throw new Error(authMsg(e));

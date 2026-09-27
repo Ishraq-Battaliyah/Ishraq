@@ -3,7 +3,7 @@
  * firebase: إعدادات Firebase Realtime Database. اجعلها null للعمل محلياً
  *           (تُحفظ البيانات في متصفح الجهاز فقط).
  * dbRoot:   المسار الجذري للبيانات داخل قاعدة البيانات.
- * adminCode: الرمز السري لدخول لوحة الإدارة.
+ * appCheckKey: مفتاح موقع reCAPTCHA v3 لتفعيل Firebase App Check (اختياري، يحدّ من الطلبات الآلية).
  */
 window.ISHRAQ_CONFIG = {
   // إعدادات تطبيق الويب من Firebase Console (ليست سرية؛ الحماية عبر قواعد القاعدة وتسجيل الدخول)
@@ -21,7 +21,8 @@ window.ISHRAQ_CONFIG = {
   ownerEmails: ['g.hussainalhajji@gmail.com', 'ishraq.battaliyah@gmail.com', 'hzzahmed4@gmail.com'],
   // يبقى المشرف مسجلاً على جهازه، ويُطلب منه الدخول من جديد بعد هذه المدة دون أي نشاط
   adminIdleHours: 72,
-  adminCode: '2026',
+  // Firebase App Check (اختياري): ضع هنا مفتاح موقع reCAPTCHA v3 بعد إنشائه، ثم فعّل الإلزام من Firebase Console
+  appCheckKey: '',
   // رابط المنصة الذي يُرسل للأعضاء في رسالة معلومات الدخول
   siteUrl: 'https://hussain-al-hajji.github.io/Ishraq/'
 };

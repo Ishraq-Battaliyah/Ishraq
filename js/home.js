@@ -17,7 +17,7 @@ const Home = (() => {
   const R = {
     header(s) {
       const links = visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
-      return `<header class="site-header" id="sec-${s.id}">
+      return `<header class="site-header" id="sec-${esc(s.id)}">
         <div class="container hdr-in">
           <a class="brand" href="#/" data-top><img src="assets/ishraq-mark.png" alt=""><span><b>${esc(s.brand || 'إشراق')}</b><small>${esc(s.tagline || '')}</small></span></a>
           <nav class="main-nav">${links}</nav>
@@ -29,7 +29,7 @@ const Home = (() => {
       </header>`;
     },
     hero(s) {
-      return `<section class="hero" id="sec-${s.id}">
+      return `<section class="hero" id="sec-${esc(s.id)}">
         <div class="hero-bg" aria-hidden="true">
           <div class="rays"></div><div class="glow g1"></div><div class="glow g2"></div>
           <svg class="net" viewBox="0 0 600 600">${heroNet()}</svg>
@@ -51,43 +51,43 @@ const Home = (() => {
       </section>`;
     },
     about(s) {
-      return `<section class="sec about" id="sec-${s.id}"><div class="container about-grid">
+      return `<section class="sec about" id="sec-${esc(s.id)}"><div class="container about-grid">
         <div class="reveal">${s.kicker ? `<span class="kicker">${esc(s.kicker)}</span>` : ''}<h2>${esc(s.title || '')}</h2><p class="lead">${nl2br(s.body || '')}</p></div>
         <div class="about-items">${items(s).map((it, i) => `<div class="about-item reveal" style="--d:${i}">
           <span class="ic">${faIcon(it.icon)}</span><div><h3>${esc(it.title)}</h3><p>${nl2br(it.text)}</p></div></div>`).join('')}</div>
       </div></section>`;
     },
     cards(s) {
-      return `<section class="sec" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <div class="feature-grid">${items(s).map((it, i) => `<div class="feature reveal" style="--d:${i}">
           <span class="ic">${faIcon(it.icon)}</span><h3>${esc(it.title)}</h3><p>${nl2br(it.text)}</p></div>`).join('')}</div>
       </div></section>`;
     },
     list(s) {
-      return `<section class="sec tint" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec tint" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <ul class="check-list">${items(s).map((it, i) => `<li class="reveal" style="--d:${i}"><i class="fa-solid fa-circle-check"></i><span>${esc(it.text)}</span></li>`).join('')}</ul>
       </div></section>`;
     },
     stats(s) {
-      return `<section class="sec stats-sec" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec stats-sec" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <div class="stats-grid">${items(s).map((it, i) => `<div class="stat reveal" style="--d:${i}"><b data-count="${esc(it.value)}">${esc(it.value)}</b><span>${esc(it.label)}</span></div>`).join('')}</div>
       </div></section>`;
     },
     timeline(s) {
-      return `<section class="sec" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <ol class="timeline">${items(s).map((it, i) => `<li class="reveal ${it.current ? 'current' : ''}" style="--d:${i}">
           <span class="tl-dot">${i + 1}</span><h3>${esc(it.title)}</h3><p>${esc(it.text)}</p>${it.current ? '<em>المرحلة الحالية</em>' : ''}</li>`).join('')}</ol>
         ${s.note ? `<p class="tl-note reveal"><i class="fa-solid fa-lightbulb"></i> ${esc(s.note)}</p>` : ''}
       </div></section>`;
     },
     steps(s) {
-      return `<section class="sec tint" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec tint" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <div class="steps">${items(s).map((it, i) => `<div class="step reveal" style="--d:${i}">
           <span class="step-n">${i + 1}</span><span class="ic">${faIcon(it.icon)}</span><h3>${esc(it.title)}</h3><p>${esc(it.text)}</p></div>`).join('')}</div>
       </div></section>`;
     },
     structure(s) {
-      return `<section class="sec" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <div class="org-grid">${items(s).map((it, i) => {
           const ppl = String(it.people || '').split('\n').map(x => x.trim()).filter(Boolean);
           return `<div class="org-card reveal" style="--d:${i % 6}"><h3>${esc(it.title)}</h3><ul>${ppl.map((p, j) => `<li class="${j === 0 && ppl.length > 1 ? 'lead-p' : ''}">${esc(p)}</li>`).join('')}</ul></div>`;
@@ -95,7 +95,7 @@ const Home = (() => {
       </div></section>`;
     },
     register(s) {
-      return `<section class="sec" id="sec-${s.id}"><div class="container">
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container">
         <div class="register-card reveal">
           <div class="rc-rays" aria-hidden="true"></div>
           <div class="rc-text">
@@ -113,7 +113,7 @@ const Home = (() => {
     },
     members(s) {
       const count = Store.list('members').length;
-      return `<section class="sec tint" id="sec-${s.id}"><div class="container">
+      return `<section class="sec tint" id="sec-${esc(s.id)}"><div class="container">
         <div class="members-cta reveal">
           <div class="avatars-stack">${Store.list('members').slice(0, 6).map(m => avatar(m)).join('')}</div>
           <div>${s.kicker ? `<span class="kicker">${esc(s.kicker)}</span>` : ''}<h2>${esc(s.title || '')}</h2><p>${esc(s.body || '')}</p>
@@ -126,7 +126,7 @@ const Home = (() => {
       // التقييمات المعروضة في مسار عام (featured)، مع الرجوع للبنية السابقة قبل ترقية الأمان
       const list = (Store.get('featured') ? Store.list('featured') : Data.reviews({ type: 'program' }).filter(r => r.featured)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
       if (!list.length) return '';
-      return `<section class="sec" id="sec-${s.id}"><div class="container">${head(s)}
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container">${head(s)}
         <div class="quotes">${list.map((r, i) => {
           const a = Data.member(r.authorId);
           return `<figure class="quote reveal" style="--d:${i}"><i class="fa-solid fa-quote-right"></i><blockquote>${nl2br(r.text)}</blockquote>
@@ -144,7 +144,7 @@ const Home = (() => {
           : `<div class="video-frame" data-video-src="${esc(v.src)}" role="button" tabindex="0" aria-label="تشغيل المقطع">
               <img src="${esc(v.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">
               <span class="play-btn"><i class="fa-solid fa-play"></i></span></div>`;
-      return `<section class="sec video-sec" id="sec-${s.id}"><div class="container">
+      return `<section class="sec video-sec" id="sec-${esc(s.id)}"><div class="container">
         ${head(s)}
         ${s.body ? `<p class="lead video-lead reveal">${nl2br(s.body)}</p>` : ''}
         <div class="video-wrap reveal">${player}</div>
@@ -155,13 +155,13 @@ const Home = (() => {
       const btn = s.button ? (s.buttonLink
         ? `<a class="btn primary" href="${esc(s.buttonLink)}" target="_blank" rel="noopener">${esc(s.button)}</a>`
         : `<button class="btn primary" data-open-form>${esc(s.button)}</button>`) : '';
-      return `<section class="sec" id="sec-${s.id}"><div class="container custom-sec ${img ? 'has-img' : ''}">
+      return `<section class="sec" id="sec-${esc(s.id)}"><div class="container custom-sec ${img ? 'has-img' : ''}">
         <div class="reveal">${head(s).replace('reveal', '')}${s.body ? `<p class="lead">${nl2br(s.body)}</p>` : ''}${btn}</div>
         ${img ? `<img class="reveal" src="${esc(img)}" alt="" referrerpolicy="no-referrer">` : ''}
       </div></section>`;
     },
     portals(s) {
-      return `<section class="sec portals" id="sec-${s.id}"><div class="container">
+      return `<section class="sec portals" id="sec-${esc(s.id)}"><div class="container">
         <div class="sec-head reveal"><h2>${esc(s.title || 'بوابات المنصة')}</h2>${s.body ? `<p class="sec-sub">${esc(s.body)}</p>` : ''}</div>
         <div class="portal-grid">
           <button class="portal reveal" data-login="mentor"><i class="fa-solid fa-user-tie"></i><b>دخول المرشد</b><small>إدارة المواعيد والجلسات والتقييم</small></button>
@@ -171,7 +171,7 @@ const Home = (() => {
       </div></section>`;
     },
     footer(s) {
-      return `<footer class="site-footer" id="sec-${s.id}"><div class="container ftr-in">
+      return `<footer class="site-footer" id="sec-${esc(s.id)}"><div class="container ftr-in">
         <div class="ftr-brand"><img src="assets/ishraq-logo.png" alt="إشراق" class="ftr-logo"><p>${nl2br(s.body || '')}</p></div>
         <div class="ftr-social">${socialLinks(s.social || {}, 'social')}</div>
         <div class="ftr-org"><small>برعاية</small><img src="assets/albatalia-logo.png" alt="جمعية البطالية الخيرية"></div>
@@ -186,7 +186,7 @@ const Home = (() => {
       const a = Math.PI + (i * Math.PI) / 8;
       const x1 = cx + Math.cos(a) * 150, y1 = cy + Math.sin(a) * 150;
       const x2 = cx + Math.cos(a) * 270, y2 = cy + Math.sin(a) * 270;
-      out += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><circle cx="${x2}" cy="${y2}" r="9"/><circle cx="${x1}" cy="${y1}" r="5"/>`;
+      out += `<line x1="${esc(x1)}" y1="${esc(y1)}" x2="${esc(x2)}" y2="${esc(y2)}"/><circle cx="${esc(x2)}" cy="${esc(y2)}" r="9"/><circle cx="${esc(x1)}" cy="${esc(y1)}" r="5"/>`;
     }
     return out + `<path d="M${cx - 200} ${cy} A200 200 0 0 1 ${cx + 200} ${cy}" fill="none"/>`;
   }
@@ -267,7 +267,7 @@ const Home = (() => {
         <a class="back" href="#/"><i class="fa-solid fa-arrow-right"></i> الرئيسية</a>
         <img src="assets/ishraq-mark.png" alt="" class="mp-mark">
         <h1>تعرّف على أعضاء دفعات إشراق</h1>
-        <div class="cohort-switch">${cohorts.map(c => `<button class="${c.id === membersCohort ? 'active' : ''}" data-cohort="${c.id}">${esc(c.name)} <span>${c.year}</span></button>`).join('')}</div>
+        <div class="cohort-switch">${cohorts.map(c => `<button class="${c.id === membersCohort ? 'active' : ''}" data-cohort="${esc(c.id)}">${esc(c.name)} <span>${esc(c.year)}</span></button>`).join('')}</div>
       </div></header>
       <div class="container mp-body">
         ${group('mentor', 'المرشدون', 'fa-user-tie')}

@@ -4,6 +4,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nl2br = s => esc(s).replace(/\n/g, '<br>');
+// أيقونة Font Awesome من البيانات: تُقبل فقط بصيغة fa-xxx وإلا تُستبدل بأيقونة افتراضية
+const safeIcon = (v, d = 'fa-circle-info') => (/^fa-[a-z0-9-]{1,40}$/.test(String(v || '')) ? v : d);
 const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
 
 /* الأرقام إنجليزية دائماً */
@@ -39,21 +41,21 @@ function minutesBetween(start, end) {
   return Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
 }
 // نطاق الوقت يُعرض من اليسار لليمين (18:00 - 19:00) حتى داخل النص العربي
-const tRange = (a, b) => `\u2066${a} - ${b}\u2069`;
+const tRange = (a, b) => `\u2066${esc(a)} - ${esc(b)}\u2069`;
 const fmtSlot = x => `${fmtDate(x.date)} · ${tRange(x.start, x.end)}`;
 
 function timeSelect(name, value = '') {
   const [hv, mv] = String(value || '').split(':');
   const hours = Array.from({ length: 24 }, (_, i) => pad(i));
   const mins = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
-  return `<div class="time-select" data-time="${name}">
+  return `<div class="time-select" data-time="${esc(name)}">
     <select data-part="h">${hours.map(h => `<option ${h === hv ? 'selected' : ''}>${h}</option>`).join('')}</select>
     <span>:</span>
     <select data-part="m">${mins.map(m => `<option ${m === mv ? 'selected' : ''}>${m}</option>`).join('')}</select>
   </div>`;
 }
 const readTime = (root, name) => {
-  const w = root.querySelector(`[data-time="${name}"]`);
+  const w = root.querySelector(`[data-time="${esc(name)}"]`);
   return `${w.querySelector('[data-part=h]').value}:${w.querySelector('[data-part=m]').value}`;
 };
 
@@ -103,8 +105,8 @@ function contactHref(k, v) {
 
 function socialLinks(obj, cls = 'social') {
   const out = SOCIALS.filter(s => obj && String(obj[s.k] || '').trim())
-    .map(s => `<a class="${cls}-link" href="${esc(contactHref(s.k, obj[s.k]))}" target="_blank" rel="noopener" title="${s.label}" aria-label="${s.label}"><i class="${s.icon}"></i></a>`);
-  return out.length ? `<div class="${cls}">${out.join('')}</div>` : '';
+    .map(s => `<a class="${cls}-link" href="${esc(contactHref(s.k, obj[s.k]))}" target="_blank" rel="noopener" title="${esc(s.label)}" aria-label="${esc(s.label)}"><i class="${esc(s.icon)}"></i></a>`);
+  return out.length ? `<div class="${esc(cls)}">${out.join('')}</div>` : '';
 }
 
 function initials(name) {
@@ -122,7 +124,7 @@ function memberCard(m, opts = {}) {
   if (!m) return '';
   const areasLabel = m.role === 'mentor' ? 'مجالات الإرشاد' : 'مجالات الاهتمام';
   const areas = String(m.areas || '').split(/[،,\n]/).map(s => s.trim()).filter(Boolean);
-  return `<article class="member-card ${m.role}" data-id="${esc(m.id)}">
+  return `<article class="member-card ${esc(m.role)}" data-id="${esc(m.id)}">
     <header class="mc-head">
       <img class="mc-logo" src="assets/ishraq-logo-white.png" alt="إشراق">
       <div class="mc-meta">
@@ -170,7 +172,7 @@ function openModal({ title = '', body = '', actions = [], size = '', onOpen, onC
   wrap.innerHTML = `<div class="modal ${size}" role="dialog" aria-modal="true">
     <header class="modal-head"><h3>${title}</h3>${dismissible ? '<button class="icon-btn modal-x" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>' : ''}</header>
     <div class="modal-body">${body}</div>
-    ${actions.length ? `<footer class="modal-foot">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-act="${i}">${a.label}</button>`).join('')}</footer>` : ''}
+    ${actions.length ? `<footer class="modal-foot">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-act="${esc(i)}">${a.label}</button>`).join('')}</footer>` : ''}
   </div>`;
   document.body.appendChild(wrap);
   document.body.classList.add('modal-open');
@@ -221,16 +223,16 @@ function confirmDialog(msg, { ok = 'تأكيد', cancel = 'إلغاء', danger =
 function fieldInput(f, value = '') {
   const id = 'fi_' + Math.random().toString(36).slice(2, 8);
   const req = f.required ? 'required' : '';
-  const lbl = `<label for="${id}">${esc(f.label)}${f.required ? ' <em>*</em>' : ''}</label>`;
+  const lbl = `<label for="${esc(id)}">${esc(f.label)}${f.required ? ' <em>*</em>' : ''}</label>`;
   let input;
   switch (f.type) {
-    case 'textarea': input = `<textarea id="${id}" name="${esc(f.k)}" rows="${f.rows || 4}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(value)}</textarea>`; break;
-    case 'select': input = `<select id="${id}" name="${esc(f.k)}" ${req}><option value="">— اختر —</option>${(f.options || []).map(o => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; break;
+    case 'textarea': input = `<textarea id="${esc(id)}" name="${esc(f.k)}" rows="${f.rows || 4}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(value)}</textarea>`; break;
+    case 'select': input = `<select id="${esc(id)}" name="${esc(f.k)}" ${req}><option value="">— اختر —</option>${(f.options || []).map(o => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`; break;
     case 'radio': return `<div class="field">${lbl}<div class="radio-row">${(f.options || []).map((o, i) => `<label class="radio"><input type="radio" name="${esc(f.k)}" value="${esc(o.value ?? o)}" ${(o.value ?? o) === value ? 'checked' : ''} ${req}><span>${esc(o.label ?? o)}</span></label>`).join('')}</div></div>`;
     case 'checkbox': return `<label class="check"><input type="checkbox" name="${esc(f.k)}" ${value ? 'checked' : ''}><span>${esc(f.label)}</span></label>`;
-    default: input = `<input id="${id}" name="${esc(f.k)}" type="${f.type || 'text'}" value="${esc(value)}" ${req} placeholder="${esc(f.placeholder || '')}" ${f.type === 'tel' ? 'inputmode="tel" dir="ltr"' : ''} ${['email', 'url'].includes(f.type) ? 'dir="ltr"' : ''}>`;
+    default: input = `<input id="${esc(id)}" name="${esc(f.k)}" type="${f.type || 'text'}" value="${esc(value)}" ${req} placeholder="${esc(f.placeholder || '')}" ${f.type === 'tel' ? 'inputmode="tel" dir="ltr"' : ''} ${['email', 'url'].includes(f.type) ? 'dir="ltr"' : ''}>`;
   }
-  return `<div class="field ${f.wide ? 'wide' : ''}">${lbl}${input}${f.hint ? `<small class="hint">${f.hint}</small>` : ''}</div>`;
+  return `<div class="field ${f.wide ? 'wide' : ''}">${lbl}${input}${f.hint ? `<small class="hint">${esc(f.hint)}</small>` : ''}</div>`;
 }
 
 function readForm(root) {
@@ -264,8 +266,12 @@ function download(filename, content, mime = 'text/csv;charset=utf-8') {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+// فاصل الأعمدة يُكتشف من سطر العناوين: فاصلة أو فاصلة منقوطة (Excel العربي) أو Tab
 function parseCSV(text) {
-  text = String(text).replace(/^﻿/, '');
+  text = String(text).replace(/^\uFEFF/, '');
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const count = ch => firstLine.split(ch).length - 1;
+  const sep = [',', ';', '\t'].sort((a, b) => count(b) - count(a))[0];
   const rows = []; let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -273,7 +279,7 @@ function parseCSV(text) {
       if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
       else cur += c;
     } else if (c === '"') q = true;
-    else if (c === ',' || c === ';' && !text.includes(',')) { row.push(cur); cur = ''; }
+    else if (c === sep) { row.push(cur); cur = ''; }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++;
       row.push(cur); rows.push(row); row = []; cur = '';
@@ -283,24 +289,31 @@ function parseCSV(text) {
   return rows.filter(r => r.some(c => String(c).trim()));
 }
 
+// قراءة ملف نصي: UTF-8 إن كان صالحاً، وإلا Windows-1256 (ترميز Excel العربي الافتراضي)
+async function readTextFile(file) {
+  const buf = await file.arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { try { return new TextDecoder('windows-1256').decode(buf); } catch { return new TextDecoder().decode(buf); } }
+}
+
 function exportPDF(title, html) {
   const w = window.open('', '_blank');
   if (!w) return toast('اسمح بالنوافذ المنبثقة لتصدير PDF', 'error');
   const base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
   w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title>
-    <base href="${base}">
+    <base href="${esc(base)}">
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/style.css"></head>
     <body class="print-doc"><header class="print-head"><img src="assets/ishraq-logo.png" alt=""><div><h1>${esc(title)}</h1><small>${fmtTs(Date.now())}</small></div></header>${html}
-    <script>setTimeout(()=>{window.print();},900)<\/script></body></html>`);
+    <script>window.addEventListener('load',()=>{const go=()=>setTimeout(()=>window.print(),150);(document.fonts&&document.fonts.ready?Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,4000))]):Promise.resolve()).then(go);});<\/script></body></html>`);
   w.document.close();
 }
 
 function exportBar(key) {
   return `<span class="export-bar">
-    <button class="icon-btn" data-export="${key}" data-fmt="pdf" title="تصدير PDF"><i class="fa-solid fa-file-pdf"></i></button>
-    <button class="icon-btn" data-export="${key}" data-fmt="csv" title="تصدير CSV"><i class="fa-solid fa-file-csv"></i></button>
+    <button class="icon-btn" data-export="${esc(key)}" data-fmt="pdf" title="تصدير PDF"><i class="fa-solid fa-file-pdf"></i></button>
+    <button class="icon-btn" data-export="${esc(key)}" data-fmt="csv" title="تصدير CSV"><i class="fa-solid fa-file-csv"></i></button>
   </span>`;
 }
 
@@ -315,7 +328,7 @@ const STATUS = {
   await_mentee: { label: 'بانتظار تأكيد المستفيد', cls: 'st-await' },
   overdue: { label: 'انقضاء الوقت', cls: 'st-overdue' }
 };
-const statusPill = s => `<span class="pill ${STATUS[s]?.cls || ''}">${STATUS[s]?.label || s}</span>`;
+const statusPill = s => `<span class="pill ${STATUS[s]?.cls || ''}">${STATUS[s]?.label || esc(s)}</span>`;
 // شارة حالة الحجز كما يراها المرشد أو المستفيد أو الإدارة
 function bookingPill(b, viewer) {
   const ds = Data.displayStatus(b);
@@ -323,7 +336,7 @@ function bookingPill(b, viewer) {
   return statusPill(ds);
 }
 const MODES = { inperson: 'حضوري', online: 'إلكتروني', both: 'حضوري أو إلكتروني' };
-const sessionName = n => `الجلسة ${ORDINALS[n - 1] || n}`;
+const sessionName = n => `الجلسة ${ORDINALS[n - 1] || esc(n)}`;
 
 const Data = {
   cohorts: () => Store.list('cohorts').sort((a, b) => a.num - b.num),
@@ -343,23 +356,51 @@ const Data = {
     if (Object.keys(pub).length) Store.update(`members/${id}`, pub);
     if (Object.keys(priv).length) Store.update(`contacts/${id}`, priv);
   },
+  // الشبكة يقرؤها المشرفون فقط؛ العضو يعرف طرفه من pairs/{id}
   menteeOf(mentorId) {
     const m = Data.member(mentorId);
     if (!m) return null;
-    return Data.member(Store.get(`network/${m.cohort}/${mentorId}`));
+    const net = Store.get(`network/${m.cohort}`);
+    return Data.member(net ? net[mentorId] : Store.get(`pairs/${mentorId}`));
   },
   mentorOf(menteeId) {
     const m = Data.member(menteeId);
     if (!m) return null;
-    const net = Store.get(`network/${m.cohort}`) || {};
-    const mid = Object.keys(net).find(k => net[k] === menteeId);
-    return Data.member(mid);
+    const net = Store.get(`network/${m.cohort}`);
+    return Data.member(net ? Object.keys(net).find(k => net[k] === menteeId) : Store.get(`pairs/${menteeId}`));
+  },
+  // مزامنة pairs مع الشبكة لكل أعضاء الدفعة
+  syncPairs(cohortId) {
+    const net = Store.get(`network/${cohortId}`) || {};
+    const upd = {};
+    Data.members(null, cohortId).forEach(m => {
+      const partner = m.role === 'mentor' ? (net[m.id] || null) : (Object.keys(net).find(k => net[k] === m.id) || null);
+      if ((Store.get(`pairs/${m.id}`) || null) !== partner) upd[m.id] = partner;
+    });
+    if (Object.keys(upd).length) Store.update('pairs', upd);
+  },
+  // نسخة التقييم المعتمد تُحفظ لدى الطرف المستهدف ليقرأها وحده
+  publishReview(r) {
+    if (!r || !r.id || !r.targetId || r.targetId === 'admin') return;
+    if (r.status === 'approved') Store.set(`approvedReviews/${r.targetId}/${r.id}`, r);
+    else if (Store.get(`approvedReviews/${r.targetId}/${r.id}`) != null) Store.remove(`approvedReviews/${r.targetId}/${r.id}`);
+  },
+  unpublishReview(r) { if (r?.targetId && r.id && Store.get(`approvedReviews/${r.targetId}/${r.id}`) != null) Store.remove(`approvedReviews/${r.targetId}/${r.id}`); },
+  // جمهور الرسالة: all | mentor | mentee | رقم العضو (تستعلم به القواعد)
+  messageAud: x => (x.target === 'member' ? x.memberId : x.target === 'all_mentors' ? 'mentor' : x.target === 'all_mentees' ? 'mentee' : 'all'),
+  // ترقية البيانات القائمة للبنية الجديدة (يشغّلها مشرف بصلاحية كاملة بعد نشر القواعد)
+  backfill() {
+    Data.cohorts().forEach(c => Data.syncPairs(c.id));
+    Store.list('messages').forEach(x => { if (x.id && x.aud !== Data.messageAud(x)) Store.set(`messages/${x.id}/aud`, Data.messageAud(x)); });
+    Store.list('reviews').forEach(r => {
+      if (r.status === 'approved' && r.targetId && r.targetId !== 'admin' && Store.get(`approvedReviews/${r.targetId}/${r.id}`) == null) Data.publishReview(r);
+    });
   },
   slots: mentorId => Store.list('slots').filter(s => s.mentorId === mentorId)
     .sort((a, b) => a.session - b.session || (a.date + a.start).localeCompare(b.date + b.start)),
   bookings: filter => Store.list('bookings').filter(b => !filter || Object.entries(filter).every(([k, v]) => b[k] === v))
     .sort((a, b) => a.session - b.session || (a.date + a.start).localeCompare(b.date + b.start)),
-  reviews: filter => Store.list('reviews').filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))
+  reviews: filter => Object.values(Object.assign({}, ...Object.values(Store.get('approvedReviews') || {}), Store.get('reviews') || {})).filter(Boolean).filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))
     .sort((a, b) => (a.session || 9) - (b.session || 9) || a.ts - b.ts),
   // الحالة المعروضة: المنجزة تحتاج تأكيد الطرفين، والقادمة التي انتهى وقتها تصبح «انقضاء الوقت»
   displayStatus(b) {
@@ -404,10 +445,17 @@ const Data = {
     const seq = Math.max(10, Store.get(key) || 0, ...existing) + 1;
     return { seq, code: `${role === 'mentor' ? 'M' : 'B'}${c.num}${seq}`, key };
   },
-  // يضيف العضو ويُنشئ له حساب دخول برمز سري (مثل M211-7K4Q)
+  // يحجز رقم العضوية التالي ذرّياً على العدّاد حتى لا يحصل مشرفان على الرقم نفسه
+  async reserveCode(role, cohortId) {
+    const c = Data.cohort(cohortId);
+    const key = `counters/${role}_${cohortId}`;
+    const floor = Math.max(10, ...Data.members(role, cohortId).map(m => m.seq || 0));
+    const seq = await Store.transaction(key, cur => Math.max(floor, Number(cur) || 0) + 1);
+    return { seq, code: `${role === 'mentor' ? 'M' : 'B'}${c.num}${seq}`, key };
+  },
+  // يضيف العضو ويُنشئ له حساب دخول برمز سري (مثل M211-7K4Q9P)
   async addMember(role, cohortId, data) {
-    const { seq, code, key } = Data.nextCode(role, cohortId);
-    Store.set(key, seq);
+    const { seq, code } = await Data.reserveCode(role, cohortId);
     const id = Store.newId();
     Store.set(`members/${id}`, { id, role, cohort: cohortId, seq, code, createdAt: Date.now() });
     Data.saveMember(id, data);
@@ -422,6 +470,10 @@ const Data = {
     const net = Store.get(`network/${m.cohort}`) || {};
     if (m.role === 'mentor') Store.remove(`network/${m.cohort}/${id}`);
     else Object.keys(net).forEach(k => net[k] === id && Store.remove(`network/${m.cohort}/${k}`));
+    const partner = Store.get(`pairs/${id}`);
+    if (partner) Store.remove(`pairs/${partner}`);
+    if (Store.get(`pairs/${id}`) != null) Store.remove(`pairs/${id}`);
+    if (Store.get(`approvedReviews/${id}`) != null) Store.remove(`approvedReviews/${id}`);
     Security.deleteMemberAccount(m);
     Store.remove(`members/${id}`);
     Store.remove(`contacts/${id}`);
@@ -437,7 +489,7 @@ const STAT_LABELS = {
 };
 // clickable: تجعل المربعات قابلة للضغط لعرض الجلسات المندرجة تحتها
 function statsBoxes(s, withHours = false, { clickable = false, active = null } = {}) {
-  const box = (key, cls, icon) => `<${clickable ? 'button type="button"' : 'div'} class="stat-box ${cls} ${active === key ? 'active' : ''}" ${clickable ? `data-stat="${key}"` : ''}>
+  const box = (key, cls, icon) => `<${clickable ? 'button type="button"' : 'div'} class="stat-box ${cls} ${active === key ? 'active' : ''}" ${clickable ? `data-stat="${esc(key)}"` : ''}>
     <i class="fa-solid ${icon}"></i><b>${s[key]}</b><span>${STAT_LABELS[key]}</span></${clickable ? 'button' : 'div'}>`;
   return `<div class="stat-boxes">
     ${box('total', 'st-total', 'fa-layer-group')}
@@ -463,7 +515,7 @@ function openNotifications(to) {
   const list = Data.notifications(to);
   openModal({
     title: '<i class="fa-solid fa-bell"></i> الإشعارات',
-    body: list.length ? `<ul class="notif-list">${list.map(n => `<li class="${n.read ? '' : 'unread'}"><i class="fa-solid ${n.icon || 'fa-circle-info'}"></i><div><p>${esc(n.text)}</p><small>${fmtTs(n.ts)}</small></div></li>`).join('')}</ul>` : emptyState('لا توجد إشعارات بعد', 'fa-bell-slash'),
+    body: list.length ? `<ul class="notif-list">${list.map(n => `<li class="${n.read ? '' : 'unread'}"><i class="fa-solid ${safeIcon(n.icon)}"></i><div><p>${esc(n.text)}</p><small>${fmtTs(n.ts)}</small></div></li>`).join('')}</ul>` : emptyState('لا توجد إشعارات بعد', 'fa-bell-slash'),
     actions: list.length ? [
       { label: 'مسح الكل', cls: 'ghost', onClick: () => list.forEach(n => Store.remove(`notifications/${to}/${n.id}`)) },
       { label: 'إغلاق', cls: 'primary' }
