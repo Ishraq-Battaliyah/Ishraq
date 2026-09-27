@@ -324,13 +324,20 @@ const sessionName = n => `الجلسة ${ORDINALS[n - 1] || n}`;
 const Data = {
   cohorts: () => Store.list('cohorts').sort((a, b) => a.num - b.num),
   cohort: id => Store.get(`cohorts/${id}`),
+  // بيانات التواصل محفوظة في مسار خاص (contacts) وتُدمج مع البطاقة عند توفرها لهذا المستخدم
+  withContacts: m => (m ? { ...m, ...(Store.get(`contacts/${m.id}`) || {}) } : null),
   members: (role, cohortId) => Store.list('members')
     .filter(m => (!role || m.role === role) && (!cohortId || m.cohort === cohortId))
+    .map(m => Data.withContacts(m))
     .sort((a, b) => (a.cohort === b.cohort ? (a.seq - b.seq) : String(a.cohort).localeCompare(b.cohort))),
-  member: id => id ? Store.get(`members/${id}`) : null,
-  byCode(code) {
-    code = toEnDigits(code).trim().toUpperCase();
-    return Store.list('members').find(m => String(m.code).toUpperCase() === code);
+  member: id => (id ? Data.withContacts(Store.get(`members/${id}`)) : null),
+  // حفظ بيانات العضو: الحقول العامة في members وبيانات التواصل في contacts
+  saveMember(id, values) {
+    const pub = {}, priv = {};
+    Object.entries(values).forEach(([k, v]) => { (CONTACT_KEYS.includes(k) ? priv : pub)[k] = v; });
+    ['code', 'role', 'cohort', 'seq', 'uid', 'id'].forEach(k => delete pub[k]);
+    if (Object.keys(pub).length) Store.update(`members/${id}`, pub);
+    if (Object.keys(priv).length) Store.update(`contacts/${id}`, priv);
   },
   menteeOf(mentorId) {
     const m = Data.member(mentorId);
@@ -374,9 +381,10 @@ const Data = {
   },
   doneCount: (key, id) => Data.bookings({ [key]: id }).filter(b => b.status === 'done').length,
   notify(to, text, extra = {}) {
-    Store.push('notifications', { to, text, ts: Date.now(), read: false, ...extra });
+    if (!to) return;
+    Store.push(`notifications/${to}`, { to, text, ts: Date.now(), read: false, ...extra });
   },
-  notifications: to => Store.list('notifications').filter(n => n.to === to).sort((a, b) => b.ts - a.ts),
+  notifications: to => Store.list(`notifications/${to}`).filter(n => n && n.text).sort((a, b) => b.ts - a.ts),
   messagesFor(m) {
     return Store.list('messages').filter(x =>
       (x.target === 'member' && x.memberId === m.id) ||
@@ -392,11 +400,17 @@ const Data = {
     const seq = Math.max(10, Store.get(key) || 0, ...existing) + 1;
     return { seq, code: `${role === 'mentor' ? 'M' : 'B'}${c.num}${seq}`, key };
   },
-  addMember(role, cohortId, data) {
+  // يضيف العضو ويُنشئ له حساب دخول برمز سري (مثل M211-7K4Q)
+  async addMember(role, cohortId, data) {
     const { seq, code, key } = Data.nextCode(role, cohortId);
     Store.set(key, seq);
-    const id = Store.push('members', { ...data, role, cohort: cohortId, seq, code, createdAt: Date.now() });
-    return Data.member(id) || { id, code };
+    const id = Store.newId();
+    Store.set(`members/${id}`, { id, role, cohort: cohortId, seq, code, createdAt: Date.now() });
+    Data.saveMember(id, data);
+    let secret = null, error = null;
+    try { secret = await Security.createMemberAccount(Store.get(`members/${id}`)); }
+    catch (e) { console.error(e); error = Security.authMsg(e); }
+    return { ...Data.member(id), secret, error };
   },
   removeMember(id) {
     const m = Data.member(id);
@@ -404,7 +418,12 @@ const Data = {
     const net = Store.get(`network/${m.cohort}`) || {};
     if (m.role === 'mentor') Store.remove(`network/${m.cohort}/${id}`);
     else Object.keys(net).forEach(k => net[k] === id && Store.remove(`network/${m.cohort}/${k}`));
+    Security.deleteMemberAccount(m);
     Store.remove(`members/${id}`);
+    Store.remove(`contacts/${id}`);
+    Store.remove(`secrets/codes/${id}`);
+    Store.remove(`myRegs/${id}`);
+    Store.remove(`notifications/${id}`);
   }
 };
 
@@ -442,10 +461,10 @@ function openNotifications(to) {
     title: '<i class="fa-solid fa-bell"></i> الإشعارات',
     body: list.length ? `<ul class="notif-list">${list.map(n => `<li class="${n.read ? '' : 'unread'}"><i class="fa-solid ${n.icon || 'fa-circle-info'}"></i><div><p>${esc(n.text)}</p><small>${fmtTs(n.ts)}</small></div></li>`).join('')}</ul>` : emptyState('لا توجد إشعارات بعد', 'fa-bell-slash'),
     actions: list.length ? [
-      { label: 'مسح الكل', cls: 'ghost', onClick: () => list.forEach(n => Store.remove(`notifications/${n.id}`)) },
+      { label: 'مسح الكل', cls: 'ghost', onClick: () => list.forEach(n => Store.remove(`notifications/${to}/${n.id}`)) },
       { label: 'إغلاق', cls: 'primary' }
     ] : [],
-    onOpen: () => list.filter(n => !n.read).forEach(n => Store.set(`notifications/${n.id}/read`, true))
+    onOpen: () => list.filter(n => !n.read).forEach(n => Store.set(`notifications/${to}/${n.id}/read`, true))
   });
 }
 document.addEventListener('click', e => {

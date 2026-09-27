@@ -8,6 +8,8 @@ const Portal = (() => {
     const me = Data.member(id);
     if (!me || me.role !== kind) { Auth.logout(); return; }
     const other = kind === 'mentor' ? Data.menteeOf(me.id) : Data.mentorOf(me.id);
+    // بيانات تواصل الطرف المرتبط تُقرأ من مسار خاص تسمح به القواعد لهذا العضو فقط
+    if (other && String(Store.scope || '').startsWith('member:')) Store.watch(`contacts/${other.id}`);
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const bookings = Data.bookings(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id });
     const msgs = Data.messagesFor(me);
@@ -404,7 +406,7 @@ const Portal = (() => {
           label: 'حفظ', cls: 'primary', onClick: m => {
             const f = $('form', m.body);
             if (!validateForm(f)) return false;
-            Store.update(`members/${member.id}`, readForm(f));
+            Data.saveMember(member.id, readForm(f));
             toast('تم حفظ البيانات');
             onSaved && onSaved();
           }

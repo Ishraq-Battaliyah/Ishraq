@@ -9,7 +9,8 @@ const Admin = (() => {
     { id: 'messages', label: 'الرسائل', icon: 'fa-envelope' },
     { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
     { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
-    { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' }
+    { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
+    { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
   const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
 
@@ -24,6 +25,7 @@ const Admin = (() => {
           <span class="muted small">${Store.mode === 'firebase' ? '<i class="fa-solid fa-cloud"></i> متصل بقاعدة البيانات' : '<i class="fa-solid fa-hard-drive"></i> وضع محلي (البيانات في هذا المتصفح فقط)'}</span></div>
           <div class="kpis">${kpis()}</div>
         </section>
+        ${securityBanner()}
         ${dbWarning()}
         ${backupBar()}
         <nav class="admin-tabs">${TABS.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${t.id}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
@@ -332,7 +334,7 @@ const Admin = (() => {
       </label>
       <div class="card-grid">
         <button class="add-card" data-add-member="${role}"><i class="fa-solid fa-plus"></i><span>إضافة ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد</span></button>
-        ${list.map(m => memberCard(m, { actions: `<button class="btn xs send-cred" data-send-cred="${m.id}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button><button class="btn xs ghost" data-edit-member="${m.id}"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn xs ghost danger" data-del-member="${m.id}"><i class="fa-solid fa-trash"></i> حذف</button>` })).join('')}
+        ${list.map(m => memberCard(m, { actions: `<button class="btn xs send-cred" data-send-cred="${m.id}"><i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول${m.credSentAt ? ' <i class="fa-solid fa-check-double" title="أُرسلت سابقاً"></i>' : ''}</button><button class="btn xs ghost" data-edit-member="${m.id}"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn xs ghost" data-regen="${m.id}" title="توليد رمز دخول جديد"><i class="fa-solid fa-key"></i> رمز جديد</button><button class="btn xs ghost danger" data-del-member="${m.id}"><i class="fa-solid fa-trash"></i> حذف</button>` })).join('')}
       </div>
     </div>`;
   }
@@ -362,16 +364,23 @@ const Admin = (() => {
     });
     const nameIdx = idx.find(x => x[0] === 'name')[1];
     if (nameIdx < 0) return toast('لم يتم العثور على عمود «الاسم»', 'error');
-    let n = 0;
-    rows.slice(1).forEach(r => {
+    const items = rows.slice(1).map(r => {
       const d = {};
       idx.forEach(([k, i]) => { if (i >= 0) d[k] = String(r[i] ?? '').trim(); });
       if (d.whatsapp) d.whatsapp = toEnDigits(d.whatsapp);
-      if (!d.name || d.name.includes('مثال')) return;
-      Data.addMember(role, cohortId, d);
-      n++;
-    });
-    toast(n ? `تمت إضافة ${n} بطاقة بنجاح` : 'لم تتم إضافة أي بطاقة', n ? 'ok' : 'error');
+      return d;
+    }).filter(d => d.name && !d.name.includes('مثال'));
+    if (!items.length) return toast('لم تتم إضافة أي بطاقة', 'error');
+    const prog = openModal({ title: '<i class="fa-solid fa-spinner fa-spin"></i> جارٍ إضافة البطاقات', size: 'sm', dismissible: false, body: '<p class="confirm-msg" data-prog>...</p>' });
+    const failed = [];
+    for (let i = 0; i < items.length; i++) {
+      $('[data-prog]', prog.el).textContent = `${i + 1} / ${items.length} — ${items[i].name}`;
+      const r = await Data.addMember(role, cohortId, items[i]);
+      if (r.error) failed.push(`${items[i].name}: ${r.error}`);
+    }
+    prog.close();
+    if (failed.length) openModal({ title: 'تمت الإضافة مع ملاحظات', size: 'md', body: `<p>أُضيفت ${items.length} بطاقة، وتعذّر إنشاء رمز الدخول لـ ${failed.length} منها. استخدم زر «رمز جديد» على بطاقاتهم لاحقاً.</p><ul>${failed.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`, actions: [{ label: 'حسناً', cls: 'primary' }] });
+    else toast(`تمت إضافة ${items.length} بطاقة بنجاح مع رموز الدخول`);
   }
 
   function addMember(role, cohortId) {
@@ -379,13 +388,15 @@ const Admin = (() => {
     const fields = PROFILE_FIELDS.map(f => ({ ...f, label: typeof f.label === 'object' ? f.label[role] : f.label, wide: f.type === 'textarea' || f.k === 'photo' }));
     openModal({
       title: `<i class="fa-solid fa-plus"></i> ${role === 'mentor' ? 'مرشد' : 'مستفيد'} جديد <span class="code-chip">${preview}</span>`, size: 'lg',
-      body: `<form class="form-grid"><p class="wide muted small">رقم العضوية يتولد آلياً وهو نفسه رمز الدخول الخاص بالعضو.</p>${fields.map(f => fieldInput(f)).join('')}</form>`,
+      body: `<form class="form-grid"><p class="wide muted small">رقم العضوية يتولد آلياً، ويُنشأ للعضو رمز دخول سري (مثل <span class="num">${preview}-7K4Q</span>) يصله عبر «مشاركة البطاقة ومعلومات الدخول».</p>${fields.map(f => fieldInput(f)).join('')}</form>`,
       actions: [{
-        label: 'حفظ البطاقة', cls: 'primary', onClick: m => {
+        label: 'حفظ البطاقة', cls: 'primary', onClick: async m => {
           const f = $('form', m.body);
           if (!validateForm(f)) return false;
-          const mem = Data.addMember(role, cohortId, readForm(f));
-          toast(`تمت الإضافة — رقم العضوية ${mem.code}`);
+          const btn = $('[data-act="0"]', m.el); btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جارٍ الحفظ...';
+          const mem = await Data.addMember(role, cohortId, readForm(f));
+          if (mem.error) toast(`أُضيفت البطاقة ${mem.code} لكن تعذّر إنشاء رمز الدخول: ${mem.error}`, 'error');
+          else toast(`تمت الإضافة — رمز الدخول ${mem.secret}`);
         }
       }, { label: 'إلغاء', cls: 'ghost' }]
     });
@@ -395,11 +406,17 @@ const Admin = (() => {
   function credentialsText(m) {
     const role = m.role === 'mentor' ? 'المرشد' : 'المستفيد';
     const url = window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '');
-    return `تحية طيبة عزيزي ${role}، تم إضافتك إلى منصة إشراق، يمكنك الدخول إلى المنصة وتعديل البيانات وإدارة حجوزات الجلسات الإرشادية وكتابة التقييمات عبر الدخول إلى الرابط ( ${url} ) والضغط على (دخول ${role}) واستخدام رقم العضوية الخاص بك (${m.code})`;
+    const code = Store.get(`secrets/codes/${m.id}`) || m.code;
+    return `تحية طيبة عزيزي ${role}، تم إضافتك إلى منصة إشراق، يمكنك الدخول إلى المنصة وتعديل البيانات وإدارة حجوزات الجلسات الإرشادية وكتابة التقييمات عبر الدخول إلى الرابط ( ${url} ) والضغط على (دخول ${role}) واستخدام رمز الدخول الخاص بك (${code})`;
   }
 
   async function sendCredentials(m) {
     if (!m) return;
+    if (!Store.get(`secrets/codes/${m.id}`) && Security.secure()) {
+      const ok = await confirmDialog('لا يوجد رمز دخول لهذا العضو بعد. هل تريد إنشاء رمز الآن؟', { ok: 'إنشاء الرمز' });
+      if (!ok) return;
+      try { await Security.createMemberAccount(m); m = Data.member(m.id); } catch (e) { return toast(Security.authMsg(e), 'error'); }
+    }
     let blob = null;
     const file = `ishraq-${m.role === 'mentor' ? 'mentor' : 'mentee'}-card.png`;
     const markSent = () => Store.update(`members/${m.id}`, { credSentAt: Date.now() });
@@ -657,6 +674,97 @@ const Admin = (() => {
   }
   P.events = () => Events.panel();
 
+  /* =============== المشرفون =============== */
+  P.admins = () => {
+    if (!Security.secure()) return `<div class="panel"><h2><i class="fa-solid fa-user-shield"></i> المشرفون</h2>${emptyState('إدارة عدة مشرفين بحسابات مستقلة تتاح بعد تفعيل الوضع الآمن (Firebase Authentication).', 'fa-lock')}</div>`;
+    const me = Store.auth.currentUser;
+    const admins = Object.entries(Store.get('admins') || {}).map(([uid, a]) => ({ uid, ...a })).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    return `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-user-shield"></i> المشرفون <span class="count">${admins.length}</span></h2>
+      <button class="btn primary" data-add-admin><i class="fa-solid fa-plus"></i> إضافة مشرف</button></div>
+      <p class="muted small">لكل مشرف بريد وكلمة سر خاصة به للدخول إلى لوحة الإدارة. إزالة المشرف توقف وصوله فوراً.</p>
+      <ul class="admin-list">${admins.map(a => `<li><span class="avatar sm"><span class="avatar-fallback"><i class="fa-solid fa-user-shield"></i></span></span>
+        <div><b>${esc(a.name || 'مشرف')}</b>${a.uid === me?.uid ? ' <span class="chip">أنت</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small></div>
+        <small class="muted">أُضيف ${a.addedAt ? fmtTs(a.addedAt) : ''}</small>
+        ${a.uid === me?.uid ? '<button class="btn xs ghost" data-my-password><i class="fa-solid fa-key"></i> تغيير كلمة السر</button>' : `<button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button>`}</li>`).join('')}</ul>
+    </div>`;
+  };
+
+  function addAdminDialog() {
+    openModal({
+      title: '<i class="fa-solid fa-user-plus"></i> إضافة مشرف', size: 'sm',
+      body: `<form class="form-grid one">
+        ${fieldInput({ k: 'name', label: 'الاسم', required: true })}
+        ${fieldInput({ k: 'email', label: 'البريد الإلكتروني', type: 'email', required: true })}
+        ${fieldInput({ k: 'password', label: 'كلمة السر المبدئية (6 أحرف على الأقل)', required: true, hint: 'أرسلها للمشرف ليغيّرها بعد أول دخول من «تغيير كلمة السر».' })}
+      </form>`,
+      actions: [{
+        label: 'إضافة', cls: 'primary', onClick: async m => {
+          const f = $('form', m.body);
+          if (!validateForm(f)) return false;
+          const v = readForm(f);
+          if (v.password.length < 6) { toast('كلمة السر 6 أحرف على الأقل', 'error'); return false; }
+          try { await Security.addAdmin(v.email, v.password, v.name); toast('تمت إضافة المشرف'); }
+          catch (e) { toast(e.message, 'error'); return false; }
+        }
+      }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
+
+  function myPasswordDialog() {
+    openModal({
+      title: '<i class="fa-solid fa-key"></i> تغيير كلمة السر', size: 'sm',
+      body: `<form class="form-grid one">
+        <div class="field"><label>كلمة السر الحالية</label><input type="password" name="cur" required dir="ltr"></div>
+        <div class="field"><label>كلمة السر الجديدة (6 أحرف على الأقل)</label><input type="password" name="next" required minlength="6" dir="ltr"></div>
+      </form>`,
+      actions: [{
+        label: 'حفظ', cls: 'primary', onClick: async m => {
+          const f = $('form', m.body);
+          if (!validateForm(f)) return false;
+          try { await Security.changeMyPassword(f.cur.value, f.next.value); toast('تم تغيير كلمة السر'); }
+          catch (e) { toast(e.message, 'error'); return false; }
+        }
+      }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
+
+  /* =============== ترقية الأمان =============== */
+  function securityBanner() {
+    if (!Security.secure()) return `<div class="sec-banner warn"><i class="fa-solid fa-shield-halved"></i><div><b>الوضع الآمن غير مفعّل</b>
+      <p>أضف إعدادات مشروع Firebase (apiKey وغيرها) في <code>js/config.js</code> لتفعيل الدخول الآمن وحماية البيانات.</p></div></div>`;
+    if (Security.needsMigration()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>خطوة أخيرة: ترقية البيانات إلى البنية الآمنة</b>
+      <p>تُنقل بيانات التواصل إلى مسار خاص، وتُنشأ رموز دخول سرية جديدة لكل الأعضاء (مثل <span class="num">M211-7K4Q</span>). تُنزَّل نسخة احتياطية تلقائياً قبل البدء.</p>
+      <button class="btn primary sm" data-migrate><i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ الترقية</button></div></div>`;
+    if (!Store.get('meta/rulesPublished')) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>انشر قواعد الحماية الجديدة</b>
+      <p>اكتملت ترقية البيانات. انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish، ثم أرسل للأعضاء رموزهم الجديدة.</p>
+      <button class="btn primary sm" data-show-rules><i class="fa-solid fa-copy"></i> عرض القواعد ونسخها</button>
+      <button class="btn ghost sm" data-rules-done><i class="fa-solid fa-check"></i> نشرتها</button></div></div>`;
+    return '';
+  }
+
+  async function runMigration() {
+    if (!(await confirmDialog('ستبدأ ترقية البيانات الآن. لا تغلق الصفحة حتى تنتهي. ستُنزَّل نسخة احتياطية أولاً.', { ok: 'ابدأ' }))) return;
+    downloadBackup(true);
+    const prog = openModal({ title: '<i class="fa-solid fa-spinner fa-spin"></i> ترقية البيانات', size: 'sm', dismissible: false, body: '<p class="confirm-msg" data-prog>جارٍ البدء...</p>' });
+    try {
+      const r = await Security.migrate(t => { $('[data-prog]', prog.el).textContent = t; });
+      prog.close();
+      if (r.failed.length) openModal({ title: 'اكتملت الترقية مع ملاحظات', size: 'md', body: `<p>تعذّر إنشاء رموز الدخول لـ ${r.failed.length} عضواً. أعد تشغيل الترقية لاحقاً أو استخدم «رمز جديد» على بطاقاتهم.</p><ul>${r.failed.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`, actions: [{ label: 'حسناً', cls: 'primary' }] });
+      else toast('اكتملت ترقية البيانات');
+    } catch (e) { prog.close(); toast(Security.authMsg(e), 'error'); }
+  }
+
+  async function showRules() {
+    let rules = '';
+    try { rules = await (await fetch('database.rules.json', { cache: 'no-store' })).text(); } catch { rules = 'تعذّر تحميل الملف database.rules.json'; }
+    openModal({
+      title: '<i class="fa-solid fa-shield-halved"></i> قواعد الحماية', size: 'lg',
+      body: `<p class="muted small">في Firebase Console: Realtime Database ← Rules ← احذف المحتوى الحالي والصق هذه القواعد ← Publish.</p><pre class="rules-pre" dir="ltr">${esc(rules)}</pre>`,
+      actions: [{ label: '<i class="fa-solid fa-copy"></i> نسخ القواعد', cls: 'primary', onClick: async () => { try { await navigator.clipboard.writeText(rules); toast('تم نسخ القواعد'); } catch { toast('انسخها يدوياً من الصندوق', 'error'); } return false; } }, { label: 'إغلاق', cls: 'ghost' }]
+    });
+  }
+
   P.interests = () => {
     const { fields, list } = interestRows();
     const all = Store.list('interests');
@@ -767,6 +875,12 @@ const Admin = (() => {
       const sb = t.closest('[data-sub]'); if (sb) { ui.sub = ui.sub === sb.dataset.sub ? null : sb.dataset.sub; return render(root); }
       const am = t.closest('[data-add-member]'); if (am) return addMember(am.dataset.addMember, ui.cohort);
       const sc = t.closest('[data-send-cred]'); if (sc) return sendCredentials(Data.member(sc.dataset.sendCred));
+      const rg = t.closest('[data-regen]');
+      if (rg) {
+        const m = Data.member(rg.dataset.regen);
+        return confirmDialog(`توليد رمز دخول جديد لـ «${esc(m.name)}»؟ سيتوقف رمزه الحالي عن العمل، ثم أرسل له الرمز الجديد عبر «مشاركة البطاقة ومعلومات الدخول».`, { ok: 'توليد رمز جديد' })
+          .then(async ok => { if (!ok) return; try { const c = await Security.regenerateCode(m); toast(`الرمز الجديد: ${c}`); } catch (e) { toast(Security.authMsg(e), 'error'); } });
+      }
       const em = t.closest('[data-edit-member]'); if (em) return Portal.editProfile(Data.member(em.dataset.editMember));
       const dm = t.closest('[data-del-member]');
       if (dm) {
@@ -774,6 +888,13 @@ const Admin = (() => {
         return confirmDialog(`حذف بطاقة «${esc(m.name)}» (${m.code})؟ سيتم أيضاً إلغاء تعيينه في الشبكة.`, { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.removeMember(m.id); ui.netCohort = null; } });
       }
       if (t.closest('[data-backup]')) return downloadBackup();
+      if (t.closest('[data-migrate]')) return runMigration();
+      if (t.closest('[data-show-rules]')) return showRules();
+      if (t.closest('[data-rules-done]')) return Store.set('meta/rulesPublished', Date.now());
+      if (t.closest('[data-add-admin]')) return addAdminDialog();
+      if (t.closest('[data-my-password]')) return myPasswordDialog();
+      const da = t.closest('[data-del-admin]');
+      if (da) return confirmDialog('إزالة هذا المشرف؟ لن يستطيع الدخول إلى لوحة الإدارة بعد الآن.', { danger: true, ok: 'إزالة' }).then(ok => ok && Store.remove(`admins/${da.dataset.delAdmin}`));
       const tpl = t.closest('[data-csv-template]'); if (tpl) return csvTemplate(tpl.dataset.csvTemplate);
       const un = t.closest('[data-unassign]'); if (un) { delete ui.netDraft[un.dataset.unassign]; return render(root); }
       if (t.closest('[data-save-net]')) {
@@ -801,7 +922,7 @@ const Admin = (() => {
         return toast('تم اعتماد التقييم');
       }
       const rj = t.closest('[data-reject]'); if (rj) return Store.update(`reviews/${rj.dataset.reject}`, { status: 'rejected', decidedAt: Date.now() });
-      const dr = t.closest('[data-del-review]'); if (dr) return confirmDialog('حذف هذا التقييم؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`reviews/${dr.dataset.delReview}`));
+      const dr = t.closest('[data-del-review]'); if (dr) return confirmDialog('حذف هذا التقييم؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Store.remove(`reviews/${dr.dataset.delReview}`); Store.remove(`featured/${dr.dataset.delReview}`); } });
       // الرسائل
       const dmsg = t.closest('[data-del-msg]'); if (dmsg) return confirmDialog('مسح هذه الرسالة؟ ستختفي من صفحات الأعضاء.', { danger: true, ok: 'مسح' }).then(ok => ok && Store.remove(`messages/${dmsg.dataset.delMsg}`));
       const di = t.closest('[data-del-inbox]'); if (di) return Store.remove(`inbox/${di.dataset.delInbox}`);
@@ -819,7 +940,7 @@ const Admin = (() => {
     root.onchange = e => {
       const t = e.target;
       if (t.matches('[data-net]')) { ui.netDraft[t.dataset.net] = t.value; return render(root); }
-      if (t.matches('[data-feature]')) return Store.set(`reviews/${t.dataset.feature}/featured`, t.checked);
+      if (t.matches('[data-feature]')) { Store.set(`reviews/${t.dataset.feature}/featured`, t.checked); return Security.setFeatured(Store.get(`reviews/${t.dataset.feature}`), t.checked); }
       if (t.matches('[data-restore]') && t.files[0]) { const f = t.files[0]; t.value = ''; return restoreBackup(f); }
       if (t.matches('.dropzone input[type=file]') && t.files[0]) importCSV(t.files[0], t.closest('[data-drop]').dataset.drop, ui.cohort);
     };

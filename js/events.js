@@ -117,8 +117,9 @@ const Events = (() => {
     if (ev && (ev.published === false || isOver(ev))) return toast('انتهى التسجيل في هذه الفعالية', 'error');
     const member = form.dataset.member ? Data.member(form.dataset.member) : null;
     if (member) {
-      if (regs(eventId).some(r => r.memberId === member.id)) return toast('أنت مسجّل في هذه الفعالية مسبقاً');
-      Store.push('eventRegs', { eventId, memberId: member.id, role: member.role, code: member.code, name: v.name, phone: v.phone, email: v.email, interest: '', ts: Date.now() });
+      if (Store.get(`myRegs/${member.id}/${eventId}`)) return toast('أنت مسجّل في هذه الفعالية مسبقاً');
+      const regId = Store.push('eventRegs', { eventId, memberId: member.id, role: member.role, code: member.code, name: v.name, phone: v.phone, email: v.email, interest: '', ts: Date.now() });
+      Store.set(`myRegs/${member.id}/${eventId}`, { regId, ts: Date.now() });
       Data.notify('admin', `تسجيل جديد في فعالية «${ev.title}»: ${member.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${v.name}`, { icon: 'fa-ticket' });
       return toast('تم تسجيل حضورك في الفعالية');
     }
@@ -163,7 +164,7 @@ const Events = (() => {
     if (!list.length) return '';
     const card = e => {
       const sp = speakerOf(e);
-      const mine = regs(e.id).find(r => r.memberId === me.id);
+      const mine = Store.get(`myRegs/${me.id}/${e.id}`);
       const locUrl = String(e.locationUrl || '').trim();
       return `<article class="ev-card ev-portal">
         <div class="ev-info">
@@ -181,7 +182,7 @@ const Events = (() => {
         <div class="ev-reg">
           ${mine
             ? `<div class="ev-registered"><i class="fa-solid fa-circle-check"></i><h4>أنت مسجّل في هذه الفعالية</h4><small>سجّلت بتاريخ ${fmtTs(mine.ts)}</small>
-                <button class="btn sm outline-light" data-ev-unreg="${mine.id}"><i class="fa-solid fa-xmark"></i> إلغاء التسجيل</button></div>`
+                <button class="btn sm outline-light" data-ev-unreg="${e.id}"><i class="fa-solid fa-xmark"></i> إلغاء التسجيل</button></div>`
             : `<h4><i class="fa-solid fa-ticket"></i> سجّل حضورك</h4>
               <form class="ev-form" data-event-form="${esc(e.id)}" data-member="${esc(me.id)}" novalidate>
                 <div class="ev-fields">
@@ -202,13 +203,16 @@ const Events = (() => {
   document.addEventListener('click', async ev => {
     const b = ev.target.closest('[data-ev-unreg]');
     if (!b) return;
-    const r = Store.get(`eventRegs/${b.dataset.evUnreg}`);
     const me = Auth.current();
-    if (!r || !me || r.memberId !== me.id) return;
+    const eventId = b.dataset.evUnreg;
+    const mine = me && Store.get(`myRegs/${me.id}/${eventId}`);
+    if (!mine) return;
     if (await confirmDialog('إلغاء تسجيلك في هذه الفعالية؟', { danger: true, ok: 'إلغاء التسجيل', cancel: 'رجوع' })) {
-      Store.remove(`eventRegs/${r.id}`);
-      const e = Store.get(`events/${r.eventId}`);
-      Data.notify('admin', `ألغى ${r.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${r.name} تسجيله في فعالية «${e?.title || ''}»`, { icon: 'fa-ticket' });
+      Store.remove(`eventRegs/${mine.regId}`);
+      Store.remove(`myRegs/${me.id}/${eventId}`);
+      const e = Store.get(`events/${eventId}`);
+      const m = Data.member(me.id);
+      Data.notify('admin', `ألغى ${m?.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${m?.name || ''} تسجيله في فعالية «${e?.title || ''}»`, { icon: 'fa-ticket' });
       toast('تم إلغاء التسجيل');
     }
   });
@@ -384,11 +388,15 @@ const Events = (() => {
       const e = Store.get(`events/${del.dataset.evDel}`);
       const n = regs(e.id).length;
       if (!(await confirmDialog(`حذف فعالية «${esc(e.title)}»${n ? ` وبيانات ${n} مسجلاً فيها` : ''} نهائياً؟`, { danger: true, ok: 'حذف' }))) return;
-      regs(e.id).forEach(r => Store.remove(`eventRegs/${r.id}`));
+      regs(e.id).forEach(r => { Store.remove(`eventRegs/${r.id}`); if (r.memberId) Store.remove(`myRegs/${r.memberId}/${e.id}`); });
       return Store.remove(`events/${e.id}`);
     }
     const dr = t.closest('[data-ev-delreg]');
-    if (dr && await confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' })) Store.remove(`eventRegs/${dr.dataset.evDelreg}`);
+    if (dr && await confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' })) {
+      const r = Store.get(`eventRegs/${dr.dataset.evDelreg}`);
+      if (r?.memberId) Store.remove(`myRegs/${r.memberId}/${r.eventId}`);
+      Store.remove(`eventRegs/${dr.dataset.evDelreg}`);
+    }
   });
 
   function exportData(key) {

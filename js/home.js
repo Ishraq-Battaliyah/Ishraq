@@ -123,7 +123,8 @@ const Home = (() => {
       </div></section>`;
     },
     testimonials(s) {
-      const list = Data.reviews({ type: 'program' }).filter(r => r.featured);
+      // التقييمات المعروضة في مسار عام (featured)، مع الرجوع للبنية السابقة قبل ترقية الأمان
+      const list = (Store.get('featured') ? Store.list('featured') : Data.reviews({ type: 'program' }).filter(r => r.featured)).sort((a, b) => (a.ts || 0) - (b.ts || 0));
       if (!list.length) return '';
       return `<section class="sec" id="sec-${s.id}"><div class="container">${head(s)}
         <div class="quotes">${list.map((r, i) => {
@@ -341,29 +342,23 @@ const Home = (() => {
 
   /* الدخول */
   function openLogin(kind) {
-    const labels = { admin: 'دخول الإدارة', mentor: 'دخول المرشد', mentee: 'دخول المستفيد' };
-    const hint = kind === 'admin' ? 'أدخل الرمز السري للإدارة' : 'أدخل رقم العضوية';
+    if (kind === 'admin') return openAdminLogin();
+    const label = kind === 'mentor' ? 'دخول المرشد' : 'دخول المستفيد';
     openModal({
-      title: `<i class="fa-solid fa-lock"></i> ${labels[kind]}`, size: 'sm',
-      body: `<form class="login-form"><p class="muted">${hint}</p>
-        <input class="code-input" name="code" dir="ltr" autocomplete="off" inputmode="${kind === 'admin' ? 'numeric' : 'text'}" type="${kind === 'admin' ? 'password' : 'text'}" required>
+      title: `<i class="fa-solid fa-lock"></i> ${label}`, size: 'sm',
+      body: `<form class="login-form"><p class="muted">أدخل رمز الدخول الخاص بك كما وصلك من إدارة البرنامج</p>
+        <input class="code-input" name="code" dir="ltr" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
         <p class="err" hidden></p></form>`,
       actions: [
         {
-          label: 'دخول', cls: 'primary', onClick: m => {
-            const input = $('[name=code]', m.body), err = $('.err', m.body);
-            const code = toEnDigits(input.value).trim();
+          label: 'دخول', cls: 'primary', onClick: async m => {
+            const input = $('[name=code]', m.body), err = $('.err', m.body), btn = $('[data-act="0"]', m.el);
             const fail = t => { err.textContent = t; err.hidden = false; input.classList.add('shake'); setTimeout(() => input.classList.remove('shake'), 500); return false; };
-            if (!code) return fail('فضلاً أدخل الرمز');
-            if (kind === 'admin') {
-              if (code !== String(window.ISHRAQ_CONFIG.adminCode || '2026')) return fail('الرمز السري غير صحيح');
-              Auth.login({ kind: 'admin' });
-              location.hash = '#/admin';
-              return;
-            }
-            const mem = Data.byCode(code);
-            if (!mem || mem.role !== kind) return fail('رقم العضوية غير صحيح');
-            setTimeout(() => confirmLogin(kind, mem), 220);
+            btn.disabled = true;
+            try {
+              const { session, member } = await Security.memberLogin(kind, input.value);
+              setTimeout(() => confirmLogin(kind, session, member), 220);
+            } catch (e) { btn.disabled = false; return fail(e.message); }
           }
         },
         { label: 'إلغاء', cls: 'ghost' }
@@ -372,14 +367,47 @@ const Home = (() => {
     });
   }
 
-  function confirmLogin(kind, mem) {
+  function openAdminLogin() {
+    const secure = Security.secure();
+    openModal({
+      title: '<i class="fa-solid fa-lock"></i> دخول الإدارة', size: 'sm',
+      body: `<form class="login-form">${secure
+        ? `<div class="form-grid one">
+            <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" dir="ltr" autocomplete="username" required></div>
+            <div class="field"><label>كلمة السر</label><input name="password" type="password" dir="ltr" autocomplete="current-password" required></div></div>`
+        : `<p class="muted">أدخل الرمز السري للإدارة</p><input class="code-input" name="password" type="password" dir="ltr" inputmode="numeric" autocomplete="off" required>`}
+        <p class="err" hidden></p></form>`,
+      actions: [
+        {
+          label: 'دخول', cls: 'primary', onClick: async m => {
+            const f = $('form', m.body), err = $('.err', m.body), btn = $('[data-act="0"]', m.el);
+            btn.disabled = true;
+            try {
+              await Security.adminLogin(f.email?.value || '', f.password.value);
+              location.hash = '#/admin';
+            } catch (e) {
+              btn.disabled = false;
+              err.textContent = e.message; err.hidden = false;
+              return false;
+            }
+          }
+        },
+        { label: 'إلغاء', cls: 'ghost' }
+      ],
+      onOpen: m => $('form', m.body).addEventListener('submit', e => { e.preventDefault(); $('[data-act="0"]', m.el).click(); })
+    });
+  }
+
+  function confirmLogin(kind, session, mem) {
+    let confirmed = false;
     openModal({
       title: 'تأكيد الدخول', size: 'sm',
-      body: `<div class="confirm-login">${avatar(mem, 'lg')}<p>ستدخل إلى لوحة تحكم ${kind === 'mentor' ? 'المرشد' : 'المستفيد'}</p><h3>${esc(mem.name)}</h3><span class="code-chip">${esc(mem.code)}</span></div>`,
+      body: `<div class="confirm-login">${avatar(mem, 'lg')}<p>ستدخل إلى لوحة تحكم ${kind === 'mentor' ? 'المرشد' : 'المستفيد'}</p><h3>${esc(mem?.name || '')}</h3><span class="code-chip">${esc(mem?.code || '')}</span></div>`,
       actions: [
-        { label: 'تأكيد', cls: 'primary', onClick: () => { Auth.login({ kind, id: mem.id }); location.hash = `#/${kind}`; } },
+        { label: 'تأكيد', cls: 'primary', onClick: () => { confirmed = true; Security.confirmMember(session); } },
         { label: 'إلغاء', cls: 'ghost' }
-      ]
+      ],
+      onClose: () => { if (!confirmed) Security.cancelMember(); }
     });
   }
 
@@ -391,11 +419,3 @@ const Home = (() => {
 
   return { render, renderMembers, maybeAnnouncement, openInterestForm };
 })();
-
-const Auth = {
-  KEY: 'ishraq-auth',
-  get() { try { return JSON.parse(sessionStorage.getItem(this.KEY) || 'null'); } catch { return null; } },
-  login(v) { try { sessionStorage.setItem(this.KEY, JSON.stringify(v)); } catch { window.__auth = v; } },
-  logout() { try { sessionStorage.removeItem(this.KEY); } catch { /* ignore */ } window.__auth = null; location.hash = '#/'; },
-  current() { return this.get() || window.__auth || null; }
-};

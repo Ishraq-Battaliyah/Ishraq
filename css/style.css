@@ -540,6 +540,21 @@ h3.sub { font-size: 1.05rem; color: var(--ink-2); margin: 20px 0 12px; display: 
 .backup-bar.due > div:first-child > i { color: #B7860B; }
 .backup-bar label.btn { cursor: pointer; }
 
+.sec-banner { display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px; margin-bottom: 18px; border-radius: 18px; background: var(--p-l); border: 1px solid #D8D1F0; color: var(--p-dd); }
+.sec-banner > i { font-size: 1.6rem; color: var(--p-d); margin-top: 4px; }
+.sec-banner b { font-family: var(--f-display); font-size: 1.1rem; }
+.sec-banner p { margin: 4px 0 10px; color: var(--ink-2); }
+.sec-banner .btn { margin-inline-end: 6px; }
+.sec-banner.warn { background: var(--warn-l); border-color: #F3DD9A; }
+.sec-banner.warn > i { color: #B7860B; }
+.sec-banner code { direction: ltr; background: #fff; padding: 0 .4em; border-radius: 6px; }
+.rules-pre { background: #1E1B33; color: #E6E3F0; padding: 16px; border-radius: 14px; overflow: auto; max-height: 50vh; font-size: .82rem; line-height: 1.6; text-align: left; }
+.admin-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.admin-list li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #FDFCFF; flex-wrap: wrap; }
+.admin-list li > div { flex: 1; min-width: 160px; }
+.admin-list b { font-family: var(--f-display); color: var(--p-dd); }
+.admin-list small[dir=ltr] { display: block; color: var(--muted); text-align: right; }
+
 /* ترتيب الأقسام */
 .sortable { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
 .sortable li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: #FDFCFF; transition: .15s; }

@@ -61,8 +61,19 @@
   }
 
   const mode = await Store.init();
-  if (!Store.get('meta/seeded')) await Store.seedOnce(defaultData);
-  else migrateEventsSection();
+  await Security.restore();
+
+  // التعبئة الافتراضية والترقيات البسيطة: من الإدارة فقط في الوضع الآمن (القواعد لا تسمح لغيرها بالكتابة)
+  let housekeepingDone = false;
+  async function housekeeping() {
+    if (housekeepingDone) return;
+    if (Security.secure() && Auth.current()?.kind !== 'admin') return;
+    housekeepingDone = true;
+    if (!Store.get('meta/seeded')) await Store.seedOnce(defaultData);
+    else migrateEventsSection();
+  }
+  await housekeeping();
+  window.addEventListener('hashchange', housekeeping);
 
   // شريط حالة الاتصال: يظهر عند انقطاع الاتصال أو وجود تعديلات لم تُحفظ بعد
   const bar = document.createElement('div');
