@@ -17,6 +17,10 @@ window.ISHRAQ_CONFIG = {
     appId: '1:430318593977:web:91c5330c59777a62aeb868'
   },
   dbRoot: 'ishraq',
+  // الحسابات الرئيسية: صلاحية كاملة دائماً، وهي وحدها تدير المشرفين والصلاحيات (يجب أن تطابق tools/build_rules.py)
+  ownerEmails: ['g.hussainalhajji@gmail.com', 'ishraq.battaliyah@gmail.com', 'hzzahmed4@gmail.com'],
+  // يبقى المشرف مسجلاً على جهازه، ويُطلب منه الدخول من جديد بعد هذه المدة دون أي نشاط
+  adminIdleHours: 72,
   adminCode: '2026',
   // رابط المنصة الذي يُرسل للأعضاء في رسالة معلومات الدخول
   siteUrl: 'https://hussain-al-hajji.github.io/Ishraq/'

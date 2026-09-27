@@ -558,6 +558,19 @@ h3.sub { font-size: 1.05rem; color: var(--ink-2); margin: 20px 0 12px; display: 
 .admin-list li > div { flex: 1; min-width: 160px; }
 .admin-list b { font-family: var(--f-display); color: var(--p-dd); }
 .admin-list li.invite { border-style: dashed; background: #fff; }
+.admin-list li.owner { background: linear-gradient(90deg, #FFF9E8, #FDFCFF); border-color: #F3DD9A; }
+.admin-list li.owner .avatar-fallback i { color: #FFD66B; }
+.admin-meta { display: grid; gap: 2px; text-align: start; min-width: 130px; }
+.perm-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.perm-chips .chip { font-size: .72rem; }
+.perm-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.perm-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; }
+.perm-item:has(input:checked) { border-color: var(--p); background: var(--p-l); }
+.perm-item input { accent-color: var(--p); width: 18px; height: 18px; margin-top: 3px; }
+.perm-item > i { color: var(--p); margin-top: 4px; width: 18px; }
+.perm-item b { display: block; font-family: var(--f-ui); }
+.perm-item small { color: var(--muted); font-size: .78rem; }
+@media (max-width: 560px) { .perm-list { grid-template-columns: 1fr; } }
 .or-sep { display: flex; align-items: center; gap: 10px; margin: 16px 0 12px; color: var(--muted); font-family: var(--f-ui); font-size: .85rem; }
 .or-sep::before, .or-sep::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .google-btn { width: 100%; background: #fff; border-color: var(--line); color: var(--ink); }

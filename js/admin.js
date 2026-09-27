@@ -14,7 +14,13 @@ const Admin = (() => {
   ];
   const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
 
+  // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
+  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', events: 'events', announce: 'announce', interests: 'interests' };
+  const tabAllowed = id => (id === 'admins' ? Security.isOwner() : Security.can(TAB_PERM[id]));
+
   function render(root) {
+    const tabs = TABS.filter(t => tabAllowed(t.id));
+    if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
     const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length, events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
@@ -28,7 +34,8 @@ const Admin = (() => {
         ${securityBanner()}
         ${dbWarning()}
         ${backupBar()}
-        <nav class="admin-tabs">${TABS.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${t.id}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
+        ${tabs.length ? '' : `<div class="panel">${emptyState('لم تُمنح لحسابك أي صلاحيات بعد. تواصل مع أحد الحسابات الرئيسية.', 'fa-user-lock')}</div>`}
+        <nav class="admin-tabs">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${t.id}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
         <div class="tab-panel">${ui.tab ? (P[ui.tab] ? P[ui.tab]() : '') : `<div class="tab-hint">${emptyState('اضغط على أي تبويب لعرض تفاصيله، واضغط عليه مرة أخرى لإخفائها.', 'fa-hand-pointer')}</div>`}</div>
       </main>
     </div>`;
@@ -54,7 +61,7 @@ const Admin = (() => {
         <span>${last ? `آخر نسخة احتياطية: <b class="num">${fmtTs(last)}</b>${due ? ` — مضى <span class="num">${days}</span> يوماً، يُنصح بأخذ نسخة جديدة` : ''}` : 'لم تُؤخذ نسخة احتياطية بعد — يُنصح بأخذ نسخة أسبوعياً'}</span></div>
       <div class="head-actions">
         <button class="btn sm primary" data-backup><i class="fa-solid fa-download"></i> نسخة احتياطية</button>
-        <label class="btn sm ghost"><i class="fa-solid fa-upload"></i> استرجاع نسخة<input type="file" accept=".json,application/json" data-restore hidden></label>
+        ${Security.isFull() ? '<label class="btn sm ghost"><i class="fa-solid fa-upload"></i> استرجاع نسخة<input type="file" accept=".json,application/json" data-restore hidden></label>' : ''}
       </div>
     </div>`;
   }
@@ -87,9 +94,12 @@ const Admin = (() => {
     if (!ok) return;
     downloadBackup(true);
     const current = Store.dump();
-    Object.keys(current).forEach(k => { if (!(k in data)) Store.remove(k); });
-    Object.entries(data).forEach(([k, v]) => { if (k !== 'meta') Store.set(k, v); });
-    Store.set('meta', { ...(data.meta || {}), seeded: data.meta?.seeded || Date.now(), eventsSection: true, lastBackup: current.meta?.lastBackup || null, restoredAt: Date.now() });
+    // بيانات المشرفين وصلاحياتهم لا تُستبدل عند الاسترجاع
+    const KEEP = ['meta', 'admins', 'adminInvites', 'adminLog'];
+    Object.keys(current).forEach(k => { if (!(k in data) && !KEEP.includes(k)) Store.remove(k); });
+    Object.entries(data).forEach(([k, v]) => { if (!KEEP.includes(k)) Store.set(k, v); });
+    Store.set('meta', { ...(data.meta || {}), seeded: data.meta?.seeded || Date.now(), eventsSection: true, lastBackup: current.meta?.lastBackup || null, restoredAt: Date.now(), rulesVersion: current.meta?.rulesVersion || null, securityVersion: current.meta?.securityVersion || data.meta?.securityVersion || null });
+    Security.log('استرجاع نسخة احتياطية', file.name || '');
     toast('تم استرجاع النسخة الاحتياطية');
   }
 
@@ -678,61 +688,122 @@ const Admin = (() => {
   P.admins = () => {
     if (!Security.secure()) return `<div class="panel"><h2><i class="fa-solid fa-user-shield"></i> المشرفون</h2>${emptyState('إدارة عدة مشرفين بحسابات مستقلة تتاح بعد تفعيل الوضع الآمن (Firebase Authentication).', 'fa-lock')}</div>`;
     const me = Store.auth.currentUser;
-    const admins = Object.entries(Store.get('admins') || {}).map(([uid, a]) => ({ uid, ...a })).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
-    const invites = Object.entries(Store.get('adminInvites') || {}).map(([key, i]) => ({ key, ...i }));
+    const all = Object.entries(Store.get('admins') || {}).map(([uid, a]) => ({ uid, ...a }));
+    const isOwnerEmail = e => Security.OWNERS.includes(String(e || '').toLowerCase());
+    const admins = all.filter(a => !isOwnerEmail(a.email)).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    const invites = Object.entries(Store.get('adminInvites') || {}).map(([key, i]) => ({ key, ...i })).sort((a, b) => (b.invitedAt || 0) - (a.invitedAt || 0));
+    const logs = Store.list('adminLog').sort((a, b) => b.ts - a.ts).slice(0, 60);
+    const roleBadge = a => a.role === 'full' || !a.role ? '<span class="pill st-done">صلاحية كاملة</span>'
+      : `<span class="pill st-await">${Object.keys(a.perms || {}).length ? `جزئية · ${Object.keys(a.perms).length}` : 'بدون صلاحيات'}</span>`;
+    const permChips = a => a.role === 'full' || !a.role ? '' : `<div class="perm-chips">${PERMISSIONS.filter(p => a.perms?.[p.k]).map(p => `<span class="chip"><i class="fa-solid ${p.icon}"></i> ${p.label}</span>`).join('') || '<small class="muted">لم تُحدد صلاحيات</small>'}</div>`;
+    const byLine = x => x ? `<small class="muted">بواسطة ${esc(x.name || x.email || '')}</small>` : '';
+    const ownerRows = Security.OWNERS.map(email => {
+      const rec = all.find(a => String(a.email).toLowerCase() === email);
+      return `<li class="owner"><span class="avatar sm"><span class="avatar-fallback"><i class="fa-solid fa-crown"></i></span></span>
+        <div><b>${esc(rec?.name || 'حساب رئيسي')}</b>${rec?.uid === me?.uid ? ' <span class="chip">أنت</span>' : ''}<small dir="ltr">${esc(email)}</small></div>
+        <span class="pill st-done">حساب رئيسي</span>${rec ? `<small class="muted">آخر تفعيل ${fmtTs(rec.addedAt)}</small>` : '<small class="muted">لم يدخل بعد</small>'}
+        ${rec?.uid === me?.uid && (me.providerData || []).some(p => p.providerId === 'password') ? '<button class="btn xs ghost" data-my-password><i class="fa-solid fa-key"></i> تغيير كلمة السر</button>' : ''}</li>`;
+    }).join('');
     return `<div class="panel">
-      <div class="panel-head"><h2><i class="fa-solid fa-user-shield"></i> المشرفون <span class="count">${admins.length}</span></h2>
+      <div class="panel-head"><h2><i class="fa-solid fa-user-shield"></i> المشرفون والصلاحيات</h2>
       <div class="head-actions"><button class="btn ghost" data-invite-admin><i class="fa-brands fa-google"></i> دعوة بحساب Google</button>
       <button class="btn primary" data-add-admin><i class="fa-solid fa-plus"></i> إضافة مشرف ببريد وكلمة سر</button></div></div>
-      <p class="muted small">طريقتان لإضافة مشرف: <b>دعوة بحساب Google</b> (يدخل المشرف بزر «الدخول بحساب Google» ويُفعَّل تلقائياً)، أو <b>بريد وكلمة سر</b> تنشئها له. إزالة المشرف توقف وصوله فوراً.</p>
-      <ul class="admin-list">${admins.map(a => `<li><span class="avatar sm"><span class="avatar-fallback"><i class="fa-solid fa-user-shield"></i></span></span>
-        <div><b>${esc(a.name || 'مشرف')}</b>${a.uid === me?.uid ? ' <span class="chip">أنت</span>' : ''}${a.via === 'google' ? ' <span class="chip"><i class="fa-brands fa-google"></i> Google</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small></div>
-        <small class="muted">أُضيف ${a.addedAt ? fmtTs(a.addedAt) : ''}</small>
-        ${a.uid === me?.uid ? ((me.providerData || []).some(p => p.providerId === 'password') ? '<button class="btn xs ghost" data-my-password><i class="fa-solid fa-key"></i> تغيير كلمة السر</button>' : '<span></span>') : `<button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button>`}</li>`).join('')}</ul>
+      <p class="muted small">الحسابات الرئيسية الثلاثة لها صلاحية كاملة دائماً، وهي وحدها تدير المشرفين وصلاحياتهم. الصلاحية الجزئية تحدد التبويبات التي يراها المشرف ويعدّلها، وتفرضها قواعد قاعدة البيانات نفسها.</p>
+      <h3 class="sub"><i class="fa-solid fa-crown"></i> الحسابات الرئيسية</h3>
+      <ul class="admin-list">${ownerRows}</ul>
+      <h3 class="sub"><i class="fa-solid fa-user-shield"></i> المشرفون <span class="count">${admins.length}</span></h3>
+      ${admins.length ? `<ul class="admin-list">${admins.map(a => `<li>
+        <span class="avatar sm"><span class="avatar-fallback"><i class="fa-solid fa-user-shield"></i></span></span>
+        <div><b>${esc(a.name || 'مشرف')}</b>${a.via === 'google' ? ' <span class="chip"><i class="fa-brands fa-google"></i> Google</span>' : ''}<small dir="ltr">${esc(a.email || '')}</small>${permChips(a)}</div>
+        ${roleBadge(a)}
+        <div class="admin-meta"><small class="muted">أُضيف ${a.addedAt ? fmtTs(a.addedAt) : ''}</small>${byLine(a.invitedBy || a.addedBy)}</div>
+        <button class="btn xs ghost" data-perms="${a.uid}"><i class="fa-solid fa-sliders"></i> الصلاحيات</button>
+        <button class="icon-btn danger" data-del-admin="${a.uid}" title="إزالة"><i class="fa-solid fa-user-minus"></i></button></li>`).join('')}</ul>` : '<p class="muted small">لا يوجد مشرفون إضافيون بعد.</p>'}
       ${invites.length ? `<h3 class="sub"><i class="fa-brands fa-google"></i> دعوات بانتظار أول دخول <span class="count">${invites.length}</span></h3>
         <ul class="admin-list">${invites.map(i => `<li class="invite"><span class="avatar sm"><span class="avatar-fallback"><i class="fa-regular fa-envelope"></i></span></span>
-          <div><b>${esc(i.name || 'مشرف مدعو')}</b><small dir="ltr">${esc(i.email)}</small></div><small class="muted">دُعي ${fmtTs(i.invitedAt)}</small>
+          <div><b>${esc(i.name || 'مشرف مدعو')}</b><small dir="ltr">${esc(i.email)}</small>${permChips(i)}</div>${roleBadge(i)}
+          <div class="admin-meta"><small class="muted">دُعي ${fmtTs(i.invitedAt)}</small>${byLine(i.invitedBy)}</div>
           <button class="icon-btn danger" data-del-invite="${esc(i.key)}" title="إلغاء الدعوة"><i class="fa-solid fa-xmark"></i></button></li>`).join('')}</ul>` : ''}
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-clock-rotate-left"></i> سجل إجراءات المشرفين</h2>${exportBar('adminLog')}</div>
+      ${logs.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الوقت</th><th>المشرف</th><th>الإجراء</th><th>على</th><th>التفاصيل</th></tr></thead><tbody>
+        ${logs.map(l => `<tr><td data-l="الوقت"><small>${fmtTs(l.ts)}</small></td><td data-l="المشرف">${esc(l.by?.name || l.by?.email || '')}</td><td data-l="الإجراء"><b>${esc(l.action)}</b></td>
+          <td data-l="على"><span dir="auto">${esc(l.target || '')}</span></td><td data-l="التفاصيل"><small>${esc(l.details || '')}</small></td></tr>`).join('')}
+      </tbody></table></div>` : emptyState('لا توجد إجراءات مسجلة بعد', 'fa-clock-rotate-left')}
     </div>`;
   };
 
+  // اختيار الصلاحية: كاملة أو جزئية مع قائمة المهام
+  function permPicker(role = 'partial', perms = {}) {
+    return `<fieldset class="wide perm-picker"><legend>الصلاحيات</legend>
+      <div class="radio-row">
+        <label class="radio"><input type="radio" name="role" value="full" ${role === 'full' ? 'checked' : ''}><span><i class="fa-solid fa-crown"></i> صلاحية كاملة</span></label>
+        <label class="radio"><input type="radio" name="role" value="partial" ${role !== 'full' ? 'checked' : ''}><span><i class="fa-solid fa-sliders"></i> صلاحية جزئية</span></label>
+      </div>
+      <div class="perm-list" ${role === 'full' ? 'hidden' : ''}>${PERMISSIONS.map(p => `<label class="perm-item"><input type="checkbox" name="perm_${p.k}" ${perms?.[p.k] ? 'checked' : ''}>
+        <i class="fa-solid ${p.icon}"></i><span><b>${p.label}</b><small>${p.desc}</small></span></label>`).join('')}</div>
+      <small class="hint">الصلاحية الكاملة تشمل كل المهام والنسخ الاحتياطي والاسترجاع، ما عدا إدارة المشرفين والصلاحيات (للحسابات الرئيسية فقط).</small>
+    </fieldset>`;
+  }
+  const readPerms = f => {
+    const role = $('input[name=role]:checked', f)?.value || 'partial';
+    const perms = {}; PERMISSIONS.forEach(p => { if ($(`[name=perm_${p.k}]`, f)?.checked) perms[p.k] = true; });
+    return { role, perms };
+  };
+  const wirePermPicker = root => $$('input[name=role]', root).forEach(r => r.addEventListener('change', () => { $('.perm-list', root).hidden = $('input[name=role]:checked', root).value === 'full'; }));
+
+  function permsDialog(uid) {
+    const a = Store.get(`admins/${uid}`);
+    openModal({
+      title: `<i class="fa-solid fa-sliders"></i> صلاحيات ${esc(a?.name || a?.email || '')}`, size: 'md',
+      body: `<form class="form-grid one">${permPicker(a?.role || 'full', a?.perms)}</form>`,
+      actions: [{ label: 'حفظ الصلاحيات', cls: 'primary', onClick: m => { const { role, perms } = readPerms($('form', m.body)); Security.setAdminPerms(uid, role, perms); toast('تم حفظ الصلاحيات'); } }, { label: 'إلغاء', cls: 'ghost' }],
+      onOpen: m => wirePermPicker(m.body)
+    });
+  }
+
   function inviteAdminDialog() {
     openModal({
-      title: '<i class="fa-brands fa-google"></i> دعوة مشرف بحساب Google', size: 'sm',
+      title: '<i class="fa-brands fa-google"></i> دعوة مشرف بحساب Google', size: 'md',
       body: `<form class="form-grid one">
         ${fieldInput({ k: 'name', label: 'الاسم', required: true })}
-        ${fieldInput({ k: 'email', label: 'بريد حساب Google (Gmail)', type: 'email', required: true, hint: 'يدخل المشرف من «دخول الإدارة» بزر «الدخول بحساب Google» بنفس هذا البريد، فيُفعَّل تلقائياً.' })}
+        ${fieldInput({ k: 'email', label: 'بريد حساب Google (Gmail)', type: 'email', required: true, hint: 'يدخل المشرف من «دخول الإدارة» بزر «الدخول بحساب Google» بنفس هذا البريد، فيُفعَّل تلقائياً بالصلاحيات المحددة هنا.' })}
+        ${permPicker('partial', {})}
       </form>`,
       actions: [{
         label: 'إرسال الدعوة', cls: 'primary', onClick: m => {
           const f = $('form', m.body);
           if (!validateForm(f)) return false;
-          const v = readForm(f);
-          Security.inviteAdmin(v.email, v.name);
+          const v = readForm(f); const { role, perms } = readPerms(f);
+          Security.inviteAdmin(v.email, v.name, role, perms);
           toast('تمت الدعوة — أخبر المشرف بالدخول بحساب Google');
         }
-      }, { label: 'إلغاء', cls: 'ghost' }]
+      }, { label: 'إلغاء', cls: 'ghost' }],
+      onOpen: m => wirePermPicker(m.body)
     });
   }
 
   function addAdminDialog() {
     openModal({
-      title: '<i class="fa-solid fa-user-plus"></i> إضافة مشرف', size: 'sm',
+      title: '<i class="fa-solid fa-user-plus"></i> إضافة مشرف ببريد وكلمة سر', size: 'md',
       body: `<form class="form-grid one">
         ${fieldInput({ k: 'name', label: 'الاسم', required: true })}
         ${fieldInput({ k: 'email', label: 'البريد الإلكتروني', type: 'email', required: true })}
-        ${fieldInput({ k: 'password', label: 'كلمة السر المبدئية (6 أحرف على الأقل)', required: true, hint: 'أرسلها للمشرف ليغيّرها بعد أول دخول من «تغيير كلمة السر».' })}
+        ${fieldInput({ k: 'password', label: 'كلمة السر المبدئية (6 أحرف على الأقل)', required: true, hint: 'أرسلها للمشرف ليغيّرها بعد أول دخول.' })}
+        ${permPicker('partial', {})}
       </form>`,
       actions: [{
         label: 'إضافة', cls: 'primary', onClick: async m => {
           const f = $('form', m.body);
           if (!validateForm(f)) return false;
-          const v = readForm(f);
+          const v = readForm(f); const { role, perms } = readPerms(f);
           if (v.password.length < 6) { toast('كلمة السر 6 أحرف على الأقل', 'error'); return false; }
-          try { await Security.addAdmin(v.email, v.password, v.name); toast('تمت إضافة المشرف'); }
+          try { await Security.addAdmin(v.email, v.password, v.name, role, perms); toast('تمت إضافة المشرف'); }
           catch (e) { toast(e.message, 'error'); return false; }
         }
-      }, { label: 'إلغاء', cls: 'ghost' }]
+      }, { label: 'إلغاء', cls: 'ghost' }],
+      onOpen: m => wirePermPicker(m.body)
     });
   }
 
@@ -758,11 +829,13 @@ const Admin = (() => {
   function securityBanner() {
     if (!Security.secure()) return `<div class="sec-banner warn"><i class="fa-solid fa-shield-halved"></i><div><b>الوضع الآمن غير مفعّل</b>
       <p>أضف إعدادات مشروع Firebase (apiKey وغيرها) في <code>js/config.js</code> لتفعيل الدخول الآمن وحماية البيانات.</p></div></div>`;
+    if (!Security.isFull()) return '';
     if (Security.needsMigration()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>خطوة أخيرة: ترقية البيانات إلى البنية الآمنة</b>
       <p>تُنقل بيانات التواصل إلى مسار خاص، وتُنشأ رموز دخول سرية جديدة لكل الأعضاء (مثل <span class="num">M211-7K4Q</span>). تُنزَّل نسخة احتياطية تلقائياً قبل البدء.</p>
       <button class="btn primary sm" data-migrate><i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ الترقية</button></div></div>`;
-    if (!Store.get('meta/rulesPublished')) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>انشر قواعد الحماية الجديدة</b>
-      <p>اكتملت ترقية البيانات. انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish، ثم أرسل للأعضاء رموزهم الجديدة.</p>
+    const rulesV = Number(Store.get('meta/rulesVersion') || (Store.get('meta/rulesPublished') ? 2 : 0));
+    if (rulesV < Security.RULES_VERSION && Security.isOwner()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>${rulesV ? 'حدّث قواعد الحماية (نظام الصلاحيات)' : 'انشر قواعد الحماية الجديدة'}</b>
+      <p>${rulesV ? 'أُضيف نظام صلاحيات المشرفين، ويحتاج نسخة جديدة من القواعد.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
       <button class="btn primary sm" data-show-rules><i class="fa-solid fa-copy"></i> عرض القواعد ونسخها</button>
       <button class="btn ghost sm" data-rules-done><i class="fa-solid fa-check"></i> نشرتها</button></div></div>`;
     return '';
@@ -839,6 +912,7 @@ const Admin = (() => {
       case 'messages': return { title: 'الرسائل المنشورة', headers: ['إلى', 'العنوان', 'النص', 'التاريخ'], rows: Store.list('messages').map(x => [x.target === 'member' ? Data.member(x.memberId)?.name : x.target, x.title, x.body, fmtTs(x.ts)]) };
       case 'inbox': return { title: 'الرسائل الواردة', headers: ['من', 'الصفة', 'الرسالة', 'التاريخ'], rows: Store.list('inbox').map(x => [x.fromName, x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.body, fmtTs(x.ts)]) };
       case 'event': case 'events': return Events.exportData(key);
+      case 'adminLog': return { title: 'سجل إجراءات المشرفين', headers: ['الوقت', 'المشرف', 'البريد', 'الإجراء', 'على', 'التفاصيل'], rows: Store.list('adminLog').sort((a, b) => b.ts - a.ts).map(l => [fmtTs(l.ts), l.by?.name || '', l.by?.email || '', l.action, l.target || '', l.details || '']) };
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
     }
     return null;
@@ -915,13 +989,14 @@ const Admin = (() => {
       if (t.closest('[data-backup]')) return downloadBackup();
       if (t.closest('[data-migrate]')) return runMigration();
       if (t.closest('[data-show-rules]')) return showRules();
-      if (t.closest('[data-rules-done]')) return Store.set('meta/rulesPublished', Date.now());
+      if (t.closest('[data-rules-done]')) { Store.update('meta', { rulesPublished: Date.now(), rulesVersion: Security.RULES_VERSION }); return Security.log('نشر قواعد الحماية', `الإصدار ${Security.RULES_VERSION}`); }
       if (t.closest('[data-add-admin]')) return addAdminDialog();
       if (t.closest('[data-invite-admin]')) return inviteAdminDialog();
-      const di2 = t.closest('[data-del-invite]'); if (di2) return Store.remove(`adminInvites/${di2.dataset.delInvite}`);
+      const di2 = t.closest('[data-del-invite]'); if (di2) return confirmDialog('إلغاء هذه الدعوة؟', { danger: true, ok: 'إلغاء الدعوة', cancel: 'رجوع' }).then(ok => ok && Security.cancelInvite(di2.dataset.delInvite));
+      const pm = t.closest('[data-perms]'); if (pm) return permsDialog(pm.dataset.perms);
       if (t.closest('[data-my-password]')) return myPasswordDialog();
       const da = t.closest('[data-del-admin]');
-      if (da) return confirmDialog('إزالة هذا المشرف؟ لن يستطيع الدخول إلى لوحة الإدارة بعد الآن.', { danger: true, ok: 'إزالة' }).then(ok => ok && Store.remove(`admins/${da.dataset.delAdmin}`));
+      if (da) return confirmDialog('إزالة هذا المشرف؟ لن يستطيع الدخول إلى لوحة الإدارة بعد الآن.', { danger: true, ok: 'إزالة' }).then(ok => ok && Security.removeAdmin(da.dataset.delAdmin));
       const tpl = t.closest('[data-csv-template]'); if (tpl) return csvTemplate(tpl.dataset.csvTemplate);
       const un = t.closest('[data-unassign]'); if (un) { delete ui.netDraft[un.dataset.unassign]; return render(root); }
       if (t.closest('[data-save-net]')) {

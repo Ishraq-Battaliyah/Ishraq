@@ -9,6 +9,19 @@ const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'eve
 const memberPaths = id => [...PUBLIC_PATHS, 'network', 'slots', 'bookings', 'reviews', 'messages', `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`];
 const CONTACT_KEYS = ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram'];
 
+// الصلاحيات الجزئية للمشرفين (يجب أن تطابق PERMS في tools/build_rules.py)
+const PERMISSIONS = [
+  { k: 'content', label: 'محتوى الصفحة الرئيسية', desc: 'الأقسام وترتيبها وحقول نموذج التسجيل', icon: 'fa-pen-ruler' },
+  { k: 'cohorts', label: 'الدفعات والعضويات', desc: 'البطاقات ورموز الدخول والشبكة واستيراد CSV', icon: 'fa-people-group' },
+  { k: 'sessions', label: 'الجلسات', desc: 'متابعة الجلسات وإحصاءاتها', icon: 'fa-calendar-days' },
+  { k: 'reviews', label: 'التقييمات', desc: 'اعتماد التقييمات واختيار المعروض منها', icon: 'fa-star' },
+  { k: 'messages', label: 'الرسائل', desc: 'إرسال الرسائل للأعضاء والرسائل الواردة', icon: 'fa-envelope' },
+  { k: 'announce', label: 'الإعلان المنبثق', desc: 'نافذة الإعلان في الصفحة الرئيسية', icon: 'fa-bullhorn' },
+  { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
+  { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
+];
+const RULES_VERSION = 3;
+
 const Auth = {
   KEY: 'ishraq-auth',
   get() { try { return JSON.parse(sessionStorage.getItem(this.KEY) || 'null'); } catch { return window.__auth || null; } },
@@ -50,6 +63,44 @@ const Security = (() => {
     'auth/operation-not-allowed': 'تسجيل الدخول بالبريد وكلمة السر غير مفعّل في Firebase Authentication'
   }[e && e.code] || (e && e.message) || 'حدث خطأ غير متوقع');
 
+  /* ===== الحسابات الرئيسية والصلاحيات ===== */
+  const OWNERS = (window.ISHRAQ_CONFIG.ownerEmails || []).map(e => String(e).toLowerCase());
+  const isOwnerUser = u => !!u && u.emailVerified === true && OWNERS.includes(String(u.email || '').toLowerCase());
+  const currentUser = () => (secure() ? Store.auth.currentUser : null);
+  const isOwner = () => !secure() || isOwnerUser(currentUser());
+  const adminRec = () => { const u = currentUser(); return u ? Store.get(`admins/${u.uid}`) : null; };
+  // صلاحية كاملة: حساب رئيسي، أو role=full، أو مشرف قديم بلا role
+  const isFull = () => isOwner() || (!!adminRec() && (adminRec().role === 'full' || !adminRec().role));
+  const can = perm => isFull() || !!adminRec()?.perms?.[perm];
+  const adminName = () => { const u = currentUser(); return adminRec()?.name || u?.displayName || u?.email || 'مشرف'; };
+
+  function log(action, target = '', details = '') {
+    const u = currentUser();
+    if (!u) return;
+    Store.push('adminLog', { ts: Date.now(), action, target, details, by: { uid: u.uid, email: u.email || '', name: adminName() } });
+  }
+
+  /* ===== بقاء المشرف مسجلاً مع حد لعدم النشاط ===== */
+  const ACTIVE_KEY = 'ishraq-admin-active';
+  const idleMs = () => (Number(window.ISHRAQ_CONFIG.adminIdleHours) || 72) * 3600 * 1000;
+  const touch = () => { try { localStorage.setItem(ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ } };
+  const lastActive = () => { try { return Number(localStorage.getItem(ACTIVE_KEY) || 0); } catch { return 0; } };
+  const idleExpired = () => { const t = lastActive(); return !t || Date.now() - t > idleMs(); };
+  let lastTouch = 0;
+  ['click', 'keydown', 'scroll', 'touchstart'].forEach(ev => window.addEventListener(ev, () => {
+    if (Auth.current()?.kind !== 'admin' || Date.now() - lastTouch < 60000) return;
+    lastTouch = Date.now(); touch();
+  }, { passive: true }));
+  async function checkIdle() {
+    if (!secure() || Auth.current()?.kind !== 'admin' || !idleExpired()) return;
+    await Auth.logout();
+    toast('انتهت جلسة الإدارة لعدم النشاط، سجّل الدخول من جديد');
+  }
+  setInterval(checkIdle, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkIdle(); });
+
+  const persist = kind => Store.auth.setPersistence(kind === 'admin' ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION).catch(() => {});
+
   /* ===== نطاق القراءة حسب الدور ===== */
   async function applyScope(session) {
     if (Store.mode !== 'firebase') return;
@@ -60,6 +111,8 @@ const Security = (() => {
   }
 
   async function roleFor(uid) {
+    const u = Store.auth?.currentUser;
+    if (u && u.uid === uid && isOwnerUser(u)) return { kind: 'admin', uid, owner: true };
     const admin = await Store.readOnce(`admins/${uid}`);
     if (admin) return { kind: 'admin', uid };
     const id = await Store.readOnce(`uids/${uid}`);
@@ -79,7 +132,15 @@ const Security = (() => {
     if (user) {
       session = await roleFor(user.uid);
       const viaGoogle = (user.providerData || []).some(p => p.providerId === 'google.com');
-      if (!session && viaGoogle) {
+      let expired = false;
+      if (session?.kind === 'admin') {
+        if (lastActive() && idleExpired()) expired = true; else touch();
+      } else if (!session && viaGoogle && idleExpired() && lastActive()) expired = true;
+      if (expired) {
+        session = null;
+        setTimeout(() => window.toast && toast('انتهت جلسة الإدارة لعدم النشاط، سجّل الدخول من جديد'), 800);
+      }
+      if (!session && viaGoogle && !expired) {
         try { session = (await finishGoogleAdmin()).session; location.hash = '#/admin'; } catch (e) { setTimeout(() => window.toast && toast(e.message, 'error'), 800); }
       }
       if (!session) await Store.auth.signOut().catch(() => {});
@@ -95,6 +156,7 @@ const Security = (() => {
     if (secure()) {
       const prefix = code.split('-')[0];
       if (!code.includes('-')) throw new Error('الرمز غير مكتمل — اكتبه كما وصلك، مثل M211-7K4Q');
+      await persist('member');
       try { await Store.auth.signInWithEmailAndPassword(emailFor(prefix), code); }
       catch (e) { throw new Error(authMsg(e)); }
       const s = await roleFor(Store.auth.currentUser.uid);
@@ -127,33 +189,31 @@ const Security = (() => {
       await applyScope(Auth.current());
       return { session: Auth.current() };
     }
+    await persist('admin');
     try { await Store.auth.signInWithEmailAndPassword(String(email).trim(), password); }
     catch (e) { throw new Error(authMsg(e)); }
     const user = Store.auth.currentUser;
-    let s = await roleFor(user.uid);
-    if (s?.kind !== 'admin') {
-      // أول مشرف: تسمح القواعد بتسجيل أول حساب مشرفاً فقط عندما لا يوجد أي مشرف
-      const claimed = await claimFirstAdmin(user);
-      if (!claimed) { await Store.auth.signOut(); throw new Error('هذا الحساب ليس من حسابات الإدارة'); }
-      s = { kind: 'admin', uid: user.uid };
+    // الحساب الرئيسي بكلمة سر يحتاج تأكيد البريد مرة واحدة
+    if (OWNERS.includes(String(user.email).toLowerCase()) && !user.emailVerified) {
+      await user.sendEmailVerification().catch(() => {});
+      await Store.auth.signOut();
+      throw new Error(`أرسلنا رابط تأكيد إلى ${user.email}. افتحه ثم سجّل الدخول من جديد، أو استخدم «الدخول بحساب Google».`);
     }
-    Auth.set(s);
-    await applyScope(s);
-    return { session: s };
+    const s = await roleFor(user.uid);
+    if (s?.kind !== 'admin') { await Store.auth.signOut(); throw new Error('هذا الحساب ليس من حسابات الإدارة'); }
+    return startAdmin(s);
   }
 
-  async function claimFirstAdmin(user) {
-    const ok = await confirmDialog('لا يوجد مشرفون مسجلون في المنصة بعد.<br>هل تريد تعيين هذا الحساب <b dir="ltr">' + esc(user.email) + '</b> كأول مشرف؟',
-      { ok: 'تعيين كمشرف', title: 'أول مشرف' });
-    if (!ok) return false;
-    try {
-      await firebase.app().database().ref(`${window.ISHRAQ_CONFIG.dbRoot || 'ishraq'}/admins/${user.uid}`)
-        .set({ email: user.email, name: 'المشرف الرئيسي', addedAt: Date.now(), first: true });
-      return true;
-    } catch (e) {
-      console.warn(e);
-      return false;
+  // بعد نجاح دخول المشرف: تسجيل النشاط، وإنشاء سجل للحساب الرئيسي إن لم يوجد
+  async function startAdmin(s) {
+    touch();
+    Auth.set(s);
+    await applyScope(s);
+    const u = currentUser();
+    if (s.owner && !Store.get(`admins/${u.uid}`)) {
+      Store.set(`admins/${u.uid}`, { email: u.email, name: u.displayName || '', role: 'full', owner: true, addedAt: Date.now(), via: (u.providerData || []).some(p => p.providerId === 'google.com') ? 'google' : 'password' });
     }
+    return { session: s };
   }
 
   /* ===== دخول الإدارة بحساب Google (بدعوة مسبقة) ===== */
@@ -163,9 +223,11 @@ const Security = (() => {
 
   async function googleAdminLogin() {
     if (!secure()) throw new Error('الدخول بحساب Google يتطلب الوضع الآمن');
+    await persist('admin');
     try { await Store.auth.signInWithPopup(googleProvider()); }
     catch (e) {
       if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+        touch(); // حتى لا تُعدّ العودة من Google جلسة منتهية
         await Store.auth.signInWithRedirect(googleProvider());
         return new Promise(() => {}); // تنتقل الصفحة إلى Google ثم تعود
       }
@@ -180,30 +242,68 @@ const Security = (() => {
   async function finishGoogleAdmin() {
     const user = Store.auth.currentUser;
     let s = await roleFor(user.uid);
-    if (s?.kind === 'admin') { Auth.set(s); await applyScope(s); return { session: s }; }
+    if (s?.kind === 'admin') return startAdmin(s);
     if (s) { await Store.auth.signOut(); throw new Error('هذا الحساب مرتبط بعضوية وليس بالإدارة'); }
     const root = firebase.app().database().ref(window.ISHRAQ_CONFIG.dbRoot || 'ishraq');
-    try {
-      await root.child(`admins/${user.uid}`).set({ email: user.email, name: user.displayName || '', addedAt: Date.now(), via: 'google' });
-      s = { kind: 'admin', uid: user.uid };
-      Auth.set(s);
-      await applyScope(s);
-      // الاسم من الدعوة إن لم يكن في حساب Google اسم
-      const inv = (await root.child(`adminInvites/${inviteKey(user.email)}`).once('value').catch(() => null))?.val();
-      if (inv?.name && !user.displayName) Store.set(`admins/${user.uid}/name`, inv.name);
-      Store.remove(`adminInvites/${inviteKey(user.email)}`);
-      return { session: s };
-    } catch (e) {
-      // القواعد تسمح بهذه الكتابة فقط إذا كان البريد مدعواً (أو لا يوجد مشرفون بعد)
+    const key = inviteKey(user.email);
+    const inv = (await root.child(`adminInvites/${key}`).once('value').catch(() => null))?.val();
+    if (!inv) {
       await Store.auth.signOut();
-      throw new Error(`الحساب ${user.email} غير مدعو للإدارة. اطلب من أحد المشرفين دعوته من تبويب «المشرفون».`);
+      throw new Error(`الحساب ${user.email} غير مدعو للإدارة. اطلب من أحد الحسابات الرئيسية دعوته.`);
     }
+    try {
+      await root.child(`admins/${user.uid}`).set({
+        email: user.email, name: inv.name || user.displayName || '', addedAt: Date.now(), via: 'google',
+        role: inv.role || 'partial', perms: inv.perms || null, invitedBy: inv.invitedBy || null
+      });
+    } catch (e) {
+      console.warn(e);
+      await Store.auth.signOut();
+      throw new Error('تعذّر تفعيل الدعوة، اطلب من الحساب الرئيسي إعادة إرسالها');
+    }
+    await root.child(`adminInvites/${key}`).remove().catch(() => {});
+    s = { kind: 'admin', uid: user.uid };
+    await startAdmin(s);
+    log('تفعيل دعوة', user.email, `دعاه: ${inv.invitedBy?.name || inv.invitedBy?.email || '—'}`);
+    return { session: s };
   }
 
-  function inviteAdmin(email, name) {
-    email = String(email || '').trim().toLowerCase();
-    Store.set(`adminInvites/${inviteKey(email)}`, { email, name: name || '', invitedAt: Date.now() });
+  function permsSummary(role, perms) {
+    if (role === 'full') return 'صلاحية كاملة';
+    const on = PERMISSIONS.filter(p => perms?.[p.k]).map(p => p.label);
+    return on.length ? `صلاحية جزئية: ${on.join('، ')}` : 'بدون صلاحيات';
   }
+
+  function inviteAdmin(email, name, role = 'partial', perms = {}) {
+    email = String(email || '').trim().toLowerCase();
+    const u = currentUser();
+    Store.set(`adminInvites/${inviteKey(email)}`, {
+      email, name: name || '', invitedAt: Date.now(), role, perms: role === 'full' ? null : cleanPerms(perms),
+      invitedBy: { uid: u.uid, email: u.email || '', name: adminName() }
+    });
+    log('إرسال دعوة Google', email, `${name ? name + ' — ' : ''}${permsSummary(role, perms)}`);
+  }
+
+  function cancelInvite(key) {
+    const inv = Store.get(`adminInvites/${key}`);
+    Store.remove(`adminInvites/${key}`);
+    log('إلغاء دعوة', inv?.email || key);
+  }
+
+  const cleanPerms = perms => { const o = {}; PERMISSIONS.forEach(p => { if (perms?.[p.k]) o[p.k] = true; }); return Object.keys(o).length ? o : null; };
+
+  function setAdminPerms(uid, role, perms) {
+    const a = Store.get(`admins/${uid}`);
+    Store.update(`admins/${uid}`, { role, perms: role === 'full' ? null : cleanPerms(perms) });
+    log('تعديل صلاحيات', a?.email || uid, permsSummary(role, perms));
+  }
+
+  function removeAdmin(uid) {
+    const a = Store.get(`admins/${uid}`);
+    Store.remove(`admins/${uid}`);
+    log('إزالة مشرف', a?.email || uid);
+  }
+
 
   async function changeMyPassword(current, next) {
     const user = Store.auth.currentUser;
@@ -276,7 +376,7 @@ const Security = (() => {
   }
 
   /* ===== المشرفون ===== */
-  async function addAdmin(email, password, name) {
+  async function addAdmin(email, password, name, role = 'partial', perms = {}) {
     const uid = await withSecondary(async a2 => {
       try { return (await a2.createUserWithEmailAndPassword(String(email).trim(), password)).user.uid; }
       catch (e) {
@@ -285,7 +385,12 @@ const Security = (() => {
         catch (e2) { throw new Error('هذا البريد مسجّل مسبقاً بكلمة سر مختلفة'); }
       }
     });
-    Store.set(`admins/${uid}`, { email: String(email).trim(), name: name || '', addedAt: Date.now() });
+    const u = currentUser();
+    Store.set(`admins/${uid}`, {
+      email: String(email).trim(), name: name || '', addedAt: Date.now(), via: 'password', role, perms: role === 'full' ? null : cleanPerms(perms),
+      addedBy: { uid: u.uid, email: u.email || '', name: adminName() }
+    });
+    log('إضافة مشرف ببريد وكلمة سر', String(email).trim(), `${name ? name + ' — ' : ''}${permsSummary(role, perms)}`);
     return uid;
   }
 
@@ -338,7 +443,8 @@ const Security = (() => {
 
   return {
     secure, applyScope, restore, memberLogin, confirmMember, cancelMember, adminLogin, changeMyPassword,
-    googleAdminLogin, finishGoogleAdmin, inviteAdmin, inviteKey,
+    googleAdminLogin, finishGoogleAdmin, inviteAdmin, inviteKey, cancelInvite, setAdminPerms, removeAdmin, permsSummary,
+    isOwner, isFull, can, log, OWNERS, RULES_VERSION,
     createMemberAccount, regenerateCode, deleteMemberAccount, addAdmin, needsMigration, migrate, setFeatured,
     newSecret, emailFor, normCode, authMsg, CONTACT_KEYS
   };

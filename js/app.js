@@ -67,7 +67,7 @@
   let housekeepingDone = false;
   async function housekeeping() {
     if (housekeepingDone) return;
-    if (Security.secure() && Auth.current()?.kind !== 'admin') return;
+    if (Security.secure() && (Auth.current()?.kind !== 'admin' || !Security.isFull())) return;
     housekeepingDone = true;
     if (!Store.get('meta/seeded')) await Store.seedOnce(defaultData);
     else migrateEventsSection();
