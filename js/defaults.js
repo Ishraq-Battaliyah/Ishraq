@@ -10,6 +10,7 @@ const SECTION_TYPES = {
   timeline:     { label: 'مسار زمني', icon: 'fa-timeline', fields: ['nav', 'kicker', 'title', 'subtitle', 'note'], items: ['title', 'text', 'current'] },
   steps:        { label: 'خطوات الرحلة', icon: 'fa-shoe-prints', fields: ['nav', 'kicker', 'title', 'subtitle'], items: ['icon', 'title', 'text'] },
   structure:    { label: 'الهيكل التنظيمي', icon: 'fa-sitemap', fields: ['nav', 'kicker', 'title', 'subtitle'], items: ['title', 'people'] },
+  events:       { label: 'فعالية قادمة', icon: 'fa-person-chalkboard', fields: ['nav', 'kicker', 'title', 'subtitle', 'emptyTitle', 'emptyBody'], single: true },
   register:     { label: 'إعلان التسجيل', icon: 'fa-bullhorn', fields: ['nav', 'kicker', 'title', 'body', 'deadline', 'button'] },
   members:      { label: 'أعضاء الدفعات', icon: 'fa-users', fields: ['nav', 'kicker', 'title', 'body', 'button'] },
   testimonials: { label: 'آراء المشاركين', icon: 'fa-quote-right', fields: ['nav', 'kicker', 'title', 'subtitle'] },
@@ -35,7 +36,9 @@ const FIELD_META = {
   buttonLink: ['رابط الزر (اتركه فارغاً لفتح نموذج التسجيل)', 'url'],
   image: ['رابط صورة (Google Drive أو رابط مباشر)', 'url'],
   video: ['رابط المقطع (YouTube أو Google Drive)', 'url'],
-  copyright: ['سطر الحقوق', 'text']
+  copyright: ['سطر الحقوق', 'text'],
+  emptyTitle: ['العنوان عند عدم وجود فعالية منشورة', 'text'],
+  emptyBody: ['النص عند عدم وجود فعالية منشورة', 'textarea']
 };
 
 const ITEM_META = {
@@ -170,6 +173,7 @@ function defaultSections() {
         { title: 'لجنة التطوير التقني والأتمتة', people: 'حسن يحيى المسلم\nم. أحمد الحاجي\nم. محمد جواد العبد الله\nسيد علي إدريس' }
       ]
     },
+    { type: 'events', nav: 'الفعاليات', kicker: 'الفعاليات وورش العمل', title: 'فعالية قادمة' },
     {
       type: 'register', nav: 'التسجيل', kicker: 'الدفعة القادمة', title: 'كن جزءاً من الدفعة القادمة',
       body: 'سواء كنت صاحب خبرة ترغب بمشاركتها كمرشد، أو طالباً وخريجاً تبحث عن توجيه يختصر طريقك كمستفيد، سجّل اهتمامك الآن وسنتواصل معك عند فتح التسجيل.',
@@ -193,6 +197,25 @@ function defaultSections() {
 
 const ORDINALS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة'];
 
+// إضافة قسم «فعالية قادمة» للمواقع التي أُنشئت قبل ميزة الفعاليات (مرة واحدة فقط)
+function migrateEventsSection() {
+  if (Store.get('meta/eventsSection')) return;
+  const secs = Store.list('content/sections').sort(byOrder);
+  if (secs.length && !secs.some(x => x.type === 'events')) {
+    const before = secs.find(x => x.type === 'register') || secs.find(x => x.type === 'portals') || secs.find(x => x.type === 'footer');
+    const id = Store.newId();
+    const upd = {};
+    let order = 1;
+    secs.forEach(x => {
+      if (before && x.id === before.id) upd[id] = { id, type: 'events', visible: true, nav: 'الفعاليات', kicker: 'الفعاليات وورش العمل', title: 'فعالية قادمة', order: order++ };
+      upd[`${x.id}/order`] = order++;
+    });
+    if (!before) upd[id] = { id, type: 'events', visible: true, nav: 'الفعاليات', kicker: 'الفعاليات وورش العمل', title: 'فعالية قادمة', order: order++ };
+    Store.update('content/sections', upd);
+  }
+  Store.set('meta/eventsSection', true);
+}
+
 function seedDatabase() {
   const sections = {};
   defaultSections().forEach(s => { const id = Store.newId(); sections[id] = { ...s, id }; });
@@ -210,6 +233,6 @@ function seedDatabase() {
       body: 'باب التسجيل في الدفعة القادمة من إشراق مفتوح الآن.',
       button: 'سجّل اهتمامك', frequency: 'session'
     },
-    meta: { seeded: true, seededAt: Date.now() }
+    meta: { seeded: true, seededAt: Date.now(), eventsSection: true }
   });
 }

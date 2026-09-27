@@ -133,6 +133,7 @@ const Home = (() => {
         }).join('')}</div>
       </div></section>`;
     },
+    events: s => Events.section(s),
     video(s) {
       const v = videoEmbed(s.video);
       const player = !v

@@ -62,6 +62,7 @@
 
   const mode = await Store.init();
   if (!Store.get('meta/seeded')) seedDatabase();
+  else migrateEventsSection();
   if (mode === 'local-fallback') toast('تعذّر الاتصال بقاعدة البيانات، يتم العمل محلياً مؤقتاً', 'error');
 
   document.getElementById('boot')?.remove();

@@ -7,6 +7,7 @@ const Admin = (() => {
     { id: 'sessions', label: 'الجلسات', icon: 'fa-calendar-days' },
     { id: 'reviews', label: 'التقييمات', icon: 'fa-star' },
     { id: 'messages', label: 'الرسائل', icon: 'fa-envelope' },
+    { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
     { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' }
   ];
@@ -14,7 +15,7 @@ const Admin = (() => {
 
   function render(root) {
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length };
+    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length, events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -600,10 +601,12 @@ const Admin = (() => {
   function interestRows() {
     const fields = Store.list('form/fields').sort(byOrder);
     const list = Store.list('interests').filter(x => ui.intRole === 'all' || x.role === ui.intRole).sort((a, b) => b.ts - a.ts);
-    const headers = ['التاريخ', 'الصفة', ...fields.map(f => f.label)];
-    const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', ...fields.map(f => x.answers?.[f.id] ?? '')]);
+    const headers = ['التاريخ', 'الصفة', 'المصدر', ...fields.map(f => f.label)];
+    const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.source || 'نموذج التسجيل', ...fields.map(f => x.answers?.[f.id] ?? '')]);
     return { fields, list, headers, rows };
   }
+  P.events = () => Events.panel();
+
   P.interests = () => {
     const { fields, list } = interestRows();
     const all = Store.list('interests');
@@ -621,7 +624,7 @@ const Admin = (() => {
       <div class="head-actions">${exportBar('interests')}<button class="btn ghost sm" data-goto-form><i class="fa-solid fa-clipboard-list"></i> تعديل حقول النموذج</button></div></div>
       <div class="chip-filter">${[['all', 'الكل'], ['mentor', 'مرشد'], ['mentee', 'مستفيد']].map(([k, l]) => `<button class="${ui.intRole === k ? 'active' : ''}" data-int-role="${k}">${l} <span>${k === 'all' ? all.length : all.filter(x => x.role === k).length}</span></button>`).join('')}</div>
       ${list.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>التاريخ</th><th>الصفة</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead><tbody>
-        ${list.map(x => `<tr class="${x.seen ? '' : 'new'}"><td data-l="التاريخ"><small>${fmtTs(x.ts)}</small></td><td data-l="الصفة"><span class="chip ${x.role}">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span></td>
+        ${list.map(x => `<tr class="${x.seen ? '' : 'new'}"><td data-l="التاريخ"><small>${fmtTs(x.ts)}</small>${x.source ? `<br><span class="chip source-chip"><i class="fa-solid fa-person-chalkboard"></i> ${esc(x.source)}</span>` : ''}</td><td data-l="الصفة"><span class="chip ${x.role}">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span></td>
           ${fields.map(f => `<td data-l="${esc(f.label)}">${cell(f, x.answers?.[f.id])}</td>`).join('')}
           <td><button class="icon-btn danger" data-del-interest="${x.id}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
       </tbody></table></div>` : emptyState('لا توجد تسجيلات بعد', 'fa-user-plus')}
@@ -652,6 +655,7 @@ const Admin = (() => {
       case 'program-reviews': return { title: 'تقييمات البرنامج', headers: reviewHead, rows: Data.reviews({ type: 'program' }).map(reviewRow) };
       case 'messages': return { title: 'الرسائل المنشورة', headers: ['إلى', 'العنوان', 'النص', 'التاريخ'], rows: Store.list('messages').map(x => [x.target === 'member' ? Data.member(x.memberId)?.name : x.target, x.title, x.body, fmtTs(x.ts)]) };
       case 'inbox': return { title: 'الرسائل الواردة', headers: ['من', 'الصفة', 'الرسالة', 'التاريخ'], rows: Store.list('inbox').map(x => [x.fromName, x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.body, fmtTs(x.ts)]) };
+      case 'event': case 'events': return Events.exportData(key);
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
     }
     return null;
@@ -662,7 +666,7 @@ const Admin = (() => {
     const d = exportData(key);
     if (!d) return;
     if (fmt === 'csv') return download(`ishraq-${key.replace(/:/g, '-')}.csv`, toCSV(d.headers, d.rows));
-    const panel = btn.closest('.panel, .members-block, .network-block');
+    const panel = btn.closest('.ev-regs, .panel, .members-block, .network-block');
     const clone = panel.cloneNode(true);
     $$('button:not(.person), .export-bar, .dropzone, select, input, .add-card, .mc-actions, .sec-actions', clone).forEach(el => el.remove());
     exportPDF(d.title, `<div class="print-body">${clone.innerHTML}</div>`);
