@@ -7,6 +7,7 @@
 الموقع ملفات ثابتة (HTML / CSS / JS) لا تحتاج إلى أي بناء.
 
 - **GitHub Pages:** من إعدادات المستودع ← Pages ← اختر الفرع `main` والمجلد `/ (root)`.
+- **الدومين:** https://ishraqbattaliyah.org (ملف `CNAME` وإعداد Custom domain في GitHub Pages). الرابط القديم `hussain-al-hajji.github.io/Ishraq` يتحول إليه تلقائياً.
 - **محلياً:** `python3 -m http.server` ثم افتح `http://localhost:8000`.
 
 ## الإعدادات — `js/config.js`
@@ -39,7 +40,7 @@
 **التفعيل لأول مرة:**
 
 1. في Firebase Console: Authentication ← Sign-in method ← تفعيل Email/Password (وGoogle لدخول المشرفين بحساب Google)، ثم Users ← Add user لحساب المشرف الأول.
-   - Authentication ← Settings ← Authorized domains: أضف `hussain-al-hajji.github.io`، وهو مطلوب لنافذة الدخول بحساب Google.
+   - Authentication ← Settings ← Authorized domains: أضف `ishraqbattaliyah.org` و`www.ishraqbattaliyah.org` و`hussain-al-hajji.github.io`، وهي مطلوبة لنافذة الدخول بحساب Google.
 2. أضف إعدادات تطبيق الويب (`apiKey` وغيرها) إلى `js/config.js`.
 3. ادخل إلى لوحة الإدارة بالبريد وكلمة السر، ووافق على تعيين الحساب كأول مشرف.
 4. اضغط «ابدأ الترقية» في شريط الأمان. تُنقل البيانات، وتُنشأ رموز الدخول للأعضاء، وتُنزَّل نسخة احتياطية قبلها تلقائياً.

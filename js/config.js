@@ -26,5 +26,5 @@ window.ISHRAQ_CONFIG = {
   // مزوّد App Check: 'enterprise' (Fraud Defense، الافتراضي) أو 'v3' (reCAPTCHA الكلاسيكي)
   appCheckProvider: 'enterprise',
   // رابط المنصة الذي يُرسل للأعضاء في رسالة معلومات الدخول
-  siteUrl: 'https://hussain-al-hajji.github.io/Ishraq/'
+  siteUrl: 'https://ishraqbattaliyah.org/'
 };
