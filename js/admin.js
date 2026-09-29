@@ -547,6 +547,8 @@ const Admin = (() => {
       <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
       ${cohortFilter('sessCohort')}
       ${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
+      <div class="extra-stat-wrap">${extraStatTile(ids)}</div>
+      ${ui.extraStat ? extraStatTable(ids) : ''}
       ${ui.sessStat ? statList(all, ui.sessStat) : '<p class="muted small"><i class="fa-solid fa-hand-pointer"></i> اضغط على أي مربع لعرض الجلسات المندرجة تحته.</p>'}
       <h3 class="sub">المرشدون</h3>
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
@@ -701,37 +703,53 @@ const Admin = (() => {
     });
   }
 
-  /* ===== جلسات إضافية: المرشدون المتاحون، والربط بمستفيد إضافي، وجدول الجلسات ===== */
+  /* ===== جلسات إضافية: تفعيل القسم، والمرشدون المشاركون، وجدول الجلسات القادمة والمنجزة ===== */
+  const person = m => (m ? `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>` : '<span class="muted">—</span>');
+
   function extraAdminPanel() {
+    const on = Data.extraOn(), cfg = Store.get('extraConfig') || {};
     const mentors = Data.members('mentor').filter(m => inCohort('sessCohort', m));
     const ids = new Set(mentors.map(m => m.id));
-    const avail = mentors.filter(m => Data.extraOffer(m.id)?.on || Data.extraMenteesOf(m.id).length);
     const bks = Data.bookings({ extra: true }).filter(b => ids.has(b.mentorId) && ['upcoming', 'done'].includes(b.status))
       .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
     const done = bks.filter(b => b.status === 'done').length;
-    const person = m => (m ? `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>` : '<span class="muted">—</span>');
-    const row = m => {
-      const offer = Data.extraOffer(m.id), linked = Data.extraMenteesOf(m.id);
-      const linkedIds = new Set(linked.map(x => x.id));
-      const own = Store.get(`network/${m.cohort}/${m.id}`);
-      const cand = Data.members('mentee').filter(x => x.id !== own && !linkedIds.has(x.id))
-        .sort((a, b) => (b.cohort === m.cohort) - (a.cohort === m.cohort) || String(a.name).localeCompare(String(b.name), 'ar'));
-      return `<li class="extra-row">
-        <div class="er-mentor">${person(m)}${offer?.on ? '<span class="pill st-done">متاح</span>' : '<span class="pill">أوقف التوفر</span>'}${offer?.note ? `<small class="muted">${esc(offer.note)}</small>` : ''}</div>
-        <div class="er-link"><div class="bp-list">${linked.map(x => `<span class="bp linked">${avatar(x, 'sm')}<b>${esc(x.name)}</b><button class="icon-btn danger xs" data-extra-unlink="${esc(m.id)}:${esc(x.id)}" title="إلغاء الربط"><i class="fa-solid fa-xmark"></i></button></span>`).join('') || '<small class="muted">لم يُربط بمستفيد بعد</small>'}</div>
-          <div class="er-add"><select data-extra-select="${esc(m.id)}"><option value="">— ربط بمستفيد إضافي —</option>${cand.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (${esc(Data.cohort(x.cohort)?.name || '')})</option>`).join('')}</select>
-          <button class="btn xs primary" data-extra-link="${esc(m.id)}"><i class="fa-solid fa-link"></i> ربط</button></div></div></li>`;
-    };
+    const withSlots = mentors.map(m => ({ m, n: Data.slots(m.id, true).filter(x => dateTimeOf(x.date, x.start) > new Date()).length })).filter(x => x.n);
     return `<div class="panel extra-admin">
-      <div class="panel-head"><h2><i class="fa-solid fa-hand-holding-heart"></i> جلسات إضافية</h2></div>
-      <p class="muted small">المرشدون الذين أعلنوا استعدادهم لساعات إرشادية إضافية. اربط المرشد بمستفيد إضافي، فيضيف مواعيده في صفحته ويحجز منها المستفيد. ${ui.sessCohort === 'all' ? '' : 'المعروض حسب الدفعة المحددة أعلاه.'}</p>
-      ${avail.length ? `<ul class="extra-list">${avail.map(row).join('')}</ul>` : emptyState('لم يعلن أي مرشد استعداده لساعات إضافية بعد', 'fa-hand-holding-heart')}
+      <div class="panel-head"><h2><i class="fa-solid fa-hand-holding-heart"></i> جلسات إضافية</h2>
+        <button class="btn ${on ? 'ghost danger' : 'primary'}" data-extra-toggle-admin="${on ? 'off' : 'on'}"><i class="fa-solid ${on ? 'fa-power-off' : 'fa-toggle-on'}"></i> ${on ? 'إيقاف الجلسات الإضافية' : 'تفعيل الجلسات الإضافية'}</button></div>
+      <p class="muted small">${on ? `مفعّلة${cfg.ts ? ` منذ ${fmtTs(cfg.ts)}` : ''}${cfg.by ? ` بواسطة ${esc(cfg.by)}` : ''}. يضيف كل مرشد مواعيده من صفحته، ويحجز أي مستفيد من أي مرشد.` : 'غير مفعّلة. عند التفعيل يظهر قسم «جلسات إضافية» لكل المرشدين والمستفيدين، ويضيف المرشدون مواعيدهم ويحجز منها أي مستفيد دون ربط بمستفيد معيّن.'}</p>
+      ${on ? `<h3 class="sub"><i class="fa-solid fa-user-tie"></i> مرشدون أضافوا مواعيد قادمة <span class="count">${withSlots.length}</span></h3>
+        ${withSlots.length ? `<div class="bp-list">${withSlots.map(x => `<span class="bp linked">${avatar(x.m, 'sm')}<b>${esc(x.m.name)}</b><small>${x.n} موعد</small></span>`).join('')}</div>` : '<p class="muted small">لم يضف أي مرشد مواعيد بعد.</p>'}` : ''}
       <h3 class="sub"><i class="fa-solid fa-list-check"></i> الجلسات الإضافية (القادمة والمنجزة) <span class="count">${bks.length}</span></h3>
       <div class="add-stats two"><div class="add-stat"><i class="fa-solid fa-hourglass-half"></i><b>${bks.length - done}</b><span>قادمة</span></div><div class="add-stat"><i class="fa-solid fa-circle-check"></i><b>${done}</b><span>منجزة</span></div></div>
       ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>المستفيد</th><th>التاريخ</th><th>الوقت</th><th>النوع</th><th>الحالة</th></tr></thead><tbody>
         ${bks.map(b => `<tr><td data-l="المرشد">${person(Data.member(b.mentorId))}</td><td data-l="المستفيد">${person(Data.member(b.menteeId))}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
       </tbody></table></div>` : emptyState('لا توجد جلسات إضافية قادمة أو منجزة', 'fa-calendar')}
     </div>`;
+  }
+
+  // عدّاد إحصائية الجلسات الإضافية ضمن الإحصاءات العامة، وجدول الساعات المنجزة لكل مرشد ومستفيد
+  function extraStatTile(mentorIds) {
+    const st = Data.extraStats();
+    const list = st.list.filter(b => mentorIds.has(b.mentorId));
+    const minutes = list.reduce((t, b) => t + minutesBetween(b.start, b.end), 0);
+    return `<button type="button" class="stat-box st-extra ${ui.extraStat ? 'active' : ''}" data-extra-stat><i class="fa-solid fa-hand-holding-heart"></i><b>${list.length}</b><span>جلسات إضافية منجزة</span><small>${Math.round(minutes / 6) / 10} ساعة</small></button>`;
+  }
+
+  function extraStatTable(mentorIds) {
+    const byMentor = new Map();
+    Data.extraStats().list.filter(b => mentorIds.has(b.mentorId)).forEach(b => {
+      const e = byMentor.get(b.mentorId) || { minutes: 0, count: 0, mentees: new Map() };
+      const mins = minutesBetween(b.start, b.end);
+      e.minutes += mins; e.count++; e.mentees.set(b.menteeId, (e.mentees.get(b.menteeId) || 0) + mins);
+      byMentor.set(b.mentorId, e);
+    });
+    const rows = [...byMentor.entries()].sort((a, b) => b[1].minutes - a[1].minutes);
+    return `<div class="stat-list"><h3 class="sub"><i class="fa-solid fa-hand-holding-heart"></i> الساعات الإضافية المنجزة <span class="count">${rows.length}</span></h3>
+      ${rows.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>الجلسات</th><th>الساعات</th><th>المستفيدون</th></tr></thead><tbody>
+        ${rows.map(([mid, e]) => `<tr><td data-l="المرشد">${person(Data.member(mid))}</td><td data-l="الجلسات"><b class="num">${e.count}</b></td><td data-l="الساعات"><b class="num">${Math.round(e.minutes / 6) / 10}</b></td>
+          <td data-l="المستفيدون"><div class="bp-list">${[...e.mentees.entries()].map(([bid, mins]) => `<span class="bp">${avatar(Data.member(bid), 'sm')}<b>${esc(Data.member(bid)?.name || '—')}</b><small>${Math.round(mins / 6) / 10} س</small></span>`).join('')}</div></td></tr>`).join('')}
+      </tbody></table></div>` : emptyState('لم ينجز أي مرشد ساعات إضافية بعد', 'fa-clock')}</div>`;
   }
 
   function statList(all, key) {
@@ -800,8 +818,8 @@ const Admin = (() => {
       const list = all.filter(r => r.from === from);
       const authorName = from === 'mentee' ? (mentee?.name || '') : m.name;
       return `<div class="review-box"><h3>${title}</h3>${list.length ? `<ul class="review-list">${list.map(r => `<li class="review">
-        <header><b>تقييم ${from === 'mentee' ? 'المستفيد' : 'المرشد'} «${esc(Data.member(r.authorId)?.name || authorName)}» ${r.type === 'final' ? 'الختامي' : 'حول ' + sessionName(r.session)}</b>
-        <span class="pill ${r.status === 'approved' ? 'st-done' : r.status === 'rejected' ? 'st-absent-mentor' : 'st-upcoming'}">${r.status === 'approved' ? 'معتمد' : r.status === 'rejected' ? 'غير معتمد' : 'بانتظار الاعتماد'}</span></header>
+        <header><b>تقييم ${from === 'mentee' ? 'المستفيد' : 'المرشد'} «${esc(Data.member(r.authorId)?.name || authorName)}» ${r.type === 'final' ? 'الختامي' : 'حول ' + (r.extraSession ? 'جلسة إضافية' : sessionName(r.session))}</b>
+        ${r.extraSession ? '<span class="chip extra-chip"><i class="fa-solid fa-hand-holding-heart"></i> جلسة إضافية</span>' : ''}<span class="pill ${r.status === 'approved' ? 'st-done' : r.status === 'rejected' ? 'st-absent-mentor' : 'st-upcoming'}">${r.status === 'approved' ? 'معتمد' : r.status === 'rejected' ? 'غير معتمد' : 'بانتظار الاعتماد'}</span></header>
         <p>${nl2br(r.text)}</p>${r.extra ? `<p class="extra"><b>${from === 'mentor' ? 'التوصية' : 'المستفاد'}:</b> ${nl2br(r.extra)}</p>` : ''}
         <footer><small>${fmtTs(r.ts)}</small><span>
           <button class="btn xs success" data-approve="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}><i class="fa-solid fa-check"></i> اعتماد وعرض للطرف الآخر</button>
@@ -1089,7 +1107,7 @@ const Admin = (() => {
     const bookingRow = x => [Data.member(x.mentorId)?.name, Data.member(x.menteeId)?.name, sessionName(x.session), fmtDate(x.date), `${x.start} - ${x.end}`, MODES[x.mode], STATUS[Data.displayStatus(x)]?.label];
     const reviewHead = ['النوع', 'من', 'الكاتب', 'عن', 'الجلسة', 'التقييم', 'التوصية / المستفاد', 'الحالة', 'التاريخ'];
     const reviewRow = r => [r.type === 'program' ? 'تقييم البرنامج' : r.type === 'final' ? 'ختامي' : 'جلسة', r.from === 'mentor' ? 'مرشد' : 'مستفيد',
-      Data.member(r.authorId)?.name || r.authorName, r.type === 'program' ? 'البرنامج' : Data.member(r.targetId)?.name, r.session ? sessionName(r.session) : '', r.text, r.extra || '',
+      Data.member(r.authorId)?.name || r.authorName, r.type === 'program' ? 'البرنامج' : Data.member(r.targetId)?.name, r.extraSession ? 'جلسة إضافية' : r.session ? sessionName(r.session) : '', r.text, r.extra || '',
       r.type === 'program' ? (r.featured ? 'معروض' : '') : ({ pending: 'بانتظار الاعتماد', approved: 'معتمد', rejected: 'غير معتمد' }[r.status]), fmtTs(r.ts)];
     switch (kind) {
       case 'content': return { title: 'أقسام الصفحة الرئيسية', headers: ['الترتيب', 'النوع', 'العنوان', 'الحالة', 'المحتوى'], rows: Store.list('content/sections').sort(byOrder).map((s, i) => [i + 1, SECTION_TYPES[s.type]?.label, s.title || s.brand || '', s.visible === false ? 'مخفي' : 'ظاهر', [s.body, ...(s.items || []).map(it => [it.title, it.text, it.value, it.label, it.people].filter(Boolean).join(' - '))].filter(Boolean).join(' | ')]) };
@@ -1212,22 +1230,21 @@ const Admin = (() => {
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
       const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }
       const bmn = t.closest('[data-band-mentor]'); if (bmn) return bandMentorDialog(bmn.dataset.bandMentor, Number(bmn.dataset.session));
-      const xl = t.closest('[data-extra-link]');
-      if (xl) {
-        const mid = xl.dataset.extraLink, sel = $(`[data-extra-select="${mid}"]`, root), bid = sel?.value;
-        if (!bid) return toast('اختر المستفيد أولاً', 'error');
-        const m = Data.member(mid), b = Data.member(bid);
-        Data.linkExtra(mid, bid);
-        Data.notify(mid, `ربطتك الإدارة بالمستفيد ${b?.name || ''} لجلسات إرشادية إضافية، يمكنك الآن إضافة مواعيدها من صفحتك`, { icon: 'fa-hand-holding-heart' });
-        Data.notify(bid, `أتاحت لك الإدارة جلسات إرشادية إضافية مع المرشد ${m?.name || ''}، اطّلع على مواعيده في صفحتك`, { icon: 'fa-hand-holding-heart' });
-        Security.log('ربط جلسات إضافية', m?.name || mid, `المستفيد ${b?.name || bid}`);
-        return toast('تم الربط');
-      }
-      const xu = t.closest('[data-extra-unlink]');
-      if (xu) {
-        const [mid, bid] = xu.dataset.extraUnlink.split(':');
-        return confirmDialog(`إلغاء ربط ${esc(Data.member(mid)?.name || '')} بـ${esc(Data.member(bid)?.name || '')}؟ تبقى الجلسات المحجوزة سابقاً كما هي.`, { danger: true, ok: 'إلغاء الربط', cancel: 'رجوع' })
-          .then(ok => { if (ok) { Data.unlinkExtra(mid, bid); Security.log('إلغاء ربط جلسات إضافية', Data.member(mid)?.name || mid, Data.member(bid)?.name || bid); } });
+      if (t.closest('[data-extra-stat]')) { ui.extraStat = !ui.extraStat; return render(root); }
+      const xt = t.closest('[data-extra-toggle-admin]');
+      if (xt) {
+        const turnOn = xt.dataset.extraToggleAdmin === 'on';
+        return confirmDialog(turnOn ? 'تفعيل الجلسات الإضافية؟ سيظهر القسم لكل المرشدين والمستفيدين، ويصلهم إشعار.' : 'إيقاف الجلسات الإضافية؟ يختفي القسم عن المرشدين والمستفيدين، وتبقى الجلسات المحجوزة سابقاً محفوظة.',
+          { ok: turnOn ? 'تفعيل' : 'إيقاف', danger: !turnOn }).then(ok => {
+          if (!ok) return;
+          Store.set('extraConfig', { enabled: turnOn, ts: Date.now(), by: Security.adminName() });
+          Security.log(turnOn ? 'تفعيل الجلسات الإضافية' : 'إيقاف الجلسات الإضافية');
+          if (turnOn) {
+            Data.members('mentor').forEach(m => Data.notify(m.id, 'فُعّلت الجلسات الإضافية: يمكنك الآن إضافة مواعيد لساعات إرشادية إضافية من صفحتك', { icon: 'fa-hand-holding-heart' }));
+            Data.members('mentee').forEach(m => Data.notify(m.id, 'فُعّلت الجلسات الإضافية: اطّلع على مواعيد المرشدين واحجز من قسم «جلسات إضافية» في صفحتك', { icon: 'fa-hand-holding-heart' }));
+          }
+          toast(turnOn ? 'تم تفعيل الجلسات الإضافية' : 'تم إيقاف الجلسات الإضافية');
+        });
       }
       const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');

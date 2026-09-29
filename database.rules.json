@@ -158,7 +158,7 @@
         ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/certificates').val() === true))",
         ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
         "$mid": {
-          ".read": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && (root.child('ishraq/uids/' + auth.uid).val() === $mid || root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() === $mid || (root.child('ishraq/extraLinks/' + root.child('ishraq/uids/' + auth.uid).val() + '/' + $mid).val() === true || root.child('ishraq/extraMentors/' + root.child('ishraq/uids/' + auth.uid).val() + '/' + $mid).val() === true))",
+          ".read": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && (root.child('ishraq/uids/' + auth.uid).val() === $mid || root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() === $mid)",
           ".write": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid",
           "whatsapp": {
             ".validate": "newData.isString() && newData.val().length <= 300"
@@ -246,13 +246,14 @@
         }
       },
       "slots": {
-        ".read": "((((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true)) || ((auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && query.orderByChild === 'mentorId' && (query.equalTo === root.child('ishraq/uids/' + auth.uid).val() || query.equalTo === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() || root.child('ishraq/extraMentors/' + root.child('ishraq/uids/' + auth.uid).val() + '/' + query.equalTo).val() === true)))",
+        ".read": "((((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true)) || ((auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && ((query.orderByChild === 'mentorId' && (query.equalTo === root.child('ishraq/uids/' + auth.uid).val() || query.equalTo === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val())) || (query.orderByChild === 'extra' && query.equalTo === true && root.child('ishraq/extraConfig/enabled').val() === true))))",
         ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true))",
         ".indexOn": [
-          "mentorId"
+          "mentorId",
+          "extra"
         ],
         "$sid": {
-          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && ((data.exists() && data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) || (!data.exists() && newData.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val() && ((newData.child('extra').val() === true && root.child('ishraq/extraLinks/' + root.child('ishraq/uids/' + auth.uid).val()).exists()) || newData.child('session').exists())))",
+          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && ((data.exists() && data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) || (!data.exists() && newData.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val() && ((newData.child('extra').val() === true && root.child('ishraq/extraConfig/enabled').val() === true && root.child('ishraq/members/' + root.child('ishraq/uids/' + auth.uid).val() + '/role').val() === 'mentor') || newData.child('session').exists())))",
           "id": {
             ".validate": "newData.isString() && newData.val().length <= 60"
           },
@@ -297,7 +298,7 @@
           "menteeId"
         ],
         "$bid": {
-          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && ((!data.exists() && newData.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val() && newData.child('status').val() === 'upcoming' && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists() && ((newData.child('mentorId').val() === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() && newData.child('session').exists() && !newData.child('extra').exists()) || (newData.child('extra').val() === true && root.child('ishraq/extraLinks/' + newData.child('mentorId').val() + '/' + root.child('ishraq/uids/' + auth.uid).val()).val() === true))) || (data.exists() && newData.exists() && data.child('status').val() === 'upcoming' && (data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val() || data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()) && newData.child('mentorId').val() === data.child('mentorId').val() && newData.child('menteeId').val() === data.child('menteeId').val() && newData.child('session').val() === data.child('session').val() && (newData.child('doneByMentor').val() === data.child('doneByMentor').val() || data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) && (newData.child('doneByMentee').val() === data.child('doneByMentee').val() || data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()) && (newData.child('status').val() === 'upcoming' || (newData.child('status').val() === 'done' && newData.child('doneByMentor').exists() && newData.child('doneByMentee').exists()) || (newData.child('status').val() === 'absent_mentee' && data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) || (newData.child('status').val() === 'absent_mentor' && data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()))))",
+          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && ((!data.exists() && newData.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val() && newData.child('status').val() === 'upcoming' && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists() && ((newData.child('mentorId').val() === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() && newData.child('session').exists() && !newData.child('extra').exists()) || (newData.child('extra').val() === true && root.child('ishraq/extraConfig/enabled').val() === true && $bid === 'x_' + newData.child('slotId').val() && root.child('ishraq/slots/' + newData.child('slotId').val() + '/extra').val() === true && root.child('ishraq/slots/' + newData.child('slotId').val() + '/mentorId').val() === newData.child('mentorId').val()))) || (data.exists() && newData.exists() && data.child('status').val() === 'upcoming' && (data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val() || data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()) && newData.child('mentorId').val() === data.child('mentorId').val() && newData.child('menteeId').val() === data.child('menteeId').val() && newData.child('session').val() === data.child('session').val() && (newData.child('doneByMentor').val() === data.child('doneByMentor').val() || data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) && (newData.child('doneByMentee').val() === data.child('doneByMentee').val() || data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()) && (newData.child('status').val() === 'upcoming' || (newData.child('status').val() === 'done' && newData.child('doneByMentor').exists() && newData.child('doneByMentee').exists()) || (newData.child('status').val() === 'absent_mentee' && data.child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val()) || (newData.child('status').val() === 'absent_mentor' && data.child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()))))",
           "id": {
             ".validate": "newData.isString() && newData.val().length <= 60"
           },
@@ -390,7 +391,7 @@
           "authorId"
         ],
         "$rid": {
-          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && !data.exists() && newData.child('authorId').val() === root.child('ishraq/uids/' + auth.uid).val() && (newData.child('targetId').val() === 'admin' || newData.child('targetId').val() === '' || newData.child('targetId').val() === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val()) && (newData.child('status').val() === 'pending' || (newData.child('type').val() === 'program' && newData.child('status').val() === 'approved' && newData.child('featured').val() === false))",
+          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && !data.exists() && newData.child('authorId').val() === root.child('ishraq/uids/' + auth.uid).val() && (newData.child('targetId').val() === 'admin' || newData.child('targetId').val() === '' || (newData.child('targetId').val() === root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() && !newData.child('extraSession').exists()) || (newData.child('extraSession').val() === true && root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('extra').val() === true && root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('status').val() === 'done' && ((root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('menteeId').val() === root.child('ishraq/uids/' + auth.uid).val() && newData.child('targetId').val() === root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('mentorId').val()) || (root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('mentorId').val() === root.child('ishraq/uids/' + auth.uid).val() && newData.child('targetId').val() === root.child('ishraq/bookings/' + newData.child('bookingId').val()).child('menteeId').val())))) && (newData.child('status').val() === 'pending' || (newData.child('type').val() === 'program' && newData.child('status').val() === 'approved' && newData.child('featured').val() === false))",
           "id": {
             ".validate": "newData.isString() && newData.val().length <= 60"
           },
@@ -438,6 +439,9 @@
           },
           "decidedAt": {
             ".validate": "newData.isNumber()"
+          },
+          "extraSession": {
+            ".validate": "newData.isBoolean()"
           },
           "$other": {
             ".validate": false
@@ -499,6 +503,9 @@
             "decidedAt": {
               ".validate": "newData.isNumber()"
             },
+            "extraSession": {
+              ".validate": "newData.isBoolean()"
+            },
             "$other": {
               ".validate": false
             },
@@ -512,7 +519,7 @@
         "$to": {
           ".read": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $to",
           "$nid": {
-            ".write": "(!data.exists() && newData.child('text').isString() && newData.child('text').val().length <= 500 && ($to === 'admin' || ((auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && (root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() === $to || (root.child('ishraq/extraLinks/' + root.child('ishraq/uids/' + auth.uid).val() + '/' + $to).val() === true || root.child('ishraq/extraMentors/' + root.child('ishraq/uids/' + auth.uid).val() + '/' + $to).val() === true))))) || (auth != null && root.child('ishraq/uids/' + auth.uid).val() === $to)",
+            ".write": "(!data.exists() && newData.child('text').isString() && newData.child('text').val().length <= 500 && ($to === 'admin' || ((auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && (root.child('ishraq/pairs/' + root.child('ishraq/uids/' + auth.uid).val()).val() === $to || (root.child('ishraq/extraPairs/' + root.child('ishraq/uids/' + auth.uid).val() + '_' + $to).exists() || root.child('ishraq/extraPairs/' + $to + '_' + root.child('ishraq/uids/' + auth.uid).val()).exists()))))) || (auth != null && root.child('ishraq/uids/' + auth.uid).val() === $to)",
             "id": {
               ".validate": "newData.isString() && newData.val().length <= 60"
             },
@@ -638,44 +645,33 @@
           }
         }
       },
-      "extraOffers": {
-        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        "$mid": {
-          ".read": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid",
-          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && root.child('ishraq/uids/' + auth.uid).val() === $mid && root.child('ishraq/members/' + root.child('ishraq/uids/' + auth.uid).val() + '/role').val() === 'mentor'",
-          "on": {
-            ".validate": "newData.isBoolean()"
-          },
-          "ts": {
-            ".validate": "newData.isNumber()"
-          },
-          "note": {
-            ".validate": "newData.isString() && newData.val().length <= 500"
-          },
-          "$other": {
-            ".validate": false
-          }
+      "extraConfig": {
+        ".read": true,
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true))",
+        "enabled": {
+          ".validate": "newData.isBoolean()"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "by": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
         }
       },
-      "extraLinks": {
-        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        "$mid": {
-          ".read": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid",
-          "$bid": {
-            ".validate": "newData.val() === true"
-          }
+      "extraTaken": {
+        ".read": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) || ((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists()))",
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true))",
+        "$sid": {
+          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && !data.exists() && newData.val() === true && root.child('ishraq/extraConfig/enabled').val() === true && root.child('ishraq/bookings/x_' + $sid + '/menteeId').val() === root.child('ishraq/uids/' + auth.uid).val()",
+          ".validate": "newData.val() === true"
         }
       },
-      "extraMentors": {
-        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
-        "$mid": {
-          ".read": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid",
-          "$aid": {
-            ".validate": "newData.val() === true"
-          }
+      "extraPairs": {
+        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true))",
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/sessions').val() === true))",
+        "$k": {
+          ".write": "(auth != null && root.child('ishraq/uids/' + auth.uid).exists()) && newData.val() === true && root.child('ishraq/extraConfig/enabled').val() === true && root.child('ishraq/members/' + root.child('ishraq/uids/' + auth.uid).val() + '/role').val() === 'mentee' && $k.beginsWith(root.child('ishraq/uids/' + auth.uid).val() + '_')",
+          ".validate": "newData.val() === true"
         }
       },
       "interests": {

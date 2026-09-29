@@ -24,6 +24,13 @@ UID = f"{R}uids/' + auth.uid)"
 ME = f"{UID}.val()"
 IS_MEMBER = f"(auth != null && {UID}.exists())"
 PARTNER = f"{R}pairs/' + {ME})"          # طرف العضو المرتبط به
+
+# الجلسات الإضافية: مفتوحة لكل المستفيدين حين تفعّلها الإدارة (extraConfig/enabled)
+EXTRA_ON = f"{R}extraConfig/enabled').val() === true"
+# علاقة المستفيد بالمرشد في جلسة إضافية: يسجّلها المستفيد عند الحجز (extraPairs/{المستفيد}_{المرشد})
+REL_TO = lambda who: f"({R}extraPairs/' + {ME} + '_' + {who}).exists() || {R}extraPairs/' + {who} + '_' + {ME}).exists())"
+
+
 MY_ROLE = f"{R}members/' + {ME} + '/role').val()"
 OWNER = "(auth != null && auth.token.email_verified === true && (" + " || ".join(f"auth.token.email === '{e}'" for e in OWNERS) + "))"
 ADMIN_REC = f"{R}admins/' + auth.uid)"
@@ -99,7 +106,7 @@ REVIEW = fields({
     "authorId": ID, "authorName": s(120), "targetId": {".validate": "newData.isString() && newData.val().length <= 60"},
     "mentorId": ID, "menteeId": ID, "bookingId": ID,
     "session": SESSION, "text": s(3000), "extra": s(3000), "status": one_of('pending', 'approved', 'rejected'),
-    "featured": BOOL, "ts": NUM, "decidedAt": NUM,
+    "featured": BOOL, "ts": NUM, "decidedAt": NUM, "extraSession": BOOL,
 }, required=('type', 'authorId', 'text', 'status'))
 
 INTEREST = fields({"id": ID, "role": one_of('mentor', 'mentee'), "answers": {"$f": s(3000)}, "ts": NUM,
@@ -137,7 +144,8 @@ CONTACT = fields({k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website'
 d = lambda k: f"data.child('{k}').val()"
 n = lambda k: f"newData.child('{k}').val()"
 # الجلسة الأساسية: مع المرشد المرتبط به. الجلسة الإضافية: مع مرشد ربطته الإدارة به (extraLinks)
-EXTRA_LINK_NEW = f"{R}extraLinks/' + {n('mentorId')} + '/' + {ME}).val() === true"
+EXTRA_LINK_NEW = (f"{EXTRA_ON} && $bid === 'x_' + {n('slotId')} && {R}slots/' + {n('slotId')} + '/extra').val() === true"
+                  f" && {R}slots/' + {n('slotId')} + '/mentorId').val() === {n('mentorId')}")
 BOOKING_CREATE = (f"!data.exists() && {n('menteeId')} === {ME} && {n('status')} === 'upcoming'"
                   " && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists()"
                   f" && (({n('mentorId')} === {PARTNER}.val() && newData.child('session').exists() && !newData.child('extra').exists())"
@@ -150,14 +158,16 @@ BOOKING_UPDATE = (f"data.exists() && newData.exists() && {d('status')} === 'upco
                   # «منجزة» بتأكيد الطرفين فقط، وكل طرف يسجّل غياب الطرف الآخر فقط
                   f" && ({n('status')} === 'upcoming' || ({n('status')} === 'done' && newData.child('doneByMentor').exists() && newData.child('doneByMentee').exists())"
                   f" || ({n('status')} === 'absent_mentee' && {d('mentorId')} === {ME}) || ({n('status')} === 'absent_mentor' && {d('menteeId')} === {ME}))")
+# تقييم جلسة إضافية: بعد إنجاز الجلسة، وبين طرفيها فقط (المرشد والمستفيد المحجوز له)
+_BK = f"{R}bookings/' + {n('bookingId')})"
+EXTRA_REVIEW_OK = (f"{n('extraSession')} === true && {_BK}.child('extra').val() === true && {_BK}.child('status').val() === 'done'"
+                   f" && (({_BK}.child('menteeId').val() === {ME} && {n('targetId')} === {_BK}.child('mentorId').val())"
+                   f" || ({_BK}.child('mentorId').val() === {ME} && {n('targetId')} === {_BK}.child('menteeId').val()))")
 REVIEW_CREATE = (f"!data.exists() && {n('authorId')} === {ME}"
-                 f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || {n('targetId')} === {PARTNER}.val())"
+                 f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || ({n('targetId')} === {PARTNER}.val() && !newData.child('extraSession').exists()) || ({EXTRA_REVIEW_OK}))"
                  f" && ({n('status')} === 'pending' || ({n('type')} === 'program' && {n('status')} === 'approved' && {n('featured')} === false))")
 
 OWN_TICKET = f"{R}tickets/' + $tid + '/memberId').val() === {ME}"
-
-REL_TO = lambda who: f"({R}extraLinks/' + {ME} + '/' + {who}).val() === true || {R}extraMentors/' + {ME} + '/' + {who}).val() === true)"
-EXTRA_MENTOR_OK = f"{R}extraMentors/' + {ME} + '/' + query.equalTo).val() === true"
 
 rules = {
     ".read": IS_FULL,
@@ -181,7 +191,7 @@ rules = {
     "contacts": {
         ".read": can('cohorts', 'sessions', 'certificates'), **w(can('cohorts')),
         "$mid": {
-            ".read": f"{IS_MEMBER} && ({ME} === $mid || {PARTNER}.val() === $mid || {REL_TO('$mid')})",
+            ".read": f"{IS_MEMBER} && ({ME} === $mid || {PARTNER}.val() === $mid)",
             ".write": f"auth != null && {ME} === $mid",
             **CONTACT,
         },
@@ -201,10 +211,10 @@ rules = {
     "inbox": {".read": can('messages'), **w(can('messages')),
               "$id": {**w(f"{IS_MEMBER} && !data.exists() && {n('fromId')} === {ME}"), **INBOX}},
     "slots": {
-        ".read": any_of(can('sessions', 'cohorts'), f"({IS_MEMBER} && query.orderByChild === 'mentorId' && (query.equalTo === {ME} || query.equalTo === {PARTNER}.val() || {EXTRA_MENTOR_OK}))"),
-        **w(can('sessions')), ".indexOn": ["mentorId"],
+        ".read": any_of(can('sessions', 'cohorts'), f"({IS_MEMBER} && ((query.orderByChild === 'mentorId' && (query.equalTo === {ME} || query.equalTo === {PARTNER}.val())) || (query.orderByChild === 'extra' && query.equalTo === true && {EXTRA_ON})))"),
+        **w(can('sessions')), ".indexOn": ["mentorId", "extra"],
         "$sid": {**w(f"{IS_MEMBER} && ((data.exists() && {d('mentorId')} === {ME}) || (!data.exists() && {n('mentorId')} === {ME}"
-                     f" && (({n('extra')} === true && {R}extraLinks/' + {ME}).exists()) || newData.child('session').exists())))"), **SLOT},
+                     f" && (({n('extra')} === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentor') || newData.child('session').exists())))"), **SLOT},
     },
     "bookings": {
         ".read": any_of(can('sessions', 'cohorts', 'reviews'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
@@ -248,15 +258,16 @@ rules = {
     },
     # اسم المشرف الذي ردّ على المحادثة: للإدارة فقط (لا يراه العضو)
     "ticketStaff": {".read": can('messages'), **w(can('messages')), "$tid": {"$mid": s(120)}},
-    # ساعات إرشادية إضافية: المرشد يعلن استعداده، والإدارة تربطه بمستفيد إضافي (ومنه يفتح مواعيده)
-    "extraOffers": {".read": can('sessions', 'cohorts'), **w(can('sessions', 'cohorts')),
-                    "$mid": {".read": f"auth != null && {ME} === $mid",
-                             ".write": f"{IS_MEMBER} && {ME} === $mid && {R}members/' + {ME} + '/role').val() === 'mentor'",
-                             **fields({"on": BOOL, "ts": NUM, "note": s(500)})}},
-    "extraLinks": {".read": can('sessions', 'cohorts'), **w(can('sessions', 'cohorts')),
-                   "$mid": {".read": f"auth != null && {ME} === $mid", "$bid": {".validate": "newData.val() === true"}}},
-    "extraMentors": {".read": can('sessions', 'cohorts'), **w(can('sessions', 'cohorts')),
-                     "$mid": {".read": f"auth != null && {ME} === $mid", "$aid": {".validate": "newData.val() === true"}}},
+    # الجلسات الإضافية: تفعّلها الإدارة، وبعدها يضيف كل مرشد مواعيده ويحجز منها أي مستفيد
+    "extraConfig": {".read": True, **w(can('sessions')), "enabled": BOOL, "ts": NUM, "by": s(120)},
+    # موعد إضافي محجوز (يُكتب عند الحجز فيراه بقية المستفيدين محجوزاً)
+    "extraTaken": {".read": f"{IS_MEMBER} || {IS_ADMIN}", **w(can('sessions')),
+                   "$sid": {".write": f"{IS_MEMBER} && !data.exists() && newData.val() === true && {EXTRA_ON} && {R}bookings/x_' + $sid + '/menteeId').val() === {ME}",
+                            ".validate": "newData.val() === true"}},
+    # علاقة مستفيد بمرشد (تسمح بتبادل الإشعارات بينهما بعد حجز جلسة إضافية)
+    "extraPairs": {".read": can('sessions'), **w(can('sessions')),
+                   "$k": {".write": f"{IS_MEMBER} && newData.val() === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentee' && $k.beginsWith({ME} + '_')",
+                          ".validate": "newData.val() === true"}},
     "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists()"), **INTEREST}},
     "eventRegs": {".read": can('events', 'certificates'), **w(can('events')),
                   "$rid": {**w(f"(!data.exists() && newData.child('eventId').isString() && (!newData.child('memberId').exists() || (auth != null && {ME} === {n('memberId')}))) || (data.exists() && !newData.exists() && auth != null && {ME} === {d('memberId')})"),

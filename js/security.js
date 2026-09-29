@@ -5,23 +5,23 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news'];
+const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
-function memberPaths(id, role, partner, extraMentors = []) {
+function memberPaths(id, role, partner) {
   const mentorId = role === 'mentor' ? id : partner;
-  const slotOwners = [...new Set([mentorId, ...extraMentors].filter(Boolean))];
-  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`,
-    role === 'mentor' ? `extraOffers/${id}` : `extraMentors/${id}`, ...(role === 'mentor' ? [`extraLinks/${id}`] : []),
+  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`, 'extraTaken',
     q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
     q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id), q('tickets', 'memberId', id),
-    ...slotOwners.map(m => q('slots', 'mentorId', m)), ...(partner ? [`contacts/${partner}`] : [])];
+    // مواعيد المرشد الأساسية (المرشد نفسه أو مرشد المستفيد)، ومواعيد الجلسات الإضافية المفتوحة لكل المستفيدين
+    ...(mentorId ? [q('slots', 'mentorId', mentorId)] : []), ...(role === 'mentee' ? [q('slots', 'extra', true)] : []),
+    ...(partner ? [`contacts/${partner}`] : [])];
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
   content: [], announce: [], interests: ['interests'],
   cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
-  sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraOffers', 'extraLinks', 'extraMentors'],
+  sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraTaken', 'extraPairs'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
   messages: ['messages', 'inbox', 'tickets', 'ticketStaff', 'network', 'pairs'],
   events: ['eventRegs', 'myRegs'],
@@ -41,7 +41,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 7;
+const RULES_VERSION = 8;
 
 const Auth = {
   KEY: 'ishraq-auth',
@@ -138,8 +138,7 @@ const Security = (() => {
       return Store.setScope(`admin:${u.uid}:${perms.join(',')}`, [...paths]);
     }
     const partner = await Store.readOnce(`pairs/${session.id}`);
-    const extra = session.kind === 'mentee' ? Object.keys((await Store.readOnce(`extraMentors/${session.id}`)) || {}) : [];
-    return Store.setScope(`member:${session.id}`, memberPaths(session.id, session.kind, partner, extra));
+    return Store.setScope(`member:${session.id}`, memberPaths(session.id, session.kind, partner));
   }
 
   async function roleFor(uid) {

@@ -10,13 +10,6 @@ const Portal = (() => {
     const other = kind === 'mentor' ? Data.menteeOf(me.id) : Data.mentorOf(me.id);
     // بيانات تواصل الطرف المرتبط تُقرأ من مسار خاص تسمح به القواعد لهذا العضو فقط
     if (other && String(Store.scope || '').startsWith('member:')) Store.watch(`contacts/${other.id}`);
-    // الجلسات الإضافية: مواعيد المرشدين الإضافيين وبيانات التواصل تُقرأ باستعلامات خاصة بهذا العضو
-    if (String(Store.scope || '').startsWith('member:')) {
-      (kind === 'mentee' ? Data.extraMentorsOf(me.id) : Data.extraMenteesOf(me.id)).forEach(x => {
-        Store.watch(`contacts/${x.id}`);
-        if (kind === 'mentee') Store.watch({ path: 'slots', child: 'mentorId', equalTo: x.id });
-      });
-    }
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const bookings = Data.bookings(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id });
     const msgs = Data.messagesFor(me);
@@ -137,9 +130,8 @@ const Portal = (() => {
             const start = readTime(f, 'start'), end = readTime(f, 'end');
             if (minutesBetween(start, end) <= 0) { toast('وقت النهاية يجب أن يكون بعد وقت البداية', 'error'); return false; }
             if (extra) {
-              if (!Data.extraMenteesOf(me.id).length) { toast('تُفتح مواعيد الجلسات الإضافية بعد أن تربطك الإدارة بمستفيد إضافي', 'error'); return false; }
+              if (!Data.extraOn()) { toast('الجلسات الإضافية غير مفعّلة من الإدارة حالياً', 'error'); return false; }
               Store.push('slots', { mentorId: me.id, extra: true, date: v.date, start, end, mode: v.mode, summary: v.summary, ts: Date.now() });
-              Data.extraMenteesOf(me.id).forEach(x => Data.notify(x.id, `أضاف مرشدك ${me.name} موعداً جديداً لجلسة إضافية: ${fmtDate(v.date)} ${start}`, { icon: 'fa-calendar-plus' }));
               toast('تمت إضافة الموعد');
               return;
             }
@@ -200,14 +192,20 @@ const Portal = (() => {
             if (!validateForm(f)) return false;
             if (!slot.extra && Data.activeBooking(me.id, slot.session)) { toast('هذه الجلسة محجوزة مسبقاً', 'error'); return; }
             const mode = slot.mode === 'both' ? readForm(f).mode : slot.mode;
+            let bid = slot.extra ? `x_${slot.id}` : null;
             const bk = {
               mentorId: slot.mentorId, menteeId: me.id, cohort: me.cohort, slotId: slot.id, ...(slot.extra ? { extra: true } : { session: slot.session }),
               date: slot.date, start: slot.start, end: slot.end, mode, summary: slot.summary || '', status: 'upcoming', ts: Date.now()
             };
             // الجلسة الإضافية برقم ثابت من رقم الموعد: لا يستطيع مستفيدان حجز الموعد نفسه
-            if (slot.extra) Store.set(`bookings/x_${slot.id}`, { id: `x_${slot.id}`, ...bk }); else Store.push('bookings', bk);
+            if (slot.extra) {
+              Store.set(`bookings/x_${slot.id}`, { id: `x_${slot.id}`, ...bk });
+              Store.set(`extraPairs/${me.id}_${slot.mentorId}`, true);
+              Store.set(`extraTaken/${slot.id}`, true);
+            } else bid = Store.push('bookings', bk);
             Data.notify(slot.mentorId, `حجز المستفيد ${me.name} ${slot.extra ? 'جلسة إضافية' : sessionName(slot.session)}: ${fmtSlot(slot)} (${MODES[mode]})`, { icon: 'fa-calendar-check' });
             toast('تم حجز الجلسة بنجاح');
+            setTimeout(() => Cal.open(bid, 'mentee'), 350);
           }
         },
         { label: 'إلغاء', cls: 'ghost' }
@@ -222,40 +220,51 @@ const Portal = (() => {
     ${mine ? (booked ? '<span class="pill st-done">محجوز</span>' : `<button class="icon-btn danger" data-del-slot="${esc(s.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button>`)
       : `<button class="btn sm primary" data-book="${esc(s.id)}"><i class="fa-solid fa-check"></i> احجز</button>`}</li>`;
 
+  // عدّاد الجلسات الإضافية المنفصل + الوسام (بعد إنجاز جلسة إضافية واحدة على الأقل)
+  function extraCounter(me) {
+    const st = Data.extraStats(me.id);
+    return `<div class="extra-counter"><div><b>${st.done}</b><span>جلسة إضافية منجزة</span></div><div><b>${st.hours}</b><span>ساعة إضافية</span></div></div>`;
+  }
+
   function extraMentorPanel(me) {
-    const offer = Data.extraOffer(me.id), on = !!offer?.on;
-    const mentees = Data.extraMenteesOf(me.id);
+    if (!Data.extraOn()) return '';
     const slots = Data.slots(me.id, true);
-    const booked = new Set(Data.bookings({ mentorId: me.id, extra: true }).filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
     const bks = Data.bookings({ mentorId: me.id, extra: true });
+    const booked = new Set(bks.filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
+    const st = Data.extraStats(me.id);
     return `<section class="panel extra-panel" id="extra-panel">
-      <div class="panel-head"><h2><i class="fa-solid fa-hand-holding-heart"></i> متاح لساعات إرشادية إضافية</h2>
-        <label class="switch"><input type="checkbox" data-extra-toggle ${on ? 'checked' : ''}><span></span> ${on ? 'أنا متاح' : 'غير متاح'}</label></div>
-      <p class="muted small">فعّل هذا الخيار إن كنت مستعداً لعقد جلسات إرشادية إضافية مع مستفيدين آخرين غير المعيّن لك. ستظهر للإدارة رغبتك، وتربطك بمستفيد إضافي، ثم تضيف هنا مواعيد الجلسات الإضافية ويحجز منها.</p>
-      ${on ? `<form class="extra-note" data-extra-note><input name="note" maxlength="500" placeholder="ملاحظة للإدارة (اختياري): الأوقات المناسبة، عدد الجلسات..." value="${esc(offer?.note || '')}"><button class="btn xs ghost" type="submit">حفظ الملاحظة</button></form>` : ''}
-      ${mentees.length ? `<div class="extra-linked"><h3 class="sub">المستفيدون الإضافيون المرتبطون بك</h3><div class="bp-list">${mentees.map(m => `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>`).join('')}</div>
-        <div class="slot-group"><div class="panel-head"><h3>مواعيد الجلسات الإضافية <span class="count">${slots.length}</span></h3>
-          <button class="btn primary sm" data-add-extra-slot><i class="fa-solid fa-plus"></i> إضافة موعد</button></div>
-          ${slots.length ? `<ul class="slot-list">${slots.map(x => slotLi(x, booked.has(x.id), true)).join('')}</ul>` : '<p class="muted small">لا توجد مواعيد مقترحة</p>'}</div></div>`
-        : on ? '<p class="slot-state locked"><i class="fa-solid fa-hourglass-half"></i> بانتظار أن تربطك الإدارة بمستفيد إضافي، وبعدها تظهر لك هنا إضافة المواعيد.</p>' : ''}
+      <div class="panel-head"><h2><i class="fa-solid fa-hand-holding-heart"></i> جلسات إرشادية إضافية</h2>
+        <button class="btn primary" data-add-extra-slot><i class="fa-solid fa-plus"></i> إضافة موعد</button></div>
+      <p class="muted small">فعّلت الإدارة الجلسات الإضافية. أضف مواعيد لساعات إرشادية إضافية، ويحجز منها أي مستفيد من صفحته، ويمكنك متابعة الجلسة وتحديثها كالجلسات الأساسية. هذه الجلسات لها عدّاد وتقييمات منفصلة.</p>
+      ${extraCounter(me)}
+      ${st.done >= 1 ? `<div class="badge-card"><div class="badge-img"><img data-badge-img alt="وسام الشكر"></div><div><h3><i class="fa-solid fa-medal"></i> وسام شكر خاص</h3>
+        <p class="muted small">شكراً لعطائك في الجلسات الإرشادية الإضافية. يمكنك حفظ الوسام كصورة ومشاركته.</p>
+        <button class="btn primary sm" data-badge-download><i class="fa-solid fa-download"></i> حفظ الوسام كصورة</button></div></div>` : ''}
+      <div class="slot-group"><h3>مواعيدي للجلسات الإضافية <span class="count">${slots.length}</span></h3>
+        ${slots.length ? `<ul class="slot-list">${slots.map(x => slotLi(x, booked.has(x.id), true)).join('')}</ul>` : '<p class="muted small">لم تضف مواعيد بعد</p>'}</div>
     </section>
-    ${mentees.length || bks.length ? scheduledPanel('mentor', me, null, bks, true) : ''}`;
+    ${bks.length ? scheduledPanel('mentor', me, null, bks, true) : ''}`;
   }
 
   function extraMenteePanel(me) {
-    const mentors = Data.extraMentorsOf(me.id);
-    if (!mentors.length) return '';
+    if (!Data.extraOn()) return '';
+    const taken = new Set(Object.keys(Store.get('extraTaken') || {}));
     const bks = Data.bookings({ menteeId: me.id, extra: true });
-    const taken = new Set(bks.filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
-    const block = m => {
-      const list = Data.slots(m.id, true).filter(x => !taken.has(x.id) && dateTimeOf(x.date, x.start) > new Date());
-      return `<div class="slot-group"><h3>${avatar(m, 'sm')} المرشد: ${esc(m.name)}</h3>
-        ${list.length ? `<ul class="slot-list">${list.map(x => slotLi(x, false, false)).join('')}</ul>` : '<p class="muted small">لا توجد مواعيد متاحة حالياً، سيصلك إشعار عند إضافة مرشدك لموعد جديد.</p>'}</div>`;
-    };
+    const mine = new Set(bks.filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
+    const open = Store.list('slots').filter(x => x.extra && !taken.has(x.id) && !mine.has(x.id) && dateTimeOf(x.date, x.start) > new Date())
+      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    const byMentor = new Map();
+    open.forEach(x => { if (!byMentor.has(x.mentorId)) byMentor.set(x.mentorId, []); byMentor.get(x.mentorId).push(x); });
+    const rows = [...byMentor.entries()].map(([mid, list]) => ({ m: Data.member(mid), list })).filter(r => r.m)
+      .sort((a, b) => String(a.m.name).localeCompare(String(b.m.name), 'ar'));
     return `<section class="panel extra-panel" id="extra-panel"><h2><i class="fa-solid fa-hand-holding-heart"></i> جلسات إضافية</h2>
-      <p class="muted small">أتاحت لك الإدارة جلسات إرشادية إضافية مع ${mentors.length > 1 ? 'المرشدين' : 'المرشد'} التاليين. اختر موعداً من المواعيد المتاحة.</p>
-      <div class="slot-groups">${mentors.map(block).join('')}</div></section>
-      ${bks.length ? scheduledPanel('mentee', me, null, bks, true) : ''}`;
+      <p class="muted small">مواعيد جلسات إرشادية إضافية أتاحها المرشدون. اختر موعداً من أي مرشد لتحجزه، وستظهر الجلسة في «الجلسات الإضافية المجدولة».</p>
+      ${rows.length ? `<div class="table-wrap"><table class="table rtable extra-table"><thead><tr><th>المرشد</th><th>المواعيد المتاحة</th></tr></thead><tbody>
+        ${rows.map(({ m, list }) => `<tr><td data-l="المرشد"><span class="bp">${avatar(m, 'md')}<b>${esc(m.name)}</b></span>${m.tagline ? `<small class="muted">${esc(m.tagline)}</small>` : ''}</td>
+          <td data-l="المواعيد المتاحة"><ul class="slot-list">${list.map(x => slotLi(x, false, false)).join('')}</ul></td></tr>`).join('')}</tbody></table></div>`
+        : emptyState('لا توجد مواعيد إضافية متاحة حالياً', 'fa-calendar')}
+    </section>
+    ${bks.length ? scheduledPanel('mentee', me, null, bks, true) : ''}`;
   }
 
   /* ===== الجلسات المجدولة ===== */
@@ -278,6 +287,7 @@ const Portal = (() => {
             <button class="btn xs danger" data-bk="absent_mentor" data-id="${esc(b.id)}" ${dis}><i class="fa-solid fa-user-slash"></i> ملغاة لغياب المرشد</button>
             ${anyConfirmed ? '' : `<button class="btn xs ghost" data-bk="resched" data-id="${esc(b.id)}"><i class="fa-solid fa-pen"></i> تعديل الحجز</button>`}`;
         }
+        actions += `<button class="btn xs ghost" data-cal="${esc(b.id)}"><i class="fa-regular fa-calendar-plus"></i> إضافة للتقويم</button>`;
         if (b.changedBy === kind && other?.whatsapp) {
           actions += `<a class="btn xs wa" href="${esc(waLink(other.whatsapp, rescheduleText(kind, b)))}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> إشعار ${kind === 'mentor' ? 'المستفيد' : 'المرشد'}</a>`;
         }
@@ -399,16 +409,20 @@ const Portal = (() => {
   }
 
   /* ===== التقييمات ===== */
+  const reviewLabel = b => `${Data.bookingName(b)} — ${fmtDate(b.date)}${b.extra ? ` ${b.start}` : ''}`;
+
   function reviewsPanel(kind, me, other, bookings) {
     const done = bookings.filter(b => b.status === 'done');
+    // الجلسات الإضافية المنجزة تدخل في التقييمات أيضاً (وتُميَّز بشارة)
+    const extraDone = Data.bookings({ [kind === 'mentor' ? 'mentorId' : 'menteeId']: me.id, extra: true }).filter(b => b.status === 'done');
     const mine = Data.reviews({ authorId: me.id });
     const reviewedBookings = new Set(mine.filter(r => r.type === 'session').map(r => r.bookingId));
-    const pendingDone = done.filter(b => !reviewedBookings.has(b.id));
+    const pendingDone = done.concat(extraDone).filter(b => !reviewedBookings.has(b.id));
     const received = Data.reviews({ targetId: me.id }).filter(r => r.status === 'approved');
     const finalDone = mine.some(r => r.type === 'final');
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const revItem = (r, showStatus) => `<li class="review">
-      <header><b>${r.type === 'final' ? 'التقييم الختامي' : r.type === 'program' ? 'تقييم البرنامج' : sessionName(r.session)}</b>
+      <header><b>${r.type === 'final' ? 'التقييم الختامي' : r.type === 'program' ? 'تقييم البرنامج' : r.extraSession ? 'جلسة إضافية' : sessionName(r.session)}</b>${r.extraSession ? '<span class="chip extra-chip"><i class="fa-solid fa-hand-holding-heart"></i> جلسة إضافية</span>' : ''}
       ${showStatus ? `<span class="pill ${reviewStatus[r.status]?.[1] || ''}">${reviewStatus[r.status]?.[0] || ''}</span>` : ''}<small>${fmtTs(r.ts)}</small></header>
       <p>${nl2br(r.text)}</p>${r.extra ? `<p class="extra"><b>${r.from === 'mentor' ? 'التوصية' : 'المستفاد من الجلسة'}:</b> ${nl2br(r.extra)}</p>` : ''}</li>`;
 
@@ -419,7 +433,7 @@ const Portal = (() => {
         <div class="review-box">
           <h3>كتابة تقييم ${otherLabel}</h3>
           ${pendingDone.length ? `<form class="form-grid one" data-review-form>
-            ${fieldInput({ k: 'booking', label: 'اختر الجلسة المنجزة', type: 'select', required: true, options: pendingDone.map(b => `${sessionName(b.session)} — ${fmtDate(b.date)}`) })}
+            ${fieldInput({ k: 'booking', label: 'اختر الجلسة المنجزة', type: 'select', required: true, options: pendingDone.map(reviewLabel) })}
             ${fieldInput({ k: 'text', label: `تقييمك لـ${otherLabel}`, type: 'textarea', required: true, rows: 3 })}
             ${fieldInput({ k: 'extra', label: kind === 'mentor' ? 'توصية للمستفيد كنتيجة للجلسة' : 'انطباعك والمستفاد من الجلسة', type: 'textarea', rows: 3 })}
             <button class="btn primary" type="submit"><i class="fa-solid fa-paper-plane"></i> إرسال التقييم</button>
@@ -440,13 +454,13 @@ const Portal = (() => {
     const v = readForm(form);
     const reviewed = new Set(Data.reviews({ authorId: me.id, type: 'session' }).map(r => r.bookingId));
     const list = done.filter(b => !reviewed.has(b.id));
-    const b = list.find(x => `${sessionName(x.session)} — ${fmtDate(x.date)}` === v.booking);
+    const b = list.find(x => reviewLabel(x) === v.booking);
     if (!b) return;
     Store.push('reviews', {
-      type: 'session', from: kind, authorId: me.id, targetId: other?.id || '', mentorId: b.mentorId, menteeId: b.menteeId,
-      bookingId: b.id, session: b.session, text: v.text, extra: v.extra, status: 'pending', ts: Date.now()
+      type: 'session', from: kind, authorId: me.id, targetId: b.extra ? (kind === 'mentor' ? b.menteeId : b.mentorId) : (other?.id || ''), mentorId: b.mentorId, menteeId: b.menteeId,
+      bookingId: b.id, ...(b.extra ? { extraSession: true } : { session: b.session }), text: v.text, extra: v.extra, status: 'pending', ts: Date.now()
     });
-    Data.notify('admin', `تقييم جديد من ${kind === 'mentor' ? 'المرشد' : 'المستفيد'} ${me.name} عن ${sessionName(b.session)} بانتظار الاعتماد`, { icon: 'fa-star' });
+    Data.notify('admin', `تقييم جديد من ${kind === 'mentor' ? 'المرشد' : 'المستفيد'} ${me.name} عن ${Data.bookingName(b)} بانتظار الاعتماد`, { icon: 'fa-star' });
     toast('تم إرسال التقييم، وسيظهر بعد اعتماد الإدارة');
   }
 
@@ -510,28 +524,21 @@ const Portal = (() => {
     $('[data-download-card]', root)?.addEventListener('click', () => CardImage.download(Data.member(me.id)));
     $('[data-add-slot]', root)?.addEventListener('click', () => openAddSlot(me));
     $('[data-add-extra-slot]', root)?.addEventListener('click', () => openAddSlot(me, 1, true));
-    $('[data-extra-toggle]', root)?.addEventListener('change', e => {
-      const on = e.target.checked, prev = Data.extraOffer(me.id);
-      Store.set(`extraOffers/${me.id}`, { on, ts: Date.now(), ...(prev?.note ? { note: prev.note } : {}) });
-      if (on) Data.notify('admin', `المرشد ${me.name} متاح لساعات إرشادية إضافية`, { icon: 'fa-hand-holding-heart' });
-      toast(on ? 'وصلت رغبتك إلى الإدارة' : 'تم إيقاف التوفر للساعات الإضافية');
-    });
-    $('[data-extra-note]', root)?.addEventListener('submit', e => {
-      e.preventDefault();
-      Store.update(`extraOffers/${me.id}`, { note: e.target.note.value.trim(), ts: Date.now() });
-      toast('تم حفظ الملاحظة');
-    });
+    $('[data-badge-download]', root)?.addEventListener('click', () => Badge.download(me));
+    const bimg = $('[data-badge-img]', root); if (bimg) Badge.render(me).then(c => { bimg.src = c.toDataURL('image/png'); });
     $$('[data-add-slot-alert]', root).forEach(b => b.onclick = () => openAddSlot(me, +b.dataset.addSlotAlert));
     $$('[data-dismiss-rem]', root).forEach(b => b.onclick = () => Store.update(`notifications/${me.id}/${b.dataset.dismissRem}`, { dismissed: true, read: true }));
     $$('[data-del-slot]', root).forEach(b => b.onclick = async () => {
       if (await confirmDialog('حذف هذا الموعد؟', { danger: true, ok: 'حذف' })) Store.remove(`slots/${b.dataset.delSlot}`);
     });
     $$('[data-book]', root).forEach(b => b.onclick = () => { const sl = Store.get(`slots/${b.dataset.book}`); if (sl) openBook(me, sl); });
+    $$('[data-cal]', root).forEach(b => b.onclick = () => Cal.open(b.dataset.cal, kind));
     $$('[data-bk]', root).forEach(b => b.onclick = () => bookingAction(kind, me, other, b.dataset.id, b.dataset.bk));
     const rf = $('[data-review-form]', root);
     rf && rf.addEventListener('submit', e => {
       e.preventDefault();
-      const done = Data.bookings(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id }).filter(b => b.status === 'done');
+      const own = kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id };
+      const done = Data.bookings(own).concat(Data.bookings({ ...own, extra: true })).filter(b => b.status === 'done');
       submitReview(kind, me, other, rf, done);
     });
     $('[data-final]', root)?.addEventListener('click', () => openFinal(kind, me, other));

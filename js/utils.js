@@ -405,12 +405,14 @@ const Data = {
     return Store.list('bookings').filter(b => !!b.extra === !!extra && Object.entries(f).every(([k, v]) => b[k] === v))
       .sort((a, b) => (a.session || 0) - (b.session || 0) || (a.date + a.start).localeCompare(b.date + b.start));
   },
-  /* ===== ساعات إرشادية إضافية ===== */
-  extraOffer: mentorId => Store.get(`extraOffers/${mentorId}`) || null,
-  extraMenteesOf: mentorId => Object.keys(Store.get(`extraLinks/${mentorId}`) || {}).map(id => Data.member(id)).filter(Boolean),
-  extraMentorsOf: menteeId => Object.keys(Store.get(`extraMentors/${menteeId}`) || {}).map(id => Data.member(id)).filter(Boolean),
-  linkExtra(mentorId, menteeId) { Store.set(`extraLinks/${mentorId}/${menteeId}`, true); Store.set(`extraMentors/${menteeId}/${mentorId}`, true); },
-  unlinkExtra(mentorId, menteeId) { Store.remove(`extraLinks/${mentorId}/${menteeId}`); Store.remove(`extraMentors/${menteeId}/${mentorId}`); },
+  /* ===== جلسات إرشادية إضافية (تفعّلها الإدارة، وتُحسب منفصلة عن الجلسات الأساسية) ===== */
+  extraOn: () => Store.get('extraConfig/enabled') === true,
+  // إحصاءات الجلسات الإضافية المنجزة: لكل مرشد (وللمجموع)، بالساعات
+  extraStats(mentorId) {
+    const done = Data.bookings({ extra: true, ...(mentorId ? { mentorId } : {}) }).filter(b => b.status === 'done');
+    const minutes = done.reduce((t, b) => t + minutesBetween(b.start, b.end), 0);
+    return { done: done.length, minutes, hours: Math.round(minutes / 6) / 10, list: done };
+  },
   // اسم الجلسة كما يظهر في النصوص: أساسية (الأولى...) أو إضافية
   bookingName: b => (b.extra ? 'جلسة إضافية' : sessionName(b.session)),
   reviews: filter => Object.values(Object.assign({}, ...Object.values(Store.get('approvedReviews') || {}), Store.get('reviews') || {})).filter(Boolean).filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))
@@ -487,10 +489,6 @@ const Data = {
     if (partner) Store.remove(`pairs/${partner}`);
     if (Store.get(`pairs/${id}`) != null) Store.remove(`pairs/${id}`);
     if (Store.get(`approvedReviews/${id}`) != null) Store.remove(`approvedReviews/${id}`);
-    // ساعات إضافية: نحذف عروض المرشد وروابطه، وروابط المستفيد من عند مرشديه
-    Object.keys(Store.get(`extraLinks/${id}`) || {}).forEach(b => Store.remove(`extraMentors/${b}/${id}`));
-    Object.keys(Store.get(`extraMentors/${id}`) || {}).forEach(a => Store.remove(`extraLinks/${a}/${id}`));
-    ['extraOffers', 'extraLinks', 'extraMentors'].forEach(k => { if (Store.get(`${k}/${id}`) != null) Store.remove(`${k}/${id}`); });
     Security.deleteMemberAccount(m);
     Store.remove(`members/${id}`);
     Store.remove(`contacts/${id}`);

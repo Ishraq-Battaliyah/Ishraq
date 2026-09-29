@@ -1093,3 +1093,19 @@ textarea { resize: vertical; min-height: 80px; }
 .add-stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; margin: 8px 0; }
 @media (max-width: 720px) { .extra-row { grid-template-columns: 1fr; } }
 .slot-group h3 .avatar { margin-inline-end: 8px; vertical-align: middle; }
+.extra-counter { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.extra-counter > div { flex: 1 1 140px; display: grid; gap: 2px; padding: 12px 16px; border-radius: var(--r-sm); background: linear-gradient(135deg, #FFF6DA, #FCEBDD); border: 1px solid #F0DDA8; }
+.extra-counter b { font-family: var(--f-display); font-size: 1.8rem; color: var(--orange); line-height: 1; }
+.extra-counter span { color: var(--ink-2); font-size: .85rem; }
+.badge-card { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 14px; margin: 10px 0; border-radius: var(--r-sm); background: #fff; border: 1px solid #F0DDA8; }
+.badge-img { width: 150px; flex: none; }
+.badge-img img { width: 100%; display: block; border-radius: 10px; border: 1px solid var(--line); }
+.badge-card h3 { margin: 0 0 4px; color: #B07A0B; }
+.chip.extra-chip { background: #FFF6DA; color: #B07A0B; border-color: #F0DDA8; }
+.extra-table td { vertical-align: top; }
+.extra-table .bp { margin-bottom: 4px; }
+.extra-stat-wrap { margin: 10px 0; }
+.stat-box.st-extra { background: linear-gradient(135deg, #FFF6DA, #FCEBDD); border: 1px solid #F0DDA8; cursor: pointer; }
+.stat-box.st-extra i { color: #B07A0B; }
+.stat-box.st-extra small { color: var(--ink-2); }
+.stat-box.st-extra.active { box-shadow: 0 0 0 3px #F6D36555; }
