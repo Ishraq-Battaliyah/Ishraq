@@ -13,6 +13,7 @@ const SECTION_TYPES = {
   events:       { label: 'فعالية قادمة', icon: 'fa-person-chalkboard', fields: ['nav', 'kicker', 'title', 'subtitle', 'emptyTitle', 'emptyBody'], single: true },
   register:     { label: 'إعلان التسجيل', icon: 'fa-bullhorn', fields: ['nav', 'kicker', 'title', 'body', 'deadline', 'button'] },
   members:      { label: 'أعضاء الدفعات', icon: 'fa-users', fields: ['nav', 'kicker', 'title', 'body', 'button'] },
+  news:         { label: 'أخبار', icon: 'fa-newspaper', fields: ['nav', 'kicker', 'title', 'subtitle'], single: true },
   testimonials: { label: 'آراء المشاركين', icon: 'fa-quote-right', fields: ['nav', 'kicker', 'title', 'subtitle'] },
   video:        { label: 'فيديو', icon: 'fa-circle-play', fields: ['nav', 'kicker', 'title', 'body', 'video'] },
   custom:       { label: 'قسم مخصص', icon: 'fa-pen-ruler', fields: ['nav', 'kicker', 'title', 'body', 'image', 'button', 'buttonLink'] },

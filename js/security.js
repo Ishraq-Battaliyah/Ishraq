@@ -5,14 +5,14 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches'];
+const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
 function memberPaths(id, role, partner) {
   const mentorId = role === 'mentor' ? id : partner;
   return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`,
     q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
-    q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id),
+    q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id), q('tickets', 'memberId', id),
     ...(mentorId ? [q('slots', 'mentorId', mentorId)] : []), ...(partner ? [`contacts/${partner}`] : [])];
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
@@ -21,8 +21,9 @@ const PERM_PATHS = {
   cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
   sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
-  messages: ['messages', 'inbox', 'network', 'pairs'],
-  events: ['eventRegs', 'myRegs']
+  messages: ['messages', 'inbox', 'tickets', 'network', 'pairs'],
+  events: ['eventRegs', 'myRegs'],
+  certificates: ['contacts', 'eventRegs', 'certs']
 };
 const CONTACT_KEYS = ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram'];
 
@@ -35,9 +36,10 @@ const PERMISSIONS = [
   { k: 'messages', label: 'الرسائل', desc: 'إرسال الرسائل للأعضاء والرسائل الواردة', icon: 'fa-envelope' },
   { k: 'announce', label: 'الإعلان المنبثق', desc: 'نافذة الإعلان في الصفحة الرئيسية', icon: 'fa-bullhorn' },
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
+  { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 5;
+const RULES_VERSION = 6;
 
 const Auth = {
   KEY: 'ishraq-auth',

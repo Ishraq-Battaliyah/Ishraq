@@ -27,6 +27,8 @@ const Portal = (() => {
 
         ${Events.portalSection(me)}
 
+        ${Support.memberSection(me)}
+
         ${msgs.length ? `<section class="panel msgs"><h2><i class="fa-solid fa-envelope-open-text"></i> رسائل من الإدارة</h2>
           <ul class="msg-list">${msgs.map(x => `<li><i class="fa-solid fa-bullhorn"></i><div>${x.title ? `<b>${esc(x.title)}</b>` : ''}<p>${nl2br(x.body)}</p><small>${fmtTs(x.ts)}</small></div></li>`).join('')}</ul></section>` : ''}
 

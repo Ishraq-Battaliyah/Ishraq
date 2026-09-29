@@ -135,6 +135,7 @@ const Home = (() => {
       </div></section>`;
     },
     events: s => Events.section(s),
+    news: s => News.section(s),
     video(s) {
       const v = videoEmbed(s.video);
       const player = !v
@@ -193,7 +194,7 @@ const Home = (() => {
 
   function render(root, instant = false) {
     const html = visibleSections().map(s => (R[s.type] ? R[s.type](s) : '')).join('');
-    root.innerHTML = `<div class="home">${html || emptyState('لا يوجد محتوى للعرض')}</div>`;
+    root.innerHTML = `<div class="home">${News.tickerBar()}${html || emptyState('لا يوجد محتوى للعرض')}</div>`;
     if (instant) $$('.reveal', root).forEach(el => el.classList.add('in'));
     wire(root);
   }

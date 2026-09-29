@@ -116,6 +116,21 @@ INBOX = fields({"id": ID, "fromId": ID, "fromName": s(120), "role": one_of('ment
 LOG = fields({"id": ID, "ts": NUM, "action": s(200), "target": s(300), "details": s(500),
               "by": fields({"uid": ID, "email": s(200), "name": s(200)})}, required=('action', 'by'))
 
+NEWS = fields({"id": ID, "title": s(200), "html": s(20000), "images": {"$i": s(500)}, "published": BOOL, "ticker": BOOL,
+               "ts": NUM, "updatedAt": NUM}, required=('title', 'html'))
+
+MSG = fields({"id": ID, "from": one_of('member', 'admin'), "by": s(120), "text": s(3000), "ts": NUM}, required=('from', 'text', 'ts'))
+TICKET = fields({"id": ID, "memberId": ID, "memberName": s(120), "role": one_of('mentor', 'mentee'), "subject": s(150),
+                 "status": one_of('open', 'answered', 'closed'), "ts": NUM, "updatedAt": NUM, "lastFrom": one_of('member', 'admin'),
+                 "unreadAdmin": BOOL, "unreadMember": BOOL, "messages": {"$mid": MSG}}, required=('memberId', 'subject', 'status'))
+
+CERT_TPL = fields({**{k: s(3000) for k in ['title', 'intro', 'body', 'org', 'signerName', 'signerTitle', 'footer', 'emailSubject', 'emailBody']},
+                   "signature": s(600), "stamp": s(600), "showSignature": BOOL, "showStamp": BOOL, "showDate": BOOL})
+CERTS = {".read": can('certificates'), **w(can('certificates')),
+         "templates": {"$kind": {**CERT_TPL}},
+         "names": {"$k": s(120)},
+         "issued": {"$k": fields({"ts": NUM, "by": s(120), "via": s(20)})}}
+
 CONTACT = fields({k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram']})
 
 # ===== قواعد كتابة العضو =====
@@ -135,6 +150,8 @@ REVIEW_CREATE = (f"!data.exists() && {n('authorId')} === {ME}"
                  f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || {n('targetId')} === {PARTNER}.val())"
                  f" && ({n('status')} === 'pending' || ({n('type')} === 'program' && {n('status')} === 'approved' && {n('featured')} === false))")
 
+OWN_TICKET = f"{R}tickets/' + $tid + '/memberId').val() === {ME}"
+
 rules = {
     ".read": IS_FULL,
     "content": {".read": True, **w(can('content'))},
@@ -143,6 +160,10 @@ rules = {
     "events": {".read": True, **w(can('events'))},
     "featured": {".read": True, **w(can('reviews'))},
     "cohorts": {".read": True, **w(can('cohorts'))},
+    # الشهادات: قوالب الشهادات والأسماء المعدّلة وسجل الإصدار
+    "certs": CERTS,
+    # الأخبار: قراءة عامة، والكتابة لصلاحية محتوى الصفحة
+    "news": {".read": True, **w(can('content')), "$id": NEWS},
     # إطلاق الدفعة: يبدأ منه حساب نطاقات متابعة الجلسات
     "launches": {".read": True, **w(can('sessions'))},
     "meta": {".read": True, **w(IS_FULL), "lastBackup": w(IS_ADMIN)},
@@ -151,7 +172,7 @@ rules = {
         "$mid": w(f"auth != null && {ME} === $mid && newData.exists() && {n('code')} === {d('code')} && {n('role')} === {d('role')} && {n('cohort')} === {d('cohort')} && {n('seq')} === {d('seq')} && {n('uid')} === {d('uid')}"),
     },
     "contacts": {
-        ".read": can('cohorts', 'sessions'), **w(can('cohorts')),
+        ".read": can('cohorts', 'sessions', 'certificates'), **w(can('cohorts')),
         "$mid": {
             ".read": f"{IS_MEMBER} && ({ME} === $mid || {PARTNER}.val() === $mid)",
             ".write": f"auth != null && {ME} === $mid",
@@ -201,8 +222,24 @@ rules = {
             },
         },
     },
+    # الدعم الفني والإداري: العضو يقرأ محادثاته فقط ويضيف رسائله، والإدارة (صلاحية الرسائل) تقرأ وتردّ
+    "tickets": {
+        ".read": any_of(can('messages'), f"({IS_MEMBER} && {query('memberId', ME)})"), **w(can('messages')), ".indexOn": ["memberId"],
+        "$tid": {
+            **TICKET,
+            # العضو ينشئ محادثته دون رسائل، ثم يضيف رسائله واحدة واحدة (كلها «من العضو»)
+            ".write": f"{IS_MEMBER} && !data.exists() && {n('memberId')} === {ME} && {n('status')} === 'open' && !newData.child('messages').exists()",
+            "messages": {"$mid": {**MSG, ".write": f"{IS_MEMBER} && !data.exists() && {n('from')} === 'member' && {OWN_TICKET} && {R}tickets/' + $tid + '/status').val() !== 'closed'"}},
+            "updatedAt": {**NUM, ".write": f"{IS_MEMBER} && {OWN_TICKET}"},
+            "lastFrom": {**one_of('member', 'admin'), ".write": f"{IS_MEMBER} && {OWN_TICKET} && newData.val() === 'member'"},
+            # العضو يعيد فتح المحادثة عند رده فقط، ولا يكتب في محادثة مغلقة
+            "status": {**one_of('open', 'answered', 'closed'), ".write": f"{IS_MEMBER} && {OWN_TICKET} && newData.val() === 'open' && data.val() !== 'closed'"},
+            "unreadAdmin": {**BOOL, ".write": f"{IS_MEMBER} && {OWN_TICKET} && newData.val() === true"},
+            "unreadMember": {**BOOL, ".write": f"{IS_MEMBER} && {OWN_TICKET} && newData.val() === false"},
+        },
+    },
     "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists()"), **INTEREST}},
-    "eventRegs": {".read": can('events'), **w(can('events')),
+    "eventRegs": {".read": can('events', 'certificates'), **w(can('events')),
                   "$rid": {**w(f"(!data.exists() && newData.child('eventId').isString() && (!newData.child('memberId').exists() || (auth != null && {ME} === {n('memberId')}))) || (data.exists() && !newData.exists() && auth != null && {ME} === {d('memberId')})"),
                            **EVENT_REG}},
     "myRegs": {".read": can('events', 'cohorts'), **w(can('events', 'cohorts')),

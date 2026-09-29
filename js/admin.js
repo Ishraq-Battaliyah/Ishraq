@@ -7,7 +7,9 @@ const Admin = (() => {
     { id: 'sessions', label: 'الجلسات', icon: 'fa-calendar-days' },
     { id: 'reviews', label: 'التقييمات', icon: 'fa-star' },
     { id: 'messages', label: 'الرسائل', icon: 'fa-envelope' },
+    { id: 'support', label: 'مراسلات', icon: 'fa-comments' },
     { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
+    { id: 'certificates', label: 'الشهادات', icon: 'fa-award' },
     { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
@@ -15,7 +17,7 @@ const Admin = (() => {
   const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
 
   // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
-  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', events: 'events', announce: 'announce', interests: 'interests' };
+  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
   const tabAllowed = id => (id === 'admins' ? Security.isOwner() : Security.can(TAB_PERM[id]));
 
   let lastRoot = null;
@@ -24,7 +26,7 @@ const Admin = (() => {
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length, events: Events.unseen() };
+    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length, support: Support.unreadAdmin(), events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -143,6 +145,7 @@ const Admin = (() => {
           <button class="icon-btn danger" data-del-sec title="حذف"><i class="fa-solid fa-trash"></i></button>
         </div></li>`).join('')}</ul>
     </div>
+    ${News.adminPanel()}
     ${formBuilderPanel()}`;
   };
 
@@ -804,6 +807,9 @@ const Admin = (() => {
         <button class="icon-btn danger" data-del-inbox="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل واردة', 'fa-inbox')}
     </div>`;
   };
+
+  P.support = () => Support.adminPanel();
+  P.certificates = () => Certs.adminPanel();
 
   /* =============== 6) الإعلان =============== */
   P.announce = () => {

@@ -104,6 +104,7 @@
   document.getElementById('boot')?.remove();
   render(false);
   window.addEventListener('hashchange', () => render(false));
+  window.addEventListener('ishraq-rerender', () => render(true));
   let t;
   Store.subscribe(() => { clearTimeout(t); t = setTimeout(() => render(true), 60); });
 })();
