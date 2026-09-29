@@ -555,6 +555,7 @@ const Admin = (() => {
       }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
     </div>
     ${bandsPanel()}
+    ${extraAdminPanel()}
     ${sel ? mentorSessions(sel) : ''}`;
   };
 
@@ -617,8 +618,8 @@ const Admin = (() => {
     const ids = new Set(Data.members(null, cid).map(m => m.id));
     const mine = x => ids.has(x.mentorId) || ids.has(x.menteeId) || ids.has(x.authorId) || ids.has(x.targetId);
     return {
-      slots: Store.list('slots').filter(x => ids.has(x.mentorId)),
-      bookings: Store.list('bookings').filter(mine),
+      slots: Store.list('slots').filter(x => ids.has(x.mentorId) && !x.extra),
+      bookings: Store.list('bookings').filter(x => mine(x) && !x.extra),
       reviews: Store.list('reviews').filter(mine)
     };
   }
@@ -698,6 +699,39 @@ const Admin = (() => {
         { label: 'إغلاق', cls: 'ghost' }
       ]
     });
+  }
+
+  /* ===== جلسات إضافية: المرشدون المتاحون، والربط بمستفيد إضافي، وجدول الجلسات ===== */
+  function extraAdminPanel() {
+    const mentors = Data.members('mentor').filter(m => inCohort('sessCohort', m));
+    const ids = new Set(mentors.map(m => m.id));
+    const avail = mentors.filter(m => Data.extraOffer(m.id)?.on || Data.extraMenteesOf(m.id).length);
+    const bks = Data.bookings({ extra: true }).filter(b => ids.has(b.mentorId) && ['upcoming', 'done'].includes(b.status))
+      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+    const done = bks.filter(b => b.status === 'done').length;
+    const person = m => (m ? `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>` : '<span class="muted">—</span>');
+    const row = m => {
+      const offer = Data.extraOffer(m.id), linked = Data.extraMenteesOf(m.id);
+      const linkedIds = new Set(linked.map(x => x.id));
+      const own = Store.get(`network/${m.cohort}/${m.id}`);
+      const cand = Data.members('mentee').filter(x => x.id !== own && !linkedIds.has(x.id))
+        .sort((a, b) => (b.cohort === m.cohort) - (a.cohort === m.cohort) || String(a.name).localeCompare(String(b.name), 'ar'));
+      return `<li class="extra-row">
+        <div class="er-mentor">${person(m)}${offer?.on ? '<span class="pill st-done">متاح</span>' : '<span class="pill">أوقف التوفر</span>'}${offer?.note ? `<small class="muted">${esc(offer.note)}</small>` : ''}</div>
+        <div class="er-link"><div class="bp-list">${linked.map(x => `<span class="bp linked">${avatar(x, 'sm')}<b>${esc(x.name)}</b><button class="icon-btn danger xs" data-extra-unlink="${esc(m.id)}:${esc(x.id)}" title="إلغاء الربط"><i class="fa-solid fa-xmark"></i></button></span>`).join('') || '<small class="muted">لم يُربط بمستفيد بعد</small>'}</div>
+          <div class="er-add"><select data-extra-select="${esc(m.id)}"><option value="">— ربط بمستفيد إضافي —</option>${cand.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (${esc(Data.cohort(x.cohort)?.name || '')})</option>`).join('')}</select>
+          <button class="btn xs primary" data-extra-link="${esc(m.id)}"><i class="fa-solid fa-link"></i> ربط</button></div></div></li>`;
+    };
+    return `<div class="panel extra-admin">
+      <div class="panel-head"><h2><i class="fa-solid fa-hand-holding-heart"></i> جلسات إضافية</h2></div>
+      <p class="muted small">المرشدون الذين أعلنوا استعدادهم لساعات إرشادية إضافية. اربط المرشد بمستفيد إضافي، فيضيف مواعيده في صفحته ويحجز منها المستفيد. ${ui.sessCohort === 'all' ? '' : 'المعروض حسب الدفعة المحددة أعلاه.'}</p>
+      ${avail.length ? `<ul class="extra-list">${avail.map(row).join('')}</ul>` : emptyState('لم يعلن أي مرشد استعداده لساعات إضافية بعد', 'fa-hand-holding-heart')}
+      <h3 class="sub"><i class="fa-solid fa-list-check"></i> الجلسات الإضافية (القادمة والمنجزة) <span class="count">${bks.length}</span></h3>
+      <div class="add-stats two"><div class="add-stat"><i class="fa-solid fa-hourglass-half"></i><b>${bks.length - done}</b><span>قادمة</span></div><div class="add-stat"><i class="fa-solid fa-circle-check"></i><b>${done}</b><span>منجزة</span></div></div>
+      ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>المستفيد</th><th>التاريخ</th><th>الوقت</th><th>النوع</th><th>الحالة</th></tr></thead><tbody>
+        ${bks.map(b => `<tr><td data-l="المرشد">${person(Data.member(b.mentorId))}</td><td data-l="المستفيد">${person(Data.member(b.menteeId))}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
+      </tbody></table></div>` : emptyState('لا توجد جلسات إضافية قادمة أو منجزة', 'fa-calendar')}
+    </div>`;
   }
 
   function statList(all, key) {
@@ -1178,6 +1212,23 @@ const Admin = (() => {
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
       const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }
       const bmn = t.closest('[data-band-mentor]'); if (bmn) return bandMentorDialog(bmn.dataset.bandMentor, Number(bmn.dataset.session));
+      const xl = t.closest('[data-extra-link]');
+      if (xl) {
+        const mid = xl.dataset.extraLink, sel = $(`[data-extra-select="${mid}"]`, root), bid = sel?.value;
+        if (!bid) return toast('اختر المستفيد أولاً', 'error');
+        const m = Data.member(mid), b = Data.member(bid);
+        Data.linkExtra(mid, bid);
+        Data.notify(mid, `ربطتك الإدارة بالمستفيد ${b?.name || ''} لجلسات إرشادية إضافية، يمكنك الآن إضافة مواعيدها من صفحتك`, { icon: 'fa-hand-holding-heart' });
+        Data.notify(bid, `أتاحت لك الإدارة جلسات إرشادية إضافية مع المرشد ${m?.name || ''}، اطّلع على مواعيده في صفحتك`, { icon: 'fa-hand-holding-heart' });
+        Security.log('ربط جلسات إضافية', m?.name || mid, `المستفيد ${b?.name || bid}`);
+        return toast('تم الربط');
+      }
+      const xu = t.closest('[data-extra-unlink]');
+      if (xu) {
+        const [mid, bid] = xu.dataset.extraUnlink.split(':');
+        return confirmDialog(`إلغاء ربط ${esc(Data.member(mid)?.name || '')} بـ${esc(Data.member(bid)?.name || '')}؟ تبقى الجلسات المحجوزة سابقاً كما هي.`, { danger: true, ok: 'إلغاء الربط', cancel: 'رجوع' })
+          .then(ok => { if (ok) { Data.unlinkExtra(mid, bid); Security.log('إلغاء ربط جلسات إضافية', Data.member(mid)?.name || mid, Data.member(bid)?.name || bid); } });
+      }
       const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }

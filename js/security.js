@@ -8,20 +8,22 @@
 const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
-function memberPaths(id, role, partner) {
+function memberPaths(id, role, partner, extraMentors = []) {
   const mentorId = role === 'mentor' ? id : partner;
+  const slotOwners = [...new Set([mentorId, ...extraMentors].filter(Boolean))];
   return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`,
+    role === 'mentor' ? `extraOffers/${id}` : `extraMentors/${id}`, ...(role === 'mentor' ? [`extraLinks/${id}`] : []),
     q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
     q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id), q('tickets', 'memberId', id),
-    ...(mentorId ? [q('slots', 'mentorId', mentorId)] : []), ...(partner ? [`contacts/${partner}`] : [])];
+    ...slotOwners.map(m => q('slots', 'mentorId', m)), ...(partner ? [`contacts/${partner}`] : [])];
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
   content: [], announce: [], interests: ['interests'],
   cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
-  sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots'],
+  sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraOffers', 'extraLinks', 'extraMentors'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
-  messages: ['messages', 'inbox', 'tickets', 'network', 'pairs'],
+  messages: ['messages', 'inbox', 'tickets', 'ticketStaff', 'network', 'pairs'],
   events: ['eventRegs', 'myRegs'],
   certificates: ['contacts', 'eventRegs', 'certs']
 };
@@ -39,7 +41,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 6;
+const RULES_VERSION = 7;
 
 const Auth = {
   KEY: 'ishraq-auth',
@@ -136,7 +138,8 @@ const Security = (() => {
       return Store.setScope(`admin:${u.uid}:${perms.join(',')}`, [...paths]);
     }
     const partner = await Store.readOnce(`pairs/${session.id}`);
-    return Store.setScope(`member:${session.id}`, memberPaths(session.id, session.kind, partner));
+    const extra = session.kind === 'mentee' ? Object.keys((await Store.readOnce(`extraMentors/${session.id}`)) || {}) : [];
+    return Store.setScope(`member:${session.id}`, memberPaths(session.id, session.kind, partner, extra));
   }
 
   async function roleFor(uid) {

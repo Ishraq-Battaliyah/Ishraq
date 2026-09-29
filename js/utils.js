@@ -392,14 +392,27 @@ const Data = {
   backfill() {
     Data.cohorts().forEach(c => Data.syncPairs(c.id));
     Store.list('messages').forEach(x => { if (x.id && x.aud !== Data.messageAud(x)) Store.set(`messages/${x.id}/aud`, Data.messageAud(x)); });
+    if (typeof Support !== 'undefined') Support.hideStaffNames();
     Store.list('reviews').forEach(r => {
       if (r.status === 'approved' && r.targetId && r.targetId !== 'admin' && Store.get(`approvedReviews/${r.targetId}/${r.id}`) == null) Data.publishReview(r);
     });
   },
-  slots: mentorId => Store.list('slots').filter(s => s.mentorId === mentorId)
-    .sort((a, b) => a.session - b.session || (a.date + a.start).localeCompare(b.date + b.start)),
-  bookings: filter => Store.list('bookings').filter(b => !filter || Object.entries(filter).every(([k, v]) => b[k] === v))
-    .sort((a, b) => a.session - b.session || (a.date + a.start).localeCompare(b.date + b.start)),
+  // الجلسات الإضافية (extra:true) منفصلة عن الجلسات الأساسية: لا تدخل في الإحصاءات ولا في التقدم ولا النطاقات
+  slots: (mentorId, extra = false) => Store.list('slots').filter(s => s.mentorId === mentorId && !!s.extra === extra)
+    .sort((a, b) => (a.session || 0) - (b.session || 0) || (a.date + a.start).localeCompare(b.date + b.start)),
+  bookings: filter => {
+    const { extra, ...f } = filter || {};
+    return Store.list('bookings').filter(b => !!b.extra === !!extra && Object.entries(f).every(([k, v]) => b[k] === v))
+      .sort((a, b) => (a.session || 0) - (b.session || 0) || (a.date + a.start).localeCompare(b.date + b.start));
+  },
+  /* ===== ساعات إرشادية إضافية ===== */
+  extraOffer: mentorId => Store.get(`extraOffers/${mentorId}`) || null,
+  extraMenteesOf: mentorId => Object.keys(Store.get(`extraLinks/${mentorId}`) || {}).map(id => Data.member(id)).filter(Boolean),
+  extraMentorsOf: menteeId => Object.keys(Store.get(`extraMentors/${menteeId}`) || {}).map(id => Data.member(id)).filter(Boolean),
+  linkExtra(mentorId, menteeId) { Store.set(`extraLinks/${mentorId}/${menteeId}`, true); Store.set(`extraMentors/${menteeId}/${mentorId}`, true); },
+  unlinkExtra(mentorId, menteeId) { Store.remove(`extraLinks/${mentorId}/${menteeId}`); Store.remove(`extraMentors/${menteeId}/${mentorId}`); },
+  // اسم الجلسة كما يظهر في النصوص: أساسية (الأولى...) أو إضافية
+  bookingName: b => (b.extra ? 'جلسة إضافية' : sessionName(b.session)),
   reviews: filter => Object.values(Object.assign({}, ...Object.values(Store.get('approvedReviews') || {}), Store.get('reviews') || {})).filter(Boolean).filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))
     .sort((a, b) => (a.session || 9) - (b.session || 9) || a.ts - b.ts),
   // الحالة المعروضة: المنجزة تحتاج تأكيد الطرفين، والقادمة التي انتهى وقتها تصبح «انقضاء الوقت»
@@ -474,6 +487,10 @@ const Data = {
     if (partner) Store.remove(`pairs/${partner}`);
     if (Store.get(`pairs/${id}`) != null) Store.remove(`pairs/${id}`);
     if (Store.get(`approvedReviews/${id}`) != null) Store.remove(`approvedReviews/${id}`);
+    // ساعات إضافية: نحذف عروض المرشد وروابطه، وروابط المستفيد من عند مرشديه
+    Object.keys(Store.get(`extraLinks/${id}`) || {}).forEach(b => Store.remove(`extraMentors/${b}/${id}`));
+    Object.keys(Store.get(`extraMentors/${id}`) || {}).forEach(a => Store.remove(`extraLinks/${a}/${id}`));
+    ['extraOffers', 'extraLinks', 'extraMentors'].forEach(k => { if (Store.get(`${k}/${id}`) != null) Store.remove(`${k}/${id}`); });
     Security.deleteMemberAccount(m);
     Store.remove(`members/${id}`);
     Store.remove(`contacts/${id}`);

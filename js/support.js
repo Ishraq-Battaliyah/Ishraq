@@ -53,7 +53,11 @@ const Support = (() => {
   }
 
   /* ===== نافذة المحادثة (للعضو وللإدارة) ===== */
-  const bubble = (m, viewer) => `<div class="bubble ${m.from === viewer ? 'mine' : 'theirs'}"><small><b>${m.from === 'admin' ? `الإدارة${m.by ? ` · ${esc(m.by)}` : ''}` : esc(m.by || 'العضو')}</b> · ${fmtTs(m.ts)}</small><p>${nl2br(m.text)}</p></div>`;
+  // اسم المشرف الذي ردّ محفوظ في مسار منفصل (ticketStaff) لا يقرؤه إلا المشرفون؛ العضو لا يرى إلا «الإدارة»
+  const bubble = (m, viewer, staff = {}) => {
+    const who = m.from === 'admin' ? `الإدارة${viewer === 'admin' && (staff[m.id] || m.by) ? ` · ${esc(staff[m.id] || m.by)}` : ''}` : esc(m.by || 'العضو');
+    return `<div class="bubble ${m.from === viewer ? 'mine' : 'theirs'}"><small><b>${who}</b> · ${fmtTs(m.ts)}</small><p>${nl2br(m.text)}</p></div>`;
+  };
 
   function openThread(tid, viewer, me) {
     const t0 = Store.get(`tickets/${tid}`);
@@ -65,7 +69,8 @@ const Support = (() => {
       const box = $('.thread-msgs', modal.body);
       if (!t || !box) return;
       const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
-      box.innerHTML = msgsOf(t).map(m => bubble(m, viewer)).join('');
+      const staff = viewer === 'admin' ? (Store.get(`ticketStaff/${tid}`) || {}) : {};
+      box.innerHTML = msgsOf(t).map(m => bubble(m, viewer, staff)).join('');
       const st = STATUS[t.status] || STATUS.open;
       $('.thread-status', modal.body).innerHTML = `<span class="pill ${st[1]}">${st[0]}</span>`;
       const closed = t.status === 'closed';
@@ -96,12 +101,14 @@ const Support = (() => {
       const t = Store.get(`tickets/${tid}`);
       if (!text || !t) return;
       const mid = Store.newId(), now = Date.now();
-      const by = viewer === 'admin' ? Security.adminName() : (me?.name || '');
-      Store.set(`tickets/${tid}/messages/${mid}`, { id: mid, from: viewer, by, text, ts: now });
       if (viewer === 'admin') {
+        // اسم المشرف الفعلي يُحفظ للإدارة فقط، ولا يظهر في الرسالة التي يقرؤها العضو
+        Store.set(`tickets/${tid}/messages/${mid}`, { id: mid, from: 'admin', text, ts: now });
+        Store.set(`ticketStaff/${tid}/${mid}`, Security.adminName());
         Store.update(`tickets/${tid}`, { updatedAt: now, lastFrom: 'admin', status: t.status === 'closed' ? 'closed' : 'answered', unreadMember: true });
         Data.notify(t.memberId, `ردّت الإدارة على رسالتك: ${t.subject.slice(0, 80)}`, { icon: 'fa-comments' });
       } else {
+        Store.set(`tickets/${tid}/messages/${mid}`, { id: mid, from: 'member', by: me?.name || '', text, ts: now });
         Store.update(`tickets/${tid}`, { updatedAt: now, lastFrom: 'member', status: 'open', unreadAdmin: true });
         Data.notify('admin', `رد جديد من ${t.memberName || 'عضو'} في «${t.subject.slice(0, 60)}»`, { icon: 'fa-comments' });
       }
@@ -115,7 +122,7 @@ const Support = (() => {
       }
       if (e.target.closest('[data-thread-del]') && await confirmDialog('حذف هذه المحادثة نهائياً؟', { danger: true, ok: 'حذف' })) {
         const t = Store.get(`tickets/${tid}`);
-        Store.remove(`tickets/${tid}`); Security.log('حذف محادثة', t?.subject || ''); modal.close();
+        Store.remove(`tickets/${tid}`); Store.remove(`ticketStaff/${tid}`); Security.log('حذف محادثة', t?.subject || ''); modal.close();
       }
     });
     off = Store.subscribe(draw);
@@ -162,5 +169,12 @@ const Support = (() => {
     requestAnimationFrame(() => { const n = $('[data-tk-search]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
   });
 
-  return { memberSection, openNew, openThread, adminPanel, unreadAdmin, all };
+  // ينقل أسماء المشرفين من رسائل الرد القديمة إلى المسار الخاص بالإدارة
+  function hideStaffNames() {
+    all().forEach(t => msgsOf(t).forEach(m => {
+      if (m.from === 'admin' && m.by) { Store.set(`ticketStaff/${t.id}/${m.id}`, m.by); Store.remove(`tickets/${t.id}/messages/${m.id}/by`); }
+    }));
+  }
+
+  return { hideStaffNames, memberSection, openNew, openThread, adminPanel, unreadAdmin, all };
 })();
