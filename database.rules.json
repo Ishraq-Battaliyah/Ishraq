@@ -83,6 +83,20 @@
             ".validate": "newData.isString() && newData.val().length <= 120"
           }
         },
+        "mailer": {
+          "url": {
+            ".validate": "newData.isString() && newData.val().length <= 400"
+          },
+          "secret": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
         "issued": {
           "$k": {
             "ts": {

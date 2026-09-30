@@ -276,8 +276,10 @@ const Certs = (() => {
      المتصفحات لا تسمح بإرفاق ملف تلقائياً في رسالة جاهزة، لذلك يُنزَّل ملف الشهادة ويُرفق بسحبه أو بالمشبك. */
   const MAIL_KEY = 'ishraq-mail-provider';
   const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const PROVIDERS = { gmail: 'Gmail (في المتصفح)', outlook: 'Outlook (في المتصفح)', app: 'تطبيق البريد الافتراضي' };
-  const getProvider = () => { let v = null; try { v = localStorage.getItem(MAIL_KEY); } catch { /* ignore */ } return PROVIDERS[v] ? v : (isMobile() ? 'app' : 'gmail'); };
+  // الإرسال المباشر: سكربت Google Apps Script على بريد الجمعية يرسل الرسالة مع الملف مرفقاً وعنوان المستلم (إعداده في certs/mailer)
+  const mailer = () => { const m = Store.get('certs/mailer'); return m && /^https:\/\/script\.google(usercontent)?\.com\//.test(m.url || '') && m.secret ? m : null; };
+  const PROVIDERS = () => ({ ...(mailer() ? { direct: 'إرسال مباشر من بريد الجمعية (مع المرفق)' } : {}), gmail: 'Gmail (في المتصفح)', outlook: 'Outlook (في المتصفح)', app: 'تطبيق البريد الافتراضي' });
+  const getProvider = () => { let v = null; try { v = localStorage.getItem(MAIL_KEY); } catch { /* ignore */ } const P = PROVIDERS(); return P[v] ? v : (mailer() ? 'direct' : isMobile() ? 'app' : 'gmail'); };
   const setProvider = v => { try { localStorage.setItem(MAIL_KEY, v); } catch { /* ignore */ } };
   const enc = encodeURIComponent;
   function composeUrl(provider, to, subject, body) {
@@ -288,7 +290,7 @@ const Certs = (() => {
   }
   // نفتح تبويب البريد فور الضغط (قبل تجهيز الملف) حتى لا يحجبه المتصفح كنافذة منبثقة، ثم نوجّهه للرابط
   function preOpen() {
-    if (getProvider() === 'app') return null;
+    if (['app', 'direct'].includes(getProvider())) return null;
     const w = window.open('', '_blank');
     try { w && (w.document.title = 'جارٍ فتح البريد...', w.document.body.innerHTML = '<p style="font-family:sans-serif;direction:rtl;padding:24px">جارٍ تجهيز الشهادة وفتح رسالة البريد...</p>'); } catch { /* ignore */ }
     return w;
@@ -299,6 +301,20 @@ const Certs = (() => {
   }
   async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } }
 
+  async function blobToBase64(blob) {
+    const buf = new Uint8Array(await blob.arrayBuffer()); let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  async function sendDirect(kind, r, subject, body, blob) {
+    const m = mailer();
+    const res = await fetch(m.url, { method: 'POST', body: JSON.stringify({ secret: m.secret, to: r.email, subject, body, senderName: m.name || '', filename: fileName(kind, r), pdf: await blobToBase64(blob) }) });
+    let j = null; try { j = await res.json(); } catch { /* ignore */ }
+    if (!j?.ok) throw new Error(j?.error === 'auth' ? 'السر غير مطابق للسكربت' : (j?.error || 'تعذّر الإرسال'));
+    markIssued(r, 'direct');
+    return 'direct';
+  }
+
   // mode: 'compose' فتح رسالة جاهزة بعنوان المستلم، أو 'share' مشاركة الملف مباشرة (جوال) مع نسخ عنوان المستلم
   async function sendMail(kind, r, subject, body, blob, win, mode = 'compose') {
     const file = new File([blob], fileName(kind, r), { type: 'application/pdf' });
@@ -308,6 +324,7 @@ const Certs = (() => {
       catch (e) { if (e.name === 'AbortError') return 'cancel'; }
     }
     const provider = getProvider();
+    if (provider === 'direct') return sendDirect(kind, r, subject, body, blob);
     saveBlob(blob, file.name);
     const note = `${body}\n\n(أرفق ملف الشهادة الذي نُزِّل على جهازك: ${file.name})`;
     const url = composeUrl(provider, r.email, subject, note);
@@ -317,7 +334,7 @@ const Certs = (() => {
     markIssued(r, 'mail');
     return provider === 'app' ? 'mailto' : 'web';
   }
-  const mailToast = res => (res === 'share' ? 'تمت المشاركة' : res === 'share-copied' ? 'تمت المشاركة، ونُسخ عنوان المستلم للصقه في خانة «إلى»'
+  const mailToast = res => (res === 'direct' ? 'تم إرسال الشهادة بالبريد مع المرفق' : res === 'share' ? 'تمت المشاركة' : res === 'share-copied' ? 'تمت المشاركة، ونُسخ عنوان المستلم للصقه في خانة «إلى»'
     : res === 'web' ? 'فُتحت رسالة البريد جاهزة؛ أرفق ملف الشهادة المنزَّل (اسحبه إليها أو اضغط المشبك) ثم أرسل' : 'فُتحت رسالة البريد؛ أرفق ملف الشهادة المنزَّل ثم أرسل');
 
   /* ===== نوافذ الإصدار ===== */
@@ -336,7 +353,7 @@ const Certs = (() => {
         <div class="cert-mail"><h4><i class="fa-regular fa-envelope"></i> رسالة البريد ${r.email ? `<small dir="ltr">${esc(r.email)}</small>` : '<small class="muted">لا يوجد بريد مسجل لهذا الشخص</small>'}</h4>
           <div class="field"><label>العنوان</label><input name="subject" value="${esc(mt.subject)}"></div>
           <div class="field"><label>النص</label><textarea name="body" rows="6">${esc(mt.body)}</textarea></div>
-          <div class="field mail-provider"><label>فتح الرسالة عبر</label><select name="provider">${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+          <div class="field mail-provider"><label>فتح الرسالة عبر</label><select name="provider">${Object.entries(PROVIDERS()).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
           <small class="hint">تُفتح رسالة جاهزة إلى ${r.email ? `<b dir="ltr">${esc(r.email)}</b>` : 'المستلم'} بالعنوان والنص أعلاه، ويُنزَّل ملف الشهادة لترفقه بها: اسحبه إلى الرسالة أو اضغط المشبك. (المتصفحات لا تسمح بإرفاق الملف تلقائياً.)</small></div>`,
       actions: [
         { label: '<i class="fa-solid fa-download"></i> حفظ الملف', cls: 'primary', onClick: async () => { const { blob } = await pdfBlob(kind, r); saveBlob(blob, fileName(kind, r)); markIssued(r, 'file'); toast('تم حفظ ملف الشهادة'); } },
@@ -344,10 +361,12 @@ const Certs = (() => {
           if (!r.email) { toast('لا يوجد بريد إلكتروني مسجل لهذا الشخص', 'error'); return false; }
           setProvider($('[name=provider]', mm.body).value);
           const win = preOpen();
-          const { blob } = await pdfBlob(kind, r);
-          const res = await sendMail(kind, r, $('[name=subject]', mm.body).value, $('[name=body]', mm.body).value, blob, win);
-          if (res === 'cancel') return false;
-          toast(mailToast(res));
+          try {
+            const { blob } = await pdfBlob(kind, r);
+            const res = await sendMail(kind, r, $('[name=subject]', mm.body).value, $('[name=body]', mm.body).value, blob, win);
+            if (res === 'cancel') return false;
+            toast(mailToast(res));
+          } catch (err) { console.error(err); win && !win.closed && win.close(); toast(`تعذّر الإرسال: ${err.message}`, 'error'); return false; }
         } },
         ...(isMobile() && navigator.canShare ? [{ label: '<i class="fa-solid fa-share-nodes"></i> مشاركة الملف مباشرة (مرفق تلقائي)', cls: 'ghost', onClick: async mm => {
           if (!r.email) { toast('لا يوجد بريد إلكتروني مسجل لهذا الشخص', 'error'); return false; }
@@ -410,23 +429,36 @@ const Certs = (() => {
     const m = openModal({
       title: `<i class="fa-regular fa-envelope"></i> إرسال الشهادات بالبريد`, size: 'md',
       body: `<p class="muted small">اضغط «إرسال» أمام كل اسم: يُنزَّل ملف شهادته وتُفتح رسالة بريد جاهزة إليه وعنوانه في خانة «إلى»، أرفق الملف وأرسلها. ${total > list.length ? `<b>${total - list.length}</b> من المحددين بلا بريد مسجل وتم استبعادهم.` : ''}</p>
-        <div class="field mail-provider"><label>فتح الرسائل عبر</label><select data-q-provider>${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="field mail-provider"><label>فتح الرسائل عبر</label><select data-q-provider>${Object.entries(PROVIDERS()).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        ${mailer() && getProvider() === 'direct' ? `<button class="btn primary sm" data-q-all><i class="fa-solid fa-paper-plane"></i> إرسال الكل مباشرة (${list.length})</button>` : ''}
         <ul class="mail-queue">${list.map(r => `<li data-q="${esc(r.id)}"><span><b>${esc(r.cert)}</b><small dir="ltr">${esc(r.email)}</small></span><button class="btn xs primary" data-q-send="${esc(r.id)}"><i class="fa-regular fa-paper-plane"></i> إرسال</button></li>`).join('')}</ul>`,
       actions: [{ label: 'تم', cls: 'primary' }]
     });
     m.body.addEventListener('change', e => { if (e.target.matches('[data-q-provider]')) setProvider(e.target.value); });
-    m.body.addEventListener('click', async e => {
-      const b = e.target.closest('[data-q-send]'); if (!b) return;
-      const r = list.find(x => x.id === b.dataset.qSend); if (!r) return;
-      b.disabled = true;
+    const sendOne = async (r, b) => {
       const win = preOpen();
       try {
         const { blob } = await pdfBlob(kind, r); const t = mailText(kind, r);
         const res = await sendMail(kind, r, t.subject, t.body, blob, win);
-        if (res === 'cancel') { b.disabled = false; win && !win.closed && win.close(); return; }
-        done.add(r.id); b.outerHTML = '<span class="pill st-done"><i class="fa-solid fa-check"></i> فُتحت</span>';
+        if (res === 'cancel') { b.disabled = false; win && !win.closed && win.close(); return false; }
+        done.add(r.id); b.outerHTML = `<span class="pill st-done"><i class="fa-solid fa-check"></i> ${res === 'direct' ? 'أُرسلت' : 'فُتحت'}</span>`;
         if (done.size === list.length) Security.log('إرسال شهادات بالبريد', KINDS[kind].label, `${done.size} رسالة`);
-      } catch (err) { console.error(err); b.disabled = false; win && !win.closed && win.close(); toast('تعذّر تجهيز الشهادة', 'error'); }
+        return true;
+      } catch (err) { console.error(err); b.disabled = false; win && !win.closed && win.close(); toast(`تعذّر الإرسال إلى ${r.cert}: ${err.message}`, 'error'); return false; }
+    };
+    m.body.addEventListener('click', async e => {
+      if (e.target.closest('[data-q-all]')) {
+        const all = e.target.closest('[data-q-all]'); all.disabled = true;
+        for (const r of list.filter(x => !done.has(x.id))) {
+          const b = $(`[data-q-send="${r.id}"]`, m.body); if (!b) continue; b.disabled = true;
+          if (!(await sendOne(r, b))) { all.disabled = false; return; }
+        }
+        toast(`تم إرسال ${done.size} رسالة`); return;
+      }
+      const b = e.target.closest('[data-q-send]'); if (!b) return;
+      const r = list.find(x => x.id === b.dataset.qSend); if (!r) return;
+      b.disabled = true;
+      await sendOne(r, b);
     });
   }
 
@@ -439,6 +471,54 @@ const Certs = (() => {
       actions: [{ label: 'حفظ', cls: 'primary', onClick: m => { const v = $('[name=n]', m.body).value.trim(); if (!v) return false; Store.set(`certs/names/${id}`, v === r.name ? null : v); } },
         ...(Store.get(`certs/names/${id}`) ? [{ label: 'استعادة الاسم الأصلي', cls: 'ghost', onClick: () => Store.remove(`certs/names/${id}`) }] : []),
         { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
+
+  /* ===== إعداد الإرسال المباشر (Google Apps Script) ===== */
+  const MAILER_CODE = `const SECRET = 'غيّر-هذه-الكلمة-إلى-سر-طويل';
+const SENDER_NAME = 'برنامج إشراق';
+function doPost(e) {
+  try {
+    const d = JSON.parse(e.postData.contents);
+    if (d.secret !== SECRET) return out({ ok: false, error: 'auth' });
+    if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(d.to || '')) return out({ ok: false, error: 'bad address' });
+    const pdf = Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf');
+    GmailApp.sendEmail(d.to, d.subject || '', d.body || '', { attachments: [pdf], name: d.senderName || SENDER_NAME });
+    return out({ ok: true });
+  } catch (err) { return out({ ok: false, error: String(err) }); }
+}
+function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }`;
+
+  function mailerDialog() {
+    const cur = Store.get('certs/mailer') || {};
+    openModal({
+      title: '<i class="fa-solid fa-paper-plane"></i> إعداد الإرسال المباشر بالبريد', size: 'lg',
+      body: `<p class="muted small">يُرسل بريد الجمعية الشهادة مباشرة إلى المستلم <b>مع الملف مرفقاً تلقائياً</b> وعنوانه في خانة «إلى»، من الحاسوب أو الجوال، دون فتح تطبيق البريد. يحتاج إعداداً لمرة واحدة:</p>
+        <ol class="steps-list"><li>ادخل <b dir="ltr">script.google.com</b> بحساب Gmail الذي سيُرسل الشهادات، واختر <b>مشروع جديد</b>.</li>
+        <li>احذف الكود الموجود والصق الكود أدناه (زر النسخ)، وغيّر السر <code>SECRET</code> إلى كلمة طويلة من اختيارك.</li>
+        <li>اضغط <b>نشر ← نشر جديد ← تطبيق ويب</b>: «تنفيذ باسم: أنا»، «من يملك الوصول: أي شخص». وافق على الصلاحيات (إرسال البريد).</li>
+        <li>انسخ <b>رابط تطبيق الويب</b> والصقه هنا مع السر نفسه.</li></ol>
+        <div class="field wide"><label>الكود <button type="button" class="btn xs ghost" data-copy-code><i class="fa-regular fa-copy"></i> نسخ</button></label><textarea readonly rows="8" dir="ltr" data-code>${esc(MAILER_CODE)}</textarea></div>
+        <form class="form-grid" data-mailer-form>
+          <div class="field wide"><label>رابط تطبيق الويب</label><input name="url" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(cur.url || '')}"></div>
+          <div class="field"><label>السر (نفس SECRET في الكود)</label><input name="secret" dir="ltr" value="${esc(cur.secret || '')}"></div>
+          <div class="field"><label>اسم المرسِل الظاهر للمستلم</label><input name="name" value="${esc(cur.name || 'برنامج إشراق')}"></div></form>
+        <small class="hint">حدّ الإرسال اليومي لحسابات Gmail العادية نحو 100 رسالة (وأكثر لحسابات Google Workspace). لا تشارك السر مع أحد؛ يقرؤه المشرفون بصلاحية «الشهادات» فقط.</small>`,
+      onOpen: m => m.body.addEventListener('click', async e => { if (e.target.closest('[data-copy-code]')) { toast(await copyText(MAILER_CODE) ? 'تم نسخ الكود' : 'تعذّر النسخ، حدّد الكود وانسخه يدوياً'); } }),
+      actions: [{ label: 'حفظ', cls: 'primary', onClick: m => {
+          const f = $('[data-mailer-form]', m.body), v = { url: f.url.value.trim(), secret: f.secret.value.trim(), name: f.name.value.trim() };
+          if (!v.url && !v.secret) { Store.remove('certs/mailer'); toast('أُلغي الإرسال المباشر'); return; }
+          if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(v.url)) { toast('الرابط يجب أن يكون رابط تطبيق ويب من script.google.com', 'error'); return false; }
+          if (v.secret.length < 8) { toast('اختر سراً من 8 أحرف على الأقل', 'error'); return false; }
+          Store.set('certs/mailer', v); setProvider('direct'); Security.log('إعداد الإرسال المباشر للشهادات'); toast('تم الحفظ، صار الإرسال المباشر هو الافتراضي');
+        } },
+        { label: 'اختبار الاتصال', cls: 'ghost', onClick: async m => {
+          const f = $('[data-mailer-form]', m.body), url = f.url.value.trim();
+          try { const res = await fetch(url, { method: 'POST', body: JSON.stringify({ secret: f.secret.value.trim(), to: 'x', ping: 1 }) }); const j = await res.json(); toast(j.error === 'auth' ? 'السكربت يعمل لكن السر غير مطابق' : 'السكربت يستجيب ✔'); }
+          catch { toast('تعذّر الوصول للسكربت؛ تأكد من الرابط وأن الوصول «أي شخص»', 'error'); }
+          return false;
+        } },
+        { label: 'إغلاق', cls: 'ghost' }]
     });
   }
 
@@ -516,7 +596,8 @@ const Certs = (() => {
       : `<div class="chip-filter">${[{ id: 'all', name: 'كل الدفعات' }, ...cohorts].map(c => `<button class="${ui.cohort === c.id ? 'active' : ''}" data-cert-cohort="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>`;
     return `<div class="panel" id="certs-panel">
       <div class="panel-head"><h2><i class="fa-solid fa-award"></i> الشهادات</h2>
-        <button class="btn ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل قوالب الشهادات</button></div>
+        <div class="head-actions"><button class="btn ghost" data-cert-mailer><i class="fa-solid fa-paper-plane"></i> إعداد الإرسال المباشر${mailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>
+        <button class="btn ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل قوالب الشهادات</button></div></div>
       <div class="sub-tabs">${Object.entries(KINDS).map(([k, v]) => `<button class="${ui.kind === k ? 'active' : ''}" data-cert-kind="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
       <div class="cert-filters">${filter}<input class="search" data-cert-search placeholder="ابحث بالاسم أو البريد..." value="${esc(ui.q)}"></div>
       <div class="cert-bar">
@@ -528,9 +609,9 @@ const Certs = (() => {
         <label class="check"><input type="checkbox" data-cert-pick="${esc(r.id)}" ${ui.sel.has(r.id) ? 'checked' : ''}><span class="sr-only">تحديد</span></label>
         <div class="cert-who"><b>${esc(r.cert)}</b>${r.cert !== r.name ? `<small class="muted">الاسم المسجل: ${esc(r.name)}</small>` : ''}
           <small class="muted">${r.sub ? `<span class="num">${esc(r.sub)}</span> · ` : ''}${r.email ? `<span dir="ltr">${esc(r.email)}</span>` : '<span class="warn">بلا بريد</span>'}</small></div>
-        ${iss ? `<span class="pill st-done" title="${fmtTs(iss.ts)}"><i class="fa-solid fa-check"></i> أُصدرت</span>` : ''}
-        <button class="icon-btn" data-cert-edit="${esc(r.id)}" title="تعديل الاسم في الشهادة"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn xs primary" data-cert-pdf="${esc(r.id)}"><i class="fa-solid fa-file-pdf"></i> PDF</button></li>`; }).join('')}</ul>`
+        <div class="cert-actions">${iss ? `<span class="pill st-done" title="${fmtTs(iss.ts)}"><i class="fa-solid fa-check"></i> أُصدرت</span>` : ''}
+        <button class="icon-btn" data-cert-edit="${esc(r.id)}" title="تعديل الاسم في الشهادة" aria-label="تعديل الاسم"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn xs primary" data-cert-pdf="${esc(r.id)}"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></li>`; }).join('')}</ul>`
         : emptyState(ui.kind === 'event' ? 'لا يوجد مسجلون في هذه الفعالية' : 'لا توجد أسماء في هذه القائمة', 'fa-award')}
     </div>`;
   }
@@ -542,6 +623,7 @@ const Certs = (() => {
     const kind = t.closest('[data-cert-kind]'); if (kind) { ui.kind = kind.dataset.certKind; ui.sel.clear(); ui.q = ''; return rerender(); }
     const co = t.closest('[data-cert-cohort]'); if (co) { ui.cohort = co.dataset.certCohort; ui.sel.clear(); return rerender(); }
     if (t.closest('[data-cert-tpl]')) return templateDialog();
+    if (t.closest('[data-cert-mailer]')) return mailerDialog();
     if (t.closest('[data-cert-bulk]')) return bulkDialog();
     const ed = t.closest('[data-cert-edit]'); if (ed) return editName(ed.dataset.certEdit);
     const pdf = t.closest('[data-cert-pdf]'); if (pdf) return issueDialog(pdf.dataset.certPdf);

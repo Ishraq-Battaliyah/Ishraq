@@ -1109,3 +1109,25 @@ textarea { resize: vertical; min-height: 80px; }
 .stat-box.st-extra i { color: #B07A0B; }
 .stat-box.st-extra small { color: var(--ink-2); }
 .stat-box.st-extra.active { box-shadow: 0 0 0 3px #F6D36555; }
+
+/* الشهادات: تناسق الشاشات الصغيرة (بدون تمرير أفقي) */
+.cert-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.cert-who { overflow-wrap: anywhere; }
+#certs-panel { overflow-x: clip; }
+@media (max-width: 640px) {
+  #certs-panel .sub-tabs { flex-wrap: wrap; }
+  #certs-panel .sub-tabs button { flex: 1 1 auto; }
+  .cert-filters { flex-direction: column; align-items: stretch; }
+  .cert-filters select, .cert-filters .search { width: 100%; min-width: 0; }
+  .cert-list li { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
+  .cert-who { flex: 1 1 0; min-width: 0; }
+  .cert-actions { flex: 1 1 100%; justify-content: flex-end; border-top: 1px dashed var(--line); padding-top: 8px; }
+  .cert-bar { gap: 8px; }
+  .cert-bar .btn { margin-inline-start: 0; flex: 1 1 100%; justify-content: center; }
+  #certs-panel .panel-head { flex-wrap: wrap; gap: 8px; }
+  #certs-panel .head-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+  #certs-panel .head-actions .btn { flex: 1 1 100%; justify-content: center; }
+}
+.steps-list { padding-inline-start: 22px; display: grid; gap: 6px; margin: 8px 0; }
+.steps-list code { background: var(--p-l); padding: 0 5px; border-radius: 4px; }
+.fa-circle-check.ok { color: var(--ok); }

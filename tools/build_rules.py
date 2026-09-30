@@ -136,6 +136,7 @@ CERT_TPL = fields({**{k: s(3000) for k in ['title', 'intro', 'body', 'org', 'sig
 CERTS = {".read": can('certificates'), **w(can('certificates')),
          "templates": {"$kind": {**CERT_TPL}},
          "names": {"$k": s(120)},
+         "mailer": fields({"url": s(400), "secret": s(120), "name": s(120)}),
          "issued": {"$k": fields({"ts": NUM, "by": s(120), "via": s(20)})}}
 
 CONTACT = fields({k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram']})
