@@ -16,7 +16,7 @@ const Home = (() => {
 
   const R = {
     header(s) {
-      const links = visibleSections().filter(x => x.nav || x.type === 'news').map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.type === 'news' ? 'الأخبار' : x.nav)}</a>`).join('');
+      const links = visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
       return `<header class="site-header" id="sec-${esc(s.id)}">
         <div class="container hdr-in">
           <a class="brand" href="#/" data-top><img src="assets/ishraq-mark.png" alt=""><span><b>${esc(s.brand || 'إشراق')}</b><small>${esc(s.tagline || '')}</small></span></a>
