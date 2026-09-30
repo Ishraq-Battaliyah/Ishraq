@@ -1131,3 +1131,16 @@ textarea { resize: vertical; min-height: 80px; }
 .steps-list { padding-inline-start: 22px; display: grid; gap: 6px; margin: 8px 0; }
 .steps-list code { background: var(--p-l); padding: 0 5px; border-radius: 4px; }
 .fa-circle-check.ok { color: var(--ok); }
+
+/* لوحة الإدارة: قائمة التبويبات جانبية على الشاشات الكبيرة، وتبقى أفقية قابلة للتمرير على الجوال */
+@media (min-width: 992px) {
+  .dash.admin .dash-main { max-width: 1400px; }
+  .admin-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .admin-tabs { flex-direction: column; overflow: visible; gap: 6px; padding: 10px; margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh); position: sticky; top: 84px; max-height: calc(100vh - 104px); overflow-y: auto; }
+  .admin-tabs button { width: 100%; justify-content: flex-start; padding: .7em 1em; border-radius: 12px; border-color: transparent; background: transparent; }
+  .admin-tabs button:hover { background: var(--p-l); border-color: transparent; }
+  .admin-tabs button.active { background: var(--grad); }
+  .admin-tabs button .caret { display: none; }
+  .admin-tabs button .badge { margin-inline-start: auto; }
+  .admin-tabs button i:first-child { width: 1.3em; text-align: center; }
+}

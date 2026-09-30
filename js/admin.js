@@ -2,12 +2,12 @@
 
 const Admin = (() => {
   const TABS = [
+    { id: 'support', label: 'مراسلات', icon: 'fa-comments' },
     { id: 'content', label: 'محتوى الصفحة', icon: 'fa-pen-ruler' },
     { id: 'cohorts', label: 'الدفعات', icon: 'fa-people-group' },
     { id: 'sessions', label: 'الجلسات', icon: 'fa-calendar-days' },
     { id: 'reviews', label: 'التقييمات', icon: 'fa-star' },
     { id: 'messages', label: 'الرسائل', icon: 'fa-envelope' },
-    { id: 'support', label: 'مراسلات', icon: 'fa-comments' },
     { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
     { id: 'certificates', label: 'الشهادات', icon: 'fa-award' },
     { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
@@ -39,8 +39,10 @@ const Admin = (() => {
         ${dbWarning()}
         ${Security.isFull() ? backupBar() : ''}
         ${tabs.length ? '' : `<div class="panel">${emptyState('لم تُمنح لحسابك أي صلاحيات بعد. تواصل مع أحد الحسابات الرئيسية.', 'fa-user-lock')}</div>`}
-        <nav class="admin-tabs">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${esc(t.id)}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
+        <div class="admin-layout">
+        <nav class="admin-tabs" aria-label="أقسام لوحة الإدارة">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${esc(t.id)}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
         <div class="tab-panel">${ui.tab ? (P[ui.tab] ? P[ui.tab]() : '') : `<div class="tab-hint">${emptyState('اضغط على أي تبويب لعرض تفاصيله، واضغط عليه مرة أخرى لإخفائها.', 'fa-hand-pointer')}</div>`}</div>
+        </div>
       </main>
     </div>`;
     wire(root);
@@ -1143,7 +1145,11 @@ const Admin = (() => {
   /* =============== الربط =============== */
   function wire(root) {
     $('[data-logout]', root).onclick = () => Auth.logout();
-    $$('[data-tab]', root).forEach(b => b.onclick = () => { ui.tab = ui.tab === b.dataset.tab ? null : b.dataset.tab; render(root); });
+    $$('[data-tab]', root).forEach(b => b.onclick = () => {
+      // على الشاشات الكبيرة القائمة جانبية دائمة الظهور فلا يُخفى التبويب النشط، وعلى الجوال يبقى الضغط الثاني يطويه
+      if (ui.tab === b.dataset.tab && window.matchMedia('(min-width: 992px)').matches) return;
+      ui.tab = ui.tab === b.dataset.tab ? null : b.dataset.tab; render(root);
+    });
     root.onclick = e => {
       const t = e.target;
       const ex = t.closest('[data-export]'); if (ex) return doExport(ex);
