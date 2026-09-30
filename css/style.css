@@ -976,7 +976,8 @@ textarea { resize: vertical; min-height: 80px; }
 .tk-item:hover { text-decoration: underline; }
 .tk-sep { color: rgba(255,255,255,.35); font-size: .6rem; }
 @keyframes tk-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .tk-track { animation: none; } .tk-viewport { overflow-x: auto; } }
+/* الشريط يبقى متحركاً حتى مع «تقليل الحركة» في الجهاز، لكن بسرعة أبطأ */
+@media (prefers-reduced-motion: reduce) { .tk-track { animation-duration: calc(var(--tk-dur, 30s) * 1.6); } }
 @media (max-width: 640px) { .tk-label span, .tk-label { padding: 8px 12px; } .tk-label { font-size: 0; gap: 0; } .tk-label i { font-size: 1rem; } }
 .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
 .news-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; box-shadow: var(--sh); transition: transform .2s, box-shadow .2s; }
