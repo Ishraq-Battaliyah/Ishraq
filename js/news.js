@@ -87,7 +87,7 @@ const News = (() => {
         <p>${esc(plain(n.html).slice(0, 140))}${plain(n.html).length > 140 ? '…' : ''}</p><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`;
     };
     return `<section class="sec news-sec" id="sec-${esc(s.id)}"><div class="container">${head}
-      ${list.length ? `<div class="news-grid">${list.map(card).join('')}</div>` : `<p class="muted center">لا توجد أخبار منشورة حالياً.</p>`}
+      ${list.length ? `<div class="news-grid">${list.map(card).join('')}</div><p class="center news-all-wrap"><a class="btn ghost" href="#/news"><i class="fa-solid fa-newspaper"></i> كل الأخبار</a></p>` : `<p class="muted center">لا توجد أخبار منشورة حالياً.</p>`}
     </div></section>`;
   }
 
@@ -120,13 +120,35 @@ const News = (() => {
       ${navigator.share ? `<button class="btn xs primary" data-native-share="${esc(n.id)}"><i class="fa-solid fa-arrow-up-from-bracket"></i> مشاركة</button>` : ''}</div>`;
   }
 
+  const pageTop = (extra = '') => `<header class="news-top"><div class="container news-top-in"><a class="brand" href="#/"><img src="assets/ishraq-mark.png" alt=""><span><b>إشراق</b><small>معك لمستقبل طموح</small></span></a>
+      <div class="news-top-actions">${extra}<a class="btn ghost sm" href="#/"><i class="fa-solid fa-house"></i> الرئيسية</a></div></div></header>`;
+  const pageFoot = '<footer class="news-foot"><div class="container">برنامج إشراق — جمعية البطالية الخيرية · <a href="#/">الصفحة الرئيسية</a></div></footer>';
+  const allBtn = '<a class="btn primary sm" href="#/news"><i class="fa-solid fa-newspaper"></i> كل الأخبار</a>';
+  let listQuery = '';
+
+  // صفحة كل الأخبار المنشورة: #/news
+  function renderList(root) {
+    const q = listQuery.trim().toLowerCase();
+    const list = published().filter(n => !q || `${n.title} ${plain(n.html)}`.toLowerCase().includes(q));
+    setMeta('الأخبار', 'أخبار برنامج إشراق');
+    root.innerHTML = `<div class="news-page">${pageTop()}<main class="container news-main wide">
+      <div class="sec-head"><h1><i class="fa-solid fa-newspaper"></i> أخبار إشراق</h1><p class="sec-sub">جميع الأخبار المنشورة، من الأحدث إلى الأقدم</p></div>
+      <input class="search" data-news-search placeholder="ابحث في الأخبار..." value="${esc(listQuery)}">
+      ${list.length ? `<div class="news-grid">${list.map(n => {
+        const img = imageLinks(n)[0], txt = plain(n.html);
+        return `<a class="news-card" href="${esc(linkPath(n.id))}">
+          ${img ? `<div class="nc-img"><img src="${esc(driveImg(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></div>` : ''}
+          <div class="nc-body"><small><i class="fa-regular fa-calendar"></i> ${fmtTs(n.ts).split(' ')[0]}</small><h3>${esc(n.title)}</h3>
+          <p>${esc(txt.slice(0, 140))}${txt.length > 140 ? '…' : ''}</p><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`; }).join('')}</div>`
+        : emptyState(q ? 'لا توجد أخبار مطابقة' : 'لا توجد أخبار منشورة حالياً', 'fa-newspaper')}
+    </main>${pageFoot}</div>`;
+  }
+
   // صفحة الخبر الكاملة
   function renderPage(root, id) {
     const n = id ? Store.get(`news/${id}`) : null;
     const isAdmin = Auth.current()?.kind === 'admin';
-    const top = `<header class="news-top"><div class="container news-top-in"><a class="brand" href="#/"><img src="assets/ishraq-mark.png" alt=""><span><b>إشراق</b><small>معك لمستقبل طموح</small></span></a>
-      <a class="btn ghost sm" href="#/"><i class="fa-solid fa-house"></i> الرئيسية</a></div></header>`;
-    const foot = `<footer class="news-foot"><div class="container">برنامج إشراق — جمعية البطالية الخيرية · <a href="#/">الصفحة الرئيسية</a></div></footer>`;
+    const top = pageTop(allBtn), foot = pageFoot;
     if (!n || !n.title || (n.published === false && !isAdmin)) {
       document.title = 'الخبر غير متاح | إشراق';
       root.innerHTML = `<div class="news-page">${top}<main class="container news-main">${emptyState('هذا الخبر غير متاح أو حُذف', 'fa-newspaper')}<p class="center"><a class="btn primary" href="#/"><i class="fa-solid fa-house"></i> العودة للرئيسية</a></p></main>${foot}</div>`;
@@ -143,10 +165,17 @@ const News = (() => {
       ${imgs.length ? `<div class="news-gallery">${imgs.map(u => `<a href="${esc(bigImg(u))}" target="_blank" rel="noopener"><img src="${esc(driveImg(u))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></a>`).join('')}</div>` : ''}
       ${shareBar(n)}
     </article>
-    ${others.length ? `<section class="news-more"><h2>أخبار أخرى</h2><div class="news-grid">${others.map(x => `<a class="news-card" href="${esc(linkPath(x.id))}"><div class="nc-body"><small><i class="fa-regular fa-calendar"></i> ${fmtTs(x.ts).split(' ')[0]}</small><h3>${esc(x.title)}</h3><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`).join('')}</div></section>` : ''}
+    ${others.length ? '' : `<p class="center news-all-wrap">${allBtn}</p>`}
+    ${others.length ? `<section class="news-more"><div class="news-more-head"><h2>أخبار أخرى</h2>${allBtn}</div><div class="news-grid">${others.map(x => `<a class="news-card" href="${esc(linkPath(x.id))}"><div class="nc-body"><small><i class="fa-regular fa-calendar"></i> ${fmtTs(x.ts).split(' ')[0]}</small><h3>${esc(x.title)}</h3><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`).join('')}</div></section>` : ''}
     </main>${foot}</div>`;
   }
 
+  document.addEventListener('input', e => {
+    if (!e.target.matches?.('[data-news-search]')) return;
+    listQuery = e.target.value; const pos = e.target.selectionStart;
+    window.dispatchEvent(new Event('ishraq-rerender'));
+    requestAnimationFrame(() => { const n = $('[data-news-search]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
+  });
   document.addEventListener('click', e => {
     const c = e.target.closest('[data-copy-link]'); if (c) return copyLink(c.dataset.copyLink);
     const sh = e.target.closest('[data-native-share]');
@@ -269,5 +298,5 @@ const News = (() => {
     }
   });
 
-  return { sanitize, plain, tickerBar, section, adminPanel, renderPage, shareUrl, all };
+  return { sanitize, plain, tickerBar, section, adminPanel, renderPage, renderList, shareUrl, all };
 })();

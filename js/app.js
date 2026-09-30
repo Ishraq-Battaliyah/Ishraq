@@ -47,7 +47,7 @@
       document.title = `إشراق | ${r === 'mentor' ? 'بوابة المرشد' : 'بوابة المستفيد'}`;
       Portal.render(root, r, auth.id);
     } else if (r === 'news') {
-      News.renderPage(root, newsId());
+      newsId() ? News.renderPage(root, newsId()) : News.renderList(root);
     } else if (r === 'members') {
       document.title = 'إشراق | أعضاء الدفعات';
       Home.renderMembers(root);

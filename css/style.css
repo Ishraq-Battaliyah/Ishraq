@@ -1160,3 +1160,11 @@ a.tk-item { color: #fff; }
 .news-more h2 { font-family: var(--f-display); font-size: 1.25rem; margin: 0 0 12px; }
 .news-foot { padding: 18px 0; text-align: center; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); background: #fff; }
 .news-foot a { color: var(--p-d); }
+.news-top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.news-main.wide { max-width: 1100px; }
+.news-main .sec-head { text-align: center; margin-bottom: 16px; }
+.news-main .sec-head h1 { font-family: var(--f-display); margin: 0; }
+.news-main .search { width: 100%; margin: 0 0 18px; }
+.news-more-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.news-more-head h2 { margin: 0; }
+.news-all-wrap { margin-top: 18px; }
