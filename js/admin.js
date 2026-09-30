@@ -43,6 +43,7 @@ const Admin = (() => {
         <nav class="admin-tabs" aria-label="أقسام لوحة الإدارة">${tabs.map(t => `<button class="${ui.tab === t.id ? 'active' : ''}" data-tab="${esc(t.id)}" aria-expanded="${ui.tab === t.id}"><i class="fa-solid ${t.icon}"></i><span>${t.label}</span>${badges[t.id] ? `<em class="badge">${badges[t.id]}</em>` : ''}<i class="fa-solid fa-chevron-down caret"></i></button>`).join('')}</nav>
         <div class="tab-panel">${ui.tab ? (P[ui.tab] ? P[ui.tab]() : '') : `<div class="tab-hint">${emptyState('اضغط على أي تبويب لعرض تفاصيله، واضغط عليه مرة أخرى لإخفائها.', 'fa-hand-pointer')}</div>`}</div>
         </div>
+      </main>
     </div>`;
     wire(root);
   }
