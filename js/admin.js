@@ -26,7 +26,7 @@ const Admin = (() => {
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, messages: Store.list('inbox').filter(x => !x.read).length, support: Support.unreadAdmin(), events: Events.unseen() };
+    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -834,7 +834,6 @@ const Admin = (() => {
   /* =============== 5) الرسائل =============== */
   P.messages = () => {
     const msgs = Store.list('messages').sort((a, b) => b.ts - a.ts);
-    const inbox = Store.list('inbox').sort((a, b) => b.ts - a.ts);
     const target = x => x.target === 'member' ? (Data.member(x.memberId)?.name || 'عضو محذوف') : { all_mentors: 'كل المرشدين', all_mentees: 'كل المستفيدين', all: 'كل المرشدين والمستفيدين' }[x.target];
     const composer = (kind, title, icon, select) => `<form class="composer" data-compose="${esc(kind)}">
       <h3><i class="fa-solid ${icon}"></i> ${title}</h3>${select}
@@ -855,10 +854,6 @@ const Admin = (() => {
       ${msgs.length ? `<ul class="msg-list">${msgs.map(x => `<li><i class="fa-solid fa-bullhorn"></i><div><span class="chip">إلى: ${esc(target(x))}</span>${x.title ? `<b>${esc(x.title)}</b>` : ''}<p>${nl2br(x.body)}</p><small>${fmtTs(x.ts)}</small></div>
         <button class="icon-btn danger" data-del-msg="${esc(x.id)}" title="مسح"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل منشورة', 'fa-envelope')}
     </div>
-    <div class="panel">
-      <div class="panel-head"><h2><i class="fa-solid fa-inbox"></i> رسائل واردة من الأعضاء</h2>${exportBar('inbox')}</div>
-      ${inbox.length ? `<ul class="msg-list">${inbox.map(x => `<li class="${x.read ? '' : 'unread'}"><i class="fa-solid fa-envelope"></i><div><b>${esc(x.fromName)}</b> <span class="chip">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span><p>${nl2br(x.body)}</p><small>${fmtTs(x.ts)}</small></div>
-        <button class="icon-btn danger" data-del-inbox="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></li>`).join('')}</ul>` : emptyState('لا توجد رسائل واردة', 'fa-inbox')}
     </div>`;
   };
 
@@ -1123,7 +1118,6 @@ const Admin = (() => {
       case 'reviews': return { title: 'التقييمات المتبادلة', headers: reviewHead, rows: Data.reviews().filter(r => r.type !== 'program').map(reviewRow) };
       case 'program-reviews': return { title: 'تقييمات البرنامج', headers: reviewHead, rows: Data.reviews({ type: 'program' }).map(reviewRow) };
       case 'messages': return { title: 'الرسائل المنشورة', headers: ['إلى', 'العنوان', 'النص', 'التاريخ'], rows: Store.list('messages').map(x => [x.target === 'member' ? Data.member(x.memberId)?.name : x.target, x.title, x.body, fmtTs(x.ts)]) };
-      case 'inbox': return { title: 'الرسائل الواردة', headers: ['من', 'الصفة', 'الرسالة', 'التاريخ'], rows: Store.list('inbox').map(x => [x.fromName, x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.body, fmtTs(x.ts)]) };
       case 'event': case 'events': return Events.exportData(key);
       case 'adminLog': return { title: 'سجل إجراءات المشرفين', headers: ['الوقت', 'المشرف', 'البريد', 'الإجراء', 'على', 'التفاصيل'], rows: Store.list('adminLog').sort((a, b) => b.ts - a.ts).map(l => [fmtTs(l.ts), l.by?.name || '', l.by?.email || '', l.action, l.target || '', l.details || '']) };
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
@@ -1270,7 +1264,6 @@ const Admin = (() => {
       const dr = t.closest('[data-del-review]'); if (dr) return confirmDialog('حذف هذا التقييم؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { Data.unpublishReview(Store.get(`reviews/${dr.dataset.delReview}`)); Store.remove(`reviews/${dr.dataset.delReview}`); if (Store.get(`featured/${dr.dataset.delReview}`) != null) Store.remove(`featured/${dr.dataset.delReview}`); } });
       // الرسائل
       const dmsg = t.closest('[data-del-msg]'); if (dmsg) return confirmDialog('مسح هذه الرسالة؟ ستختفي من صفحات الأعضاء.', { danger: true, ok: 'مسح' }).then(ok => ok && Store.remove(`messages/${dmsg.dataset.delMsg}`));
-      const di = t.closest('[data-del-inbox]'); if (di) return Store.remove(`inbox/${di.dataset.delInbox}`);
       // الإعلان
       if (t.closest('[data-ann-preview]')) {
         const f = $('[data-ann-form]', root); const v = readForm(f);
