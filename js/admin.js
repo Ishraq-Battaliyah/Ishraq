@@ -2,7 +2,7 @@
 
 const Admin = (() => {
   const TABS = [
-    { id: 'support', label: 'مراسلات', icon: 'fa-comments' },
+    { id: 'support', label: 'الدعم الفني والإداري', icon: 'fa-comments' },
     { id: 'content', label: 'محتوى الصفحة', icon: 'fa-pen-ruler' },
     { id: 'cohorts', label: 'الدفعات', icon: 'fa-people-group' },
     { id: 'sessions', label: 'الجلسات', icon: 'fa-calendar-days' },

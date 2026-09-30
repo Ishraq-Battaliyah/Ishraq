@@ -66,7 +66,7 @@ const News = (() => {
   function tickerBar() {
     const items = ticker();
     if (!items.length) return '';
-    const track = items.map(n => `<button class="tk-item" data-news="${esc(n.id)}"><i class="fa-solid fa-bolt"></i>${esc(n.title)}</button>`).join('<span class="tk-sep" aria-hidden="true">◆</span>');
+    const track = items.map(n => `<a class="tk-item" href="${esc(linkPath(n.id))}"><i class="fa-solid fa-bolt"></i>${esc(n.title)}</a>`).join('<span class="tk-sep" aria-hidden="true">◆</span>');
     // النسخة المكررة تصنع حلقة متصلة دون فراغ
     return `<div class="news-ticker" role="region" aria-label="آخر الأخبار">
       <span class="tk-label"><i class="fa-solid fa-newspaper"></i> آخر الأخبار</span>
@@ -81,35 +81,76 @@ const News = (() => {
       ${s.kicker ? `<span class="kicker">${esc(s.kicker)}</span>` : ''}<h2>${esc(s.title || 'الأخبار')}</h2>${s.subtitle ? `<p class="sec-sub">${esc(s.subtitle)}</p>` : ''}</div>`;
     const card = n => {
       const img = imageLinks(n)[0];
-      return `<article class="news-card reveal" data-news="${esc(n.id)}" tabindex="0" role="button">
+      return `<a class="news-card reveal" href="${esc(linkPath(n.id))}">
         ${img ? `<div class="nc-img"><img src="${esc(driveImg(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></div>` : ''}
         <div class="nc-body"><small><i class="fa-regular fa-calendar"></i> ${fmtTs(n.ts).split(' ')[0]}</small><h3>${esc(n.title)}</h3>
-        <p>${esc(plain(n.html).slice(0, 140))}${plain(n.html).length > 140 ? '…' : ''}</p><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></article>`;
+        <p>${esc(plain(n.html).slice(0, 140))}${plain(n.html).length > 140 ? '…' : ''}</p><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`;
     };
     return `<section class="sec news-sec" id="sec-${esc(s.id)}"><div class="container">${head}
       ${list.length ? `<div class="news-grid">${list.map(card).join('')}</div>` : `<p class="muted center">لا توجد أخبار منشورة حالياً.</p>`}
     </div></section>`;
   }
 
-  function open(id) {
-    const n = Store.get(`news/${id}`);
-    if (!n) return;
-    const imgs = imageLinks(n);
-    openModal({
-      title: esc(n.title), size: 'lg', cls: 'news-modal',
-      body: `<article class="news-full"><small class="muted"><i class="fa-regular fa-calendar"></i> ${fmtTs(n.ts)}</small>
-        <div class="news-content">${sanitize(n.html)}</div>
-        ${imgs.length ? `<div class="news-gallery">${imgs.map(u => `<a href="${esc(bigImg(u))}" target="_blank" rel="noopener"><img src="${esc(driveImg(u))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></a>`).join('')}</div>` : ''}</article>`,
-      actions: [{ label: 'إغلاق', cls: 'primary' }]
+  /* ===== رابط مباشر لكل خبر: #/news/{id} (يعمل خارج المنصة ويفتح صفحة الخبر مباشرة) ===== */
+  const linkPath = id => `#/news/${encodeURIComponent(id)}`;
+  const baseUrl = () => (window.ISHRAQ_CONFIG.siteUrl || (location.origin + location.pathname)).replace(/#.*$/, '');
+  const shareUrl = id => baseUrl() + linkPath(id);
+
+  function setMeta(title, desc) {
+    document.title = `${title} | إشراق`;
+    [['property', 'og:title', title], ['property', 'og:description', desc], ['name', 'description', desc]].forEach(([k, n, v]) => {
+      let el = document.head.querySelector(`meta[${k}="${n}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute(k, n); document.head.appendChild(el); }
+      el.setAttribute('content', v);
     });
   }
 
+  async function copyLink(url) {
+    try { await navigator.clipboard.writeText(url); toast('تم نسخ رابط الخبر'); }
+    catch { window.prompt('انسخ الرابط:', url); }
+  }
+
+  function shareBar(n) {
+    const url = shareUrl(n.id), text = `${n.title}\n${url}`;
+    return `<div class="news-share"><b><i class="fa-solid fa-share-nodes"></i> شارك الخبر</b>
+      <a class="btn xs wa" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> واتساب</a>
+      <a class="btn xs ghost" href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(n.title)}" target="_blank" rel="noopener"><i class="fa-brands fa-telegram"></i> تيليجرام</a>
+      <a class="btn xs ghost" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(n.title)}" target="_blank" rel="noopener"><i class="fa-brands fa-x-twitter"></i> إكس</a>
+      <button class="btn xs ghost" data-copy-link="${esc(url)}"><i class="fa-regular fa-copy"></i> نسخ الرابط</button>
+      ${navigator.share ? `<button class="btn xs primary" data-native-share="${esc(n.id)}"><i class="fa-solid fa-arrow-up-from-bracket"></i> مشاركة</button>` : ''}</div>`;
+  }
+
+  // صفحة الخبر الكاملة
+  function renderPage(root, id) {
+    const n = id ? Store.get(`news/${id}`) : null;
+    const isAdmin = Auth.current()?.kind === 'admin';
+    const top = `<header class="news-top"><div class="container news-top-in"><a class="brand" href="#/"><img src="assets/ishraq-mark.png" alt=""><span><b>إشراق</b><small>معك لمستقبل طموح</small></span></a>
+      <a class="btn ghost sm" href="#/"><i class="fa-solid fa-house"></i> الرئيسية</a></div></header>`;
+    const foot = `<footer class="news-foot"><div class="container">برنامج إشراق — جمعية البطالية الخيرية · <a href="#/">الصفحة الرئيسية</a></div></footer>`;
+    if (!n || !n.title || (n.published === false && !isAdmin)) {
+      document.title = 'الخبر غير متاح | إشراق';
+      root.innerHTML = `<div class="news-page">${top}<main class="container news-main">${emptyState('هذا الخبر غير متاح أو حُذف', 'fa-newspaper')}<p class="center"><a class="btn primary" href="#/"><i class="fa-solid fa-house"></i> العودة للرئيسية</a></p></main>${foot}</div>`;
+      return;
+    }
+    setMeta(n.title, plain(n.html).slice(0, 160));
+    const imgs = imageLinks(n);
+    const others = published().filter(x => x.id !== n.id).slice(0, 3);
+    root.innerHTML = `<div class="news-page">${top}<main class="container news-main"><article class="news-full">
+      ${n.published === false ? '<p class="warn small"><i class="fa-solid fa-eye-slash"></i> مسودة: لا تظهر للزوار.</p>' : ''}
+      <h1>${esc(n.title)}</h1>
+      <small class="muted"><i class="fa-regular fa-calendar"></i> ${fmtTs(n.ts).split(' ')[0]}</small>
+      <div class="news-content">${sanitize(n.html)}</div>
+      ${imgs.length ? `<div class="news-gallery">${imgs.map(u => `<a href="${esc(bigImg(u))}" target="_blank" rel="noopener"><img src="${esc(driveImg(u))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></a>`).join('')}</div>` : ''}
+      ${shareBar(n)}
+    </article>
+    ${others.length ? `<section class="news-more"><h2>أخبار أخرى</h2><div class="news-grid">${others.map(x => `<a class="news-card" href="${esc(linkPath(x.id))}"><div class="nc-body"><small><i class="fa-regular fa-calendar"></i> ${fmtTs(x.ts).split(' ')[0]}</small><h3>${esc(x.title)}</h3><span class="nc-more">اقرأ الخبر <i class="fa-solid fa-arrow-left"></i></span></div></a>`).join('')}</div></section>` : ''}
+    </main>${foot}</div>`;
+  }
+
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-news]');
-    if (t) open(t.dataset.news);
-  });
-  document.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.news-card[data-news]')) { e.preventDefault(); open(e.target.dataset.news); }
+    const c = e.target.closest('[data-copy-link]'); if (c) return copyLink(c.dataset.copyLink);
+    const sh = e.target.closest('[data-native-share]');
+    if (sh) { const n = Store.get(`news/${sh.dataset.nativeShare}`); n && navigator.share({ title: n.title, text: n.title, url: shareUrl(n.id) }).catch(() => {}); }
   });
 
   /* ===== لوحة الإدارة ===== */
@@ -123,6 +164,8 @@ const News = (() => {
         <div class="sec-info"><b>${esc(n.title)}</b><small>${fmtTs(n.ts)} · ${esc(plain(n.html).slice(0, 70))}</small>
           <span class="chips">${n.published === false ? '<span class="chip">مسودة</span>' : '<span class="chip st-done">منشور</span>'}${n.ticker ? '<span class="chip"><i class="fa-solid fa-bolt"></i> في الشريط</span>' : ''}${imageLinks(n).length ? `<span class="chip"><i class="fa-regular fa-image"></i> ${imageLinks(n).length}</span>` : ''}</span></div>
         <div class="sec-actions">
+          <button class="icon-btn" data-copy-link="${esc(shareUrl(n.id))}" title="نسخ رابط الخبر"><i class="fa-solid fa-link"></i></button>
+          <a class="icon-btn" href="${esc(linkPath(n.id))}" target="_blank" rel="noopener" title="فتح صفحة الخبر"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
           <button class="icon-btn" data-toggle-news="${esc(n.id)}" title="${n.published === false ? 'نشر' : 'إخفاء'}"><i class="fa-solid ${n.published === false ? 'fa-eye-slash' : 'fa-eye'}"></i></button>
           <button class="icon-btn" data-edit-news="${esc(n.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
           <button class="icon-btn danger" data-del-news="${esc(n.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></div></li>`).join('')}</ul>` : emptyState('لا توجد أخبار بعد. اضغط «إضافة خبر».', 'fa-newspaper')}
@@ -207,6 +250,7 @@ const News = (() => {
           Store.set(`news/${rec.id}`, rec);
           Security.log(n ? 'تعديل خبر' : 'نشر خبر', title);
           toast('تم حفظ الخبر');
+          if (rec.published) setTimeout(() => confirmDialog(`رابط الخبر المباشر:<br><b dir="ltr" class="num">${esc(shareUrl(rec.id))}</b>`, { ok: 'نسخ الرابط', cancel: 'إغلاق', title: 'تم نشر الخبر' }).then(ok => ok && copyLink(shareUrl(rec.id))), 300);
         }
       }, { label: 'إلغاء', cls: 'ghost' }]
     });
@@ -225,5 +269,5 @@ const News = (() => {
     }
   });
 
-  return { sanitize, plain, tickerBar, section, adminPanel, open, all };
+  return { sanitize, plain, tickerBar, section, adminPanel, renderPage, shareUrl, all };
 })();

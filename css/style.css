@@ -1144,3 +1144,19 @@ textarea { resize: vertical; min-height: 80px; }
   .admin-tabs button .badge { margin-inline-start: auto; }
   .admin-tabs button i:first-child { width: 1.3em; text-align: center; }
 }
+
+/* ===== صفحة الخبر (رابط مباشر) ===== */
+a.tk-item, a.news-card { text-decoration: none; color: inherit; }
+a.tk-item { color: #fff; }
+.news-page { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.news-top { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.news-top-in { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; }
+.news-main { flex: 1; padding: 28px 0 40px; max-width: 860px; }
+.news-page .news-full { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 28px clamp(16px, 4vw, 36px); box-shadow: var(--sh); }
+.news-page .news-full h1 { margin: 0 0 6px; font-family: var(--f-display); font-size: clamp(1.5rem, 4vw, 2.2rem); color: var(--ink); line-height: 1.5; }
+.news-share { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 22px; padding-top: 16px; border-top: 1px dashed var(--line); }
+.news-share b { margin-inline-end: 6px; color: var(--ink-2); }
+.news-more { margin-top: 28px; }
+.news-more h2 { font-family: var(--f-display); font-size: 1.25rem; margin: 0 0 12px; }
+.news-foot { padding: 18px 0; text-align: center; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); background: #fff; }
+.news-foot a { color: var(--p-d); }

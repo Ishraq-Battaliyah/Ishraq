@@ -5,9 +5,11 @@
   let lastRoute = null;
 
   function route() {
-    const r = (location.hash.replace(/^#\/?/, '').split('?')[0] || 'home');
-    return ['home', 'members', 'admin', 'mentor', 'mentee'].includes(r) ? r : 'home';
+    const r = (location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0] || 'home');
+    return ['home', 'members', 'admin', 'mentor', 'mentee', 'news'].includes(r) ? r : 'home';
   }
+  // معرّف الخبر من الرابط المباشر: #/news/{id}
+  const newsId = () => decodeURIComponent((location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[1] || ''));
 
   /* الاحتفاظ بقيم الحقول والتركيز عند إعادة الرسم بسبب تحديثات البيانات */
   function snapshot() {
@@ -44,6 +46,8 @@
       if (auth?.kind !== r) { location.hash = '#/'; return; }
       document.title = `إشراق | ${r === 'mentor' ? 'بوابة المرشد' : 'بوابة المستفيد'}`;
       Portal.render(root, r, auth.id);
+    } else if (r === 'news') {
+      News.renderPage(root, newsId());
     } else if (r === 'members') {
       document.title = 'إشراق | أعضاء الدفعات';
       Home.renderMembers(root);
