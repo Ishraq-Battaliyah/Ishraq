@@ -271,23 +271,54 @@ const Certs = (() => {
 
   /* ===== الإرسال بالبريد (mailto) ===== */
   const mailText = (kind, r) => { const t = template(kind), v = valuesFor(kind, r, t); return { subject: fill(t.emailSubject, v), body: fill(t.emailBody, v) }; };
-  function openMail(to, subject, body) {
-    const a = document.createElement('a');
-    a.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    document.body.appendChild(a); a.click(); a.remove();
+  /* طرق فتح رسالة البريد: Gmail أو Outlook في تبويب جديد من المتصفح نفسه (الأنسب للابتوب)،
+     أو تطبيق البريد الافتراضي عبر mailto (الأنسب للجوال). عنوان المستلم وعنوان الرسالة ونصها تُعبَّأ آلياً في كل الحالات.
+     المتصفحات لا تسمح بإرفاق ملف تلقائياً في رسالة جاهزة، لذلك يُنزَّل ملف الشهادة ويُرفق بسحبه أو بالمشبك. */
+  const MAIL_KEY = 'ishraq-mail-provider';
+  const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const PROVIDERS = { gmail: 'Gmail (في المتصفح)', outlook: 'Outlook (في المتصفح)', app: 'تطبيق البريد الافتراضي' };
+  const getProvider = () => { let v = null; try { v = localStorage.getItem(MAIL_KEY); } catch { /* ignore */ } return PROVIDERS[v] ? v : (isMobile() ? 'app' : 'gmail'); };
+  const setProvider = v => { try { localStorage.setItem(MAIL_KEY, v); } catch { /* ignore */ } };
+  const enc = encodeURIComponent;
+  function composeUrl(provider, to, subject, body) {
+    if (body.length > 1200) body = body.slice(0, 1200);   // حدّ طول الرابط
+    if (provider === 'gmail') return `https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${enc(to)}&su=${enc(subject)}&body=${enc(body)}`;
+    if (provider === 'outlook') return `https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subject)}&body=${enc(body)}`;
+    return `mailto:${to}?subject=${enc(subject)}&body=${enc(body)}`;
   }
-  // على الجوال: مشاركة الملف مباشرة إلى تطبيق البريد إن أمكن، وإلا mailto مع تنزيل الملف
-  async function sendMail(kind, r, subject, body, blob) {
+  // نفتح تبويب البريد فور الضغط (قبل تجهيز الملف) حتى لا يحجبه المتصفح كنافذة منبثقة، ثم نوجّهه للرابط
+  function preOpen() {
+    if (getProvider() === 'app') return null;
+    const w = window.open('', '_blank');
+    try { w && (w.document.title = 'جارٍ فتح البريد...', w.document.body.innerHTML = '<p style="font-family:sans-serif;direction:rtl;padding:24px">جارٍ تجهيز الشهادة وفتح رسالة البريد...</p>'); } catch { /* ignore */ }
+    return w;
+  }
+  function fallbackLink(url) {
+    openModal({ title: 'فتح رسالة البريد', size: 'sm', body: '<p class="confirm-msg">منع المتصفح فتح تبويب البريد تلقائياً. اضغط الزر لفتحه.</p>',
+      actions: [{ label: '<i class="fa-regular fa-envelope"></i> فتح رسالة البريد', cls: 'primary', onClick: () => { window.open(url, '_blank', 'noopener'); } }, { label: 'إغلاق', cls: 'ghost' }] });
+  }
+  async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } }
+
+  // mode: 'compose' فتح رسالة جاهزة بعنوان المستلم، أو 'share' مشاركة الملف مباشرة (جوال) مع نسخ عنوان المستلم
+  async function sendMail(kind, r, subject, body, blob, win, mode = 'compose') {
     const file = new File([blob], fileName(kind, r), { type: 'application/pdf' });
-    const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (mobile && navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: subject, text: body }); markIssued(r, 'share'); return 'share'; } catch (e) { if (e.name === 'AbortError') return 'cancel'; }
+    if (mode === 'share' && navigator.canShare?.({ files: [file] })) {
+      const copied = await copyText(r.email);
+      try { await navigator.share({ files: [file], title: subject, text: body }); markIssued(r, 'share'); return copied ? 'share-copied' : 'share'; }
+      catch (e) { if (e.name === 'AbortError') return 'cancel'; }
     }
+    const provider = getProvider();
     saveBlob(blob, file.name);
-    openMail(r.email, subject, `${body}\n\n(أرفق ملف الشهادة الذي نُزِّل على جهازك: ${file.name})`);
+    const note = `${body}\n\n(أرفق ملف الشهادة الذي نُزِّل على جهازك: ${file.name})`;
+    const url = composeUrl(provider, r.email, subject, note);
+    if (provider === 'app') { const a = document.createElement('a'); a.href = url; document.body.appendChild(a); a.click(); a.remove(); }
+    else if (win && !win.closed) win.location.href = url;
+    else fallbackLink(url);
     markIssued(r, 'mail');
-    return 'mailto';
+    return provider === 'app' ? 'mailto' : 'web';
   }
+  const mailToast = res => (res === 'share' ? 'تمت المشاركة' : res === 'share-copied' ? 'تمت المشاركة، ونُسخ عنوان المستلم للصقه في خانة «إلى»'
+    : res === 'web' ? 'فُتحت رسالة البريد جاهزة؛ أرفق ملف الشهادة المنزَّل (اسحبه إليها أو اضغط المشبك) ثم أرسل' : 'فُتحت رسالة البريد؛ أرفق ملف الشهادة المنزَّل ثم أرسل');
 
   /* ===== نوافذ الإصدار ===== */
   async function previewImg(kind, r) {
@@ -305,16 +336,26 @@ const Certs = (() => {
         <div class="cert-mail"><h4><i class="fa-regular fa-envelope"></i> رسالة البريد ${r.email ? `<small dir="ltr">${esc(r.email)}</small>` : '<small class="muted">لا يوجد بريد مسجل لهذا الشخص</small>'}</h4>
           <div class="field"><label>العنوان</label><input name="subject" value="${esc(mt.subject)}"></div>
           <div class="field"><label>النص</label><textarea name="body" rows="6">${esc(mt.body)}</textarea></div>
-          <small class="hint">يفتح «إرسال بالبريد» رسالة جاهزة في تطبيق البريد على جهازك، ويُنزَّل ملف الشهادة لترفقه بها (وعلى الجوال يُشارَك الملف مباشرة).</small></div>`,
+          <div class="field mail-provider"><label>فتح الرسالة عبر</label><select name="provider">${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+          <small class="hint">تُفتح رسالة جاهزة إلى ${r.email ? `<b dir="ltr">${esc(r.email)}</b>` : 'المستلم'} بالعنوان والنص أعلاه، ويُنزَّل ملف الشهادة لترفقه بها: اسحبه إلى الرسالة أو اضغط المشبك. (المتصفحات لا تسمح بإرفاق الملف تلقائياً.)</small></div>`,
       actions: [
         { label: '<i class="fa-solid fa-download"></i> حفظ الملف', cls: 'primary', onClick: async () => { const { blob } = await pdfBlob(kind, r); saveBlob(blob, fileName(kind, r)); markIssued(r, 'file'); toast('تم حفظ ملف الشهادة'); } },
         { label: '<i class="fa-regular fa-envelope"></i> إرسال بالبريد', cls: 'ghost', onClick: async mm => {
           if (!r.email) { toast('لا يوجد بريد إلكتروني مسجل لهذا الشخص', 'error'); return false; }
+          setProvider($('[name=provider]', mm.body).value);
+          const win = preOpen();
           const { blob } = await pdfBlob(kind, r);
-          const res = await sendMail(kind, r, $('[name=subject]', mm.body).value, $('[name=body]', mm.body).value, blob);
+          const res = await sendMail(kind, r, $('[name=subject]', mm.body).value, $('[name=body]', mm.body).value, blob, win);
           if (res === 'cancel') return false;
-          toast(res === 'share' ? 'تمت المشاركة' : 'فُتحت رسالة البريد، أرفق الملف المنزَّل ثم أرسلها');
+          toast(mailToast(res));
         } },
+        ...(isMobile() && navigator.canShare ? [{ label: '<i class="fa-solid fa-share-nodes"></i> مشاركة الملف مباشرة (مرفق تلقائي)', cls: 'ghost', onClick: async mm => {
+          if (!r.email) { toast('لا يوجد بريد إلكتروني مسجل لهذا الشخص', 'error'); return false; }
+          const { blob } = await pdfBlob(kind, r);
+          const res = await sendMail(kind, r, $('[name=subject]', mm.body).value, $('[name=body]', mm.body).value, blob, null, 'share');
+          if (res === 'cancel') return false;
+          toast(mailToast(res));
+        } }] : []),
         { label: 'إغلاق', cls: 'ghost' }]
     });
     const pv = await previewImg(kind, r);
@@ -368,21 +409,24 @@ const Certs = (() => {
     const done = new Set();
     const m = openModal({
       title: `<i class="fa-regular fa-envelope"></i> إرسال الشهادات بالبريد`, size: 'md',
-      body: `<p class="muted small">اضغط «إرسال» أمام كل اسم: يُنزَّل ملف شهادته وتُفتح رسالة بريد جاهزة إليه، أرفق الملف وأرسلها. ${total > list.length ? `<b>${total - list.length}</b> من المحددين بلا بريد مسجل وتم استبعادهم.` : ''}</p>
+      body: `<p class="muted small">اضغط «إرسال» أمام كل اسم: يُنزَّل ملف شهادته وتُفتح رسالة بريد جاهزة إليه وعنوانه في خانة «إلى»، أرفق الملف وأرسلها. ${total > list.length ? `<b>${total - list.length}</b> من المحددين بلا بريد مسجل وتم استبعادهم.` : ''}</p>
+        <div class="field mail-provider"><label>فتح الرسائل عبر</label><select data-q-provider>${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${getProvider() === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
         <ul class="mail-queue">${list.map(r => `<li data-q="${esc(r.id)}"><span><b>${esc(r.cert)}</b><small dir="ltr">${esc(r.email)}</small></span><button class="btn xs primary" data-q-send="${esc(r.id)}"><i class="fa-regular fa-paper-plane"></i> إرسال</button></li>`).join('')}</ul>`,
       actions: [{ label: 'تم', cls: 'primary' }]
     });
+    m.body.addEventListener('change', e => { if (e.target.matches('[data-q-provider]')) setProvider(e.target.value); });
     m.body.addEventListener('click', async e => {
       const b = e.target.closest('[data-q-send]'); if (!b) return;
       const r = list.find(x => x.id === b.dataset.qSend); if (!r) return;
       b.disabled = true;
+      const win = preOpen();
       try {
         const { blob } = await pdfBlob(kind, r); const t = mailText(kind, r);
-        const res = await sendMail(kind, r, t.subject, t.body, blob);
-        if (res === 'cancel') { b.disabled = false; return; }
+        const res = await sendMail(kind, r, t.subject, t.body, blob, win);
+        if (res === 'cancel') { b.disabled = false; win && !win.closed && win.close(); return; }
         done.add(r.id); b.outerHTML = '<span class="pill st-done"><i class="fa-solid fa-check"></i> فُتحت</span>';
         if (done.size === list.length) Security.log('إرسال شهادات بالبريد', KINDS[kind].label, `${done.size} رسالة`);
-      } catch (err) { console.error(err); b.disabled = false; toast('تعذّر تجهيز الشهادة', 'error'); }
+      } catch (err) { console.error(err); b.disabled = false; win && !win.closed && win.close(); toast('تعذّر تجهيز الشهادة', 'error'); }
     });
   }
 
