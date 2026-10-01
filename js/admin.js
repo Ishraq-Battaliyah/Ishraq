@@ -841,7 +841,14 @@ const Admin = (() => {
       <textarea name="body" rows="3" required placeholder="نص الرسالة"></textarea>
       <button class="btn primary sm" type="submit"><i class="fa-solid fa-paper-plane"></i> نشر الرسالة</button></form>`;
     const opt = role => Data.members(role).map(m => `<option value="${esc(m.id)}">${esc(m.name)} (${esc(m.code)})</option>`).join('');
+    const mailOn = Store.get('notifyMail/enabled') === true;
     return `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-envelope-circle-check"></i> إشعارات البريد الإلكتروني للأعضاء</h2>
+        <span class="head-actions"><button class="btn ghost sm" data-mail-help><i class="fa-solid fa-circle-info"></i> إعداد الإرسال</button>
+        <button class="btn ${mailOn ? 'ghost danger' : 'primary'}" data-mail-toggle="${mailOn ? 'off' : 'on'}"><i class="fa-solid ${mailOn ? 'fa-power-off' : 'fa-toggle-on'}"></i> ${mailOn ? 'إيقاف الإشعارات البريدية' : 'تفعيل الإشعارات البريدية'}</button></span></div>
+      <p class="muted small">${mailOn ? 'مفعّلة: كل إشعار يصل المرشد أو المستفيد داخل المنصة (حجز، تعديل، إلغاء، تقييم...) يُرسل نسخة منه إلى بريده المسجل في بطاقته، ويستطيع كل عضو تعطيلها لنفسه من صفحته.' : 'معطّلة. بعد تجهيز سكربت الإرسال (زر «إعداد الإرسال») فعّلها لتصل الإشعارات إلى بريد كل عضو، مع إمكان تعطيلها من صفحته.'}</p>
+    </div>
+    <div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-paper-plane"></i> إرسال رسالة / تنبيه</h2></div>
       <div class="composers">
         ${composer('mentor', 'رسالة لمرشد', 'fa-user-tie', `<select name="to" required><option value="">— اختر المرشد —</option>${opt('mentor')}</select>`)}
@@ -1043,7 +1050,7 @@ const Admin = (() => {
       <button class="btn primary sm" data-migrate><i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ الترقية</button></div></div>`;
     const rulesV = Number(Store.get('meta/rulesVersion') || (Store.get('meta/rulesPublished') ? 2 : 0));
     if (rulesV < Security.RULES_VERSION && Security.isOwner()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>${rulesV ? 'حدّث قواعد الحماية' : 'انشر قواعد الحماية الجديدة'}</b>
-      <p>${rulesV ? 'أُضيفت ميزات جديدة (صلاحيات المشرفين وإطلاق الدفعة) تحتاج نسخة جديدة من القواعد.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
+      <p>${rulesV ? 'أُضيفت ميزات جديدة (إلغاء المواعيد، والموعد البديل، والمواعيد المقترحة من المستفيد، وإشعارات البريد) تحتاج نسخة جديدة من القواعد، وقبل نشرها قد لا تُحفظ هذه الميزات.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
       <button class="btn primary sm" data-show-rules><i class="fa-solid fa-copy"></i> عرض القواعد ونسخها</button>
       <button class="btn ghost sm" data-rules-done><i class="fa-solid fa-check"></i> نشرتها</button></div></div>`;
     return '';
@@ -1059,6 +1066,23 @@ const Admin = (() => {
       if (r.failed.length) openModal({ title: 'اكتملت الترقية مع ملاحظات', size: 'md', body: `<p>تعذّر إنشاء رموز الدخول لـ ${r.failed.length} عضواً. أعد تشغيل الترقية لاحقاً أو استخدم «رمز جديد» على بطاقاتهم.</p><ul>${r.failed.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`, actions: [{ label: 'حسناً', cls: 'primary' }] });
       else toast('اكتملت ترقية البيانات');
     } catch (e) { prog.close(); toast(Security.authMsg(e), 'error'); }
+  }
+
+  // سكربت إرسال إشعارات البريد (Google Apps Script بحساب مالك مشروع Firebase)
+  async function mailHelp() {
+    let code = '';
+    try { code = await (await fetch('tools/notify-mailer.gs', { cache: 'no-store' })).text(); } catch { code = ''; }
+    openModal({
+      title: '<i class="fa-solid fa-envelope-circle-check"></i> إعداد إرسال إشعارات البريد', size: 'lg',
+      body: `<ol class="steps-list"><li>ادخل <b dir="ltr">script.google.com</b> بحساب Gmail الذي هو <b>مالك أو محرّر لمشروع Firebase</b> (وهو الذي سيرسل الرسائل)، واختر <b>مشروع جديد</b>.</li>
+        <li>اضغط «نسخ الكود» أدناه، والصقه مكان الكود الموجود في الملف <b dir="ltr">Code.gs</b>.</li>
+        <li>من ⚙ إعدادات المشروع فعّل «إظهار ملف appsscript.json»، وافتحه والصق فيه محتوى <b dir="ltr">appsscript.json</b> الموجود في أعلى الكود (نطاقات الصلاحيات).</li>
+        <li>اختر الدالة <b dir="ltr">setup</b> ثم <b>تشغيل</b> ووافق على الصلاحيات؛ فتُنشأ مهمة تعمل كل 5 دقائق تقرأ طابور الإشعارات وترسلها.</li>
+        <li>عُد هنا واضغط «تفعيل الإشعارات البريدية». يمكنك اختبار الإرسال بتشغيل الدالة <b dir="ltr">sendPending</b> يدوياً.</li></ol>
+        <p class="muted small">حد الإرسال اليومي لحساب Gmail المجاني نحو 100 رسالة، ولحسابات Google Workspace نحو 1500 رسالة. لا يُرسل لمن عطّل الإشعارات أو لم يُضف بريداً في بطاقته.</p>
+        <pre class="rules-pre" dir="ltr">${esc(code || 'تعذّر تحميل tools/notify-mailer.gs')}</pre>`,
+      actions: [{ label: '<i class="fa-solid fa-copy"></i> نسخ الكود', cls: 'primary', onClick: async () => { try { await navigator.clipboard.writeText(code); toast('تم نسخ الكود'); } catch { toast('انسخه يدوياً من الصندوق', 'error'); } return false; } }, { label: 'إغلاق', cls: 'ghost' }]
+    });
   }
 
   async function showRules() {
@@ -1201,6 +1225,16 @@ const Admin = (() => {
       if (t.closest('[data-backup-full]')) return confirmDialog('تنزيل نسخة تتضمن رموز دخول جميع الأعضاء؟ احفظ الملف في مكان آمن ولا ترسله لأحد.', { ok: 'تنزيل' }).then(ok => ok && downloadBackup(false, true));
       if (t.closest('[data-migrate]')) return runMigration();
       if (t.closest('[data-show-rules]')) return showRules();
+      if (t.closest('[data-mail-help]')) return mailHelp();
+      const mt = t.closest('[data-mail-toggle]');
+      if (mt) {
+        const turnOn = mt.dataset.mailToggle === 'on';
+        return confirmDialog(turnOn ? 'تفعيل الإشعارات البريدية؟ تأكد أولاً من تجهيز سكربت الإرسال، وإلا ستتراكم الرسائل دون إرسال.' : 'إيقاف الإشعارات البريدية للجميع؟', { ok: turnOn ? 'تفعيل' : 'إيقاف', danger: !turnOn }).then(ok => {
+          if (!ok) return;
+          Store.set('notifyMail', { enabled: turnOn, ts: Date.now(), by: Security.adminName() });
+          Security.log(turnOn ? 'تفعيل الإشعارات البريدية' : 'إيقاف الإشعارات البريدية');
+        });
+      }
       if (t.closest('[data-rules-done]')) { Store.update('meta', { rulesPublished: Date.now(), rulesVersion: Security.RULES_VERSION }); Data.backfill(); return Security.log('نشر قواعد الحماية', `الإصدار ${Security.RULES_VERSION}`); }
       if (t.closest('[data-add-admin]')) return addAdminDialog();
       if (t.closest('[data-invite-admin]')) return inviteAdminDialog();

@@ -323,6 +323,9 @@ const STATUS = {
   done: { label: 'منجزة', cls: 'st-done' },
   absent_mentor: { label: 'ملغاة لغياب المرشد', cls: 'st-absent-mentor' },
   absent_mentee: { label: 'ملغاة لغياب المستفيد', cls: 'st-absent-mentee' },
+  cancelled: { label: 'ملغاة', cls: 'st-cancelled' },
+  // موعد بديل مقترح بانتظار موافقة الطرف الآخر (حالة معروضة لا تُحفظ)
+  await_approval: { label: 'بانتظار موافقة على موعد بديل', cls: 'st-proposed' },
   // حالات معروضة (لا تُحفظ): تأكيد الإنجاز من طرف واحد، وجلسة انقضى وقتها دون تحديث
   await_mentor: { label: 'بانتظار تأكيد المرشد', cls: 'st-await' },
   await_mentee: { label: 'بانتظار تأكيد المستفيد', cls: 'st-await' },
@@ -332,6 +335,12 @@ const statusPill = s => `<span class="pill ${STATUS[s]?.cls || ''}">${STATUS[s]?
 // شارة حالة الحجز كما يراها المرشد أو المستفيد أو الإدارة
 function bookingPill(b, viewer) {
   const ds = Data.displayStatus(b);
+  if (ds === 'cancelled') return `<span class="pill st-cancelled">ملغاة${b.cancelledBy ? ` من ${b.cancelledBy === 'mentor' ? 'المرشد' : 'المستفيد'}` : ''}</span>`;
+  if (ds === 'await_approval') {
+    const by = b.proposal?.by, approver = by === 'mentor' ? 'mentee' : 'mentor', name = r => (r === 'mentor' ? 'المرشد' : 'المستفيد');
+    if (viewer && viewer === approver) return `<span class="pill st-proposed mine">بانتظار موافقتك على موعد بديل</span>`;
+    return `<span class="pill st-proposed">بانتظار موافقة ${name(approver)} على موعد بديل</span>`;
+  }
   if (viewer && ds === `await_${viewer}`) return `<span class="pill st-await mine">بانتظار تأكيدك</span>`;
   return statusPill(ds);
 }
@@ -420,6 +429,7 @@ const Data = {
   // الحالة المعروضة: المنجزة تحتاج تأكيد الطرفين، والقادمة التي انتهى وقتها تصبح «انقضاء الوقت»
   displayStatus(b) {
     if (b.status !== 'upcoming') return b.status;
+    if (b.proposal) return 'await_approval';
     if (b.doneByMentor && !b.doneByMentee) return 'await_mentee';
     if (b.doneByMentee && !b.doneByMentor) return 'await_mentor';
     if (Date.now() > dateTimeOf(b.date, b.end).getTime()) return 'overdue';
@@ -428,10 +438,11 @@ const Data = {
   // تصنيف الإحصاءات: كل ما انقضى وقته ولم يُحسم يدخل في «بانتظار التحديث»
   category(b) {
     const ds = Data.displayStatus(b);
+    if (ds === 'await_approval') return 'proposed';
     return ['overdue', 'await_mentor', 'await_mentee'].includes(ds) ? 'pending' : ds;
   },
   stats(bookings) {
-    const s = { total: bookings.length, upcoming: 0, pending: 0, done: 0, absent_mentor: 0, absent_mentee: 0, minutes: 0 };
+    const s = { total: bookings.length, upcoming: 0, pending: 0, done: 0, absent_mentor: 0, absent_mentee: 0, cancelled: 0, proposed: 0, minutes: 0 };
     bookings.forEach(b => { const c = Data.category(b); s[c] = (s[c] || 0) + 1; if (c === 'done') s.minutes += minutesBetween(b.start, b.end); });
     s.hours = Math.round(s.minutes / 6) / 10;
     return s;
@@ -443,6 +454,8 @@ const Data = {
   notify(to, text, extra = {}) {
     if (!to) return;
     Store.push(`notifications/${to}`, { to, text, ts: Date.now(), read: false, ...extra });
+    // نسخة للبريد الإلكتروني عبر طابور يرسله سكربت الإرسال (إن فعّلته الإدارة)؛ التعطيل الشخصي يطبّقه السكربت
+    if (to !== 'admin' && Store.get('notifyMail/enabled') === true) Store.push('mailQueue', { to, text: String(text).slice(0, 500), ts: Date.now() });
   },
   notifications: to => Store.list(`notifications/${to}`).filter(n => n && n.text).sort((a, b) => b.ts - a.ts),
   messagesFor(m) {
@@ -500,7 +513,7 @@ const Data = {
 
 const STAT_LABELS = {
   total: 'إجمالي الجلسات', upcoming: 'الجلسات القادمة', pending: 'بانتظار التحديث', done: 'الجلسات المنجزة',
-  absent_mentor: 'ملغاة لغياب المرشد', absent_mentee: 'ملغاة لغياب المستفيد', hours: 'ساعات إرشادية منجزة'
+  absent_mentor: 'ملغاة لغياب المرشد', absent_mentee: 'ملغاة لغياب المستفيد', cancelled: 'ملغاة بعد الحجز', proposed: 'بانتظار موافقة على موعد بديل', hours: 'ساعات إرشادية منجزة'
 };
 // clickable: تجعل المربعات قابلة للضغط لعرض الجلسات المندرجة تحتها
 function statsBoxes(s, withHours = false, { clickable = false, active = null } = {}) {
@@ -513,6 +526,8 @@ function statsBoxes(s, withHours = false, { clickable = false, active = null } =
     ${box('done', 'st-done', 'fa-circle-check')}
     ${box('absent_mentor', 'st-absent-mentor', 'fa-user-slash')}
     ${box('absent_mentee', 'st-absent-mentee', 'fa-user-xmark')}
+    ${box('cancelled', 'st-cancelled', 'fa-calendar-xmark')}
+    ${box('proposed', 'st-proposed', 'fa-calendar-day')}
     ${withHours ? box('hours', 'st-hours', 'fa-clock') : ''}
   </div>`;
 }
