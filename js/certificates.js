@@ -654,6 +654,38 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
   }
 
   /* ===== التبويب ===== */
+  /* ===== معاينة حيّة للشهادة أعلى القائمة: تتبع النوع والدفعة أو الفعالية المختارة ===== */
+  const liveCache = {};
+  const LIVE_W = 900;
+  function liveSample() {
+    const kind = ui.kind, first = recipients()[0];
+    if (first) return first;
+    const hasEvent = kind === 'event' || kind === 'speaker';
+    const ev = hasEvent ? ((kind === 'speaker' && ui.spEvent && Store.get(`events/${ui.spEvent}`)) || currentEvent() || { title: 'عنوان الفعالية', date: todayISO() }) : null;
+    return { id: 'sample', cert: { event: 'اسم الحاضر', mentor: 'اسم المرشد', mentee: 'اسم المستفيد', speaker: 'اسم المتحدث' }[kind], name: '', email: '',
+      cohortId: hasEvent ? null : (ui.cohort !== 'all' ? ui.cohort : (Data.cohorts().slice(-1)[0]?.id || null)), event: ev };
+  }
+  async function updateLive(key, kind, sample, tpl) {
+    try {
+      const { canvas } = await render(kind, sample, tpl);
+      const c = document.createElement('canvas'); c.width = LIVE_W; c.height = Math.round(LIVE_W * canvas.height / canvas.width);
+      c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+      liveCache[key] = c.toDataURL('image/jpeg', .85);
+    } catch (e) { console.error(e); return; }
+    const img = document.querySelector('[data-cert-live]');
+    if (img && img.dataset.key === key) { img.src = liveCache[key]; img.closest('.cert-live')?.classList.remove('loading'); }
+  }
+  function livePreview() {
+    const kind = ui.kind, sample = liveSample(), tpl = template(kind);
+    const key = JSON.stringify([kind, tpl, sample.cert, sample.cohortId, sample.event?.id || sample.event?.title, sample.event?.date, ui.issueDate]);
+    const hit = liveCache[key];
+    if (!hit) setTimeout(() => updateLive(key, kind, sample, tpl), 0);
+    return `<div class="cert-live ${hit ? '' : 'loading'}"><div class="cert-live-head"><b><i class="fa-regular fa-eye"></i> معاينة الشهادة</b>
+      <button type="button" class="btn xs ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل القالب</button></div>
+      <img data-cert-live data-key="${esc(key)}" src="${hit || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}" alt="معاينة الشهادة">
+      <p class="muted small">تتغير المعاينة تلقائياً مع النوع والدفعة أو الفعالية المختارة، وتعرض اسم أول شخص في القائمة. لتعديل المحتوى اضغط «تعديل القالب».</p></div>`;
+  }
+
   function adminPanel() {
     const list = recipients();
     const sel = list.filter(r => ui.sel.has(r.id));
@@ -672,6 +704,7 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
       <div class="sub-tabs">${Object.entries(KINDS).map(([k, v]) => `<button class="${ui.kind === k ? 'active' : ''}" data-cert-kind="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
       <div class="cert-filters">${filter}<label class="cert-date" title="الافتراضي يوم الإصدار">تاريخ الإصدار <input type="date" data-cert-date value="${esc(ui.issueDate)}"><button type="button" class="btn xs ghost" data-cert-date-reset ${ui.issueDate ? '' : 'disabled'}>اليوم</button></label>
         <input class="search" data-cert-search placeholder="ابحث بالاسم أو البريد..." value="${esc(ui.q)}"></div>
+      ${livePreview()}
       <div class="cert-bar">
         <label class="check"><input type="checkbox" data-cert-all ${allSel ? 'checked' : ''} ${list.length ? '' : 'disabled'}><span>تحديد الكل (${list.length})</span></label>
         <span class="muted small">${sel.length ? `محدد: <b>${sel.length}</b>` : ''}</span>
