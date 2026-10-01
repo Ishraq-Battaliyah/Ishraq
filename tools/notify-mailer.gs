@@ -22,6 +22,7 @@
  *       ]
  *     }
  *  4) شغّل الدالة setup مرة واحدة ووافق على الصلاحيات (تنشئ مهمة كل 5 دقائق).
+ *     للتشخيص: شغّل diagnose ثم افتح «سجل التنفيذ»، وللتأكد من الإرسال شغّل testEmail.
  *  5) في المنصة: لوحة الإدارة ← الرسائل ← «تفعيل الإشعارات البريدية».
  */
 const DB_URL = 'https://ishraq-c9328-default-rtdb.firebaseio.com';   // databaseURL من js/config.js
@@ -46,10 +47,13 @@ function db(path, method, query) {
 }
 
 function sendPending() {
-  if (db('notifyMail/enabled') !== true) return;          // الإدارة أوقفت الإرسال
+  if (db('notifyMail/enabled') !== true) { Logger.log('الإشعارات البريدية معطّلة من لوحة الإدارة (notifyMail/enabled ليست true)'); return; }
   const queue = db('mailQueue', 'get', `orderBy=${encodeURIComponent('"$key"')}&limitToFirst=${MAX_PER_RUN}`) || {};
+  const keys = Object.keys(queue);
+  Logger.log(`رسائل في الطابور: ${keys.length}`);
   const cache = {};
-  Object.keys(queue).forEach(key => {
+  let sent = 0, skipped = 0, failed = 0;
+  keys.forEach(key => {
     const item = queue[key] || {};
     try {
       const c = cache[item.to] || (cache[item.to] = db(`contacts/${item.to}`) || {});
@@ -57,14 +61,38 @@ function sendPending() {
       if (ok) {
         const name = (db(`members/${item.to}/name`) || '').toString();
         const text = String(item.text || '');
-        GmailApp.sendEmail(c.email.trim(), 'إشعار جديد من برنامج إشراق',
-          `${name ? 'عزيزي ' + name + '،\n\n' : ''}${text}\n\nللدخول إلى المنصة: ${SITE_URL}\n\nلإيقاف إشعارات البريد: ادخل إلى صفحتك في المنصة وعطّل «إشعارات البريد الإلكتروني».`,
-          { name: SENDER_NAME });
-      }
+        // MailApp (وليس GmailApp): نطاقه script.send_mail مذكور في appsscript.json؛ وGmailApp يحتاج نطاق Gmail غير مذكور فيفشل
+        MailApp.sendEmail({
+          to: c.email.trim(),
+          subject: 'إشعار جديد من برنامج إشراق',
+          body: `${name ? 'عزيزي ' + name + '،\n\n' : ''}${text}\n\nللدخول إلى المنصة: ${SITE_URL}\n\nلإيقاف إشعارات البريد: ادخل إلى صفحتك في المنصة وعطّل «إشعارات البريد الإلكتروني».`,
+          name: SENDER_NAME
+        });
+        sent++;
+      } else { skipped++; Logger.log(`تخطّي ${item.to}: ${c.emailNotify === false ? 'عطّل الإشعارات' : 'لا يوجد بريد صحيح في بطاقته'}`); }
       db(`mailQueue/${key}`, 'delete');
     } catch (err) {
-      console.error(err);
+      failed++;
+      console.error(err); Logger.log(`✗ فشل إرسال ${key}: ${err}`);
       if (item.ts && Date.now() - item.ts > DROP_AFTER_MS) db(`mailQueue/${key}`, 'delete');   // لا تتراكم الرسائل المعطوبة
     }
   });
+  Logger.log(`أُرسلت ${sent} · تخطّي ${skipped} · فشل ${failed}`);
+}
+
+// شغّلها يدوياً (زر «تشغيل») لتعرف أين المشكلة: تطبع في «سجل التنفيذ» نتيجة كل فحص
+function diagnose() {
+  const step = (name, fn) => { try { Logger.log(`✓ ${name}: ${fn()}`); } catch (e) { Logger.log(`✗ ${name}: ${e}`); } };
+  step('الحساب الذي يرسل', () => Session.getEffectiveUser().getEmail());
+  step('الإشعارات مفعّلة في لوحة الإدارة', () => JSON.stringify(db('notifyMail')));
+  step('قراءة الطابور (تحتاج صلاحية Firebase للحساب)', () => { const q = db('mailQueue', 'get', 'shallow=true'); return `${q ? Object.keys(q).length : 0} رسالة في الطابور`; });
+  step('المهام المجدولة', () => ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()).join(', ') || 'لا توجد! شغّل setup');
+  step('الحصة المتبقية للإرسال اليوم', () => MailApp.getRemainingDailyQuota());
+}
+
+// يرسل رسالة تجريبية إلى بريد الحساب نفسه للتأكد من صلاحية الإرسال
+function testEmail() {
+  const me = Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail({ to: me, subject: 'تجربة إشعارات إشراق', body: 'إذا وصلتك هذه الرسالة فصلاحية الإرسال سليمة.', name: SENDER_NAME });
+  Logger.log('أُرسلت رسالة تجريبية إلى ' + me);
 }
