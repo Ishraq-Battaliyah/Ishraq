@@ -248,7 +248,7 @@ const Certs = (() => {
     const by = H * D.foot.y, [dx, sx0, gx] = D.foot.xs.map(f => W * f);
     if (tpl.showDate) {
       ctx.fillStyle = C.b; ctx.font = `700 ${20 * k}px ${FONT}`; ctx.fillText('التاريخ:', dx, by + 6 * k);
-      ctx.font = `500 ${20 * k}px ${FONT}`; ctx.fillStyle = C.ink2; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(ui.issueDate ? parseISO(ui.issueDate) : new Date()), dx, by + 38 * k); ctx.direction = 'rtl';
+      ctx.font = `500 ${20 * k}px ${FONT}`; ctx.fillStyle = C.ink2; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(r.issueDate ? parseISO(r.issueDate) : ui.issueDate ? parseISO(ui.issueDate) : new Date()), dx, by + 38 * k); ctx.direction = 'rtl';
     }
     if (stamp) { const sh = 110 * k, sw = Math.min(sh * stamp.width / stamp.height, 200 * k); ctx.drawImage(stamp, sx0 - sw / 2, by - 72 * k, sw, sh); }
     if (sig) { const sh = 62 * k, sw = Math.min(sh * sig.width / sig.height, 190 * k); ctx.drawImage(sig, gx - sw / 2, by - 66 * k, sw, sh); }
@@ -323,7 +323,7 @@ const Certs = (() => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
-  const markIssued = (r, via) => Store.set(`certs/issued/${r.id}`, { ts: Date.now(), by: Security.adminName(), via });
+  const markIssued = (r, via) => Store.set(`certs/issued/${r.id}`, { ts: Date.now(), by: Security.adminName(), via, ...(ui.issueDate ? { date: ui.issueDate } : {}) });
 
   /* ===== الإرسال بالبريد (mailto) ===== */
   const mailText = (kind, r) => { const t = template(kind), v = valuesFor(kind, r, t); return { subject: fill(t.emailSubject, v), body: fill(t.emailBody, v) }; };
@@ -538,8 +538,8 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     if (d.secret !== SECRET) return out({ ok: false, error: 'auth' });
     if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(d.to || '')) return out({ ok: false, error: 'bad address' });
-    const pdf = Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf');
-    GmailApp.sendEmail(d.to, d.subject || '', d.body || '', { attachments: [pdf], name: d.senderName || SENDER_NAME });
+    const attachments = d.pdf ? [Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf')] : [];
+    GmailApp.sendEmail(d.to, d.subject || '', d.body || '', { attachments, name: d.senderName || SENDER_NAME });
     return out({ ok: true });
   } catch (err) { return out({ ok: false, error: String(err) }); }
 }
@@ -754,5 +754,26 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     requestAnimationFrame(() => { const n = $('[data-cert-search]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
   });
 
-  return { adminPanel, render, buildPdf, buildZip, template, DEFAULTS };
+  /* ===== شهادة العضو في صفحته: بعد أن تصدرها الإدارة يستخرجها المرشد أو المستفيد PDF بنفسه ===== */
+  function memberSection(me) {
+    if (!me || !KINDS[me.role] || !['mentor', 'mentee'].includes(me.role) || !issuedOf(me.id)) return '';
+    return `<section class="panel my-cert"><div class="panel-head"><h2><i class="fa-solid fa-award"></i> شهادتك</h2>
+      <button class="btn primary" data-my-cert><i class="fa-solid fa-file-pdf"></i> استخراج الشهادة PDF</button></div>
+      <p class="muted small">أصدرت لك إدارة البرنامج شهادتك، ويمكنك استخراجها بصيغة PDF وحفظها في أي وقت.</p></section>`;
+  }
+  async function downloadMine() {
+    const a = Auth.current(), m = a?.id && Data.member(a.id);
+    const iss = m && issuedOf(m.id);
+    if (!iss) return toast('لم تُصدر شهادتك بعد', 'error');
+    const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const r = { id: m.id, cert: nameOf(m.id, m.name), name: m.name, email: m.email || '', cohortId: m.cohort, event: null, issueDate: iss.date || iso(new Date(iss.ts || Date.now())) };
+    try {
+      toast('جارٍ تجهيز الشهادة...');
+      const { blob } = await pdfBlob(m.role, r);
+      saveBlob(blob, fileName(m.role, r));
+    } catch (e) { console.error(e); toast('تعذّر إنشاء الشهادة', 'error'); }
+  }
+  document.addEventListener('click', e => { if (e.target.closest?.('[data-my-cert]')) downloadMine(); });
+
+  return { adminPanel, render, buildPdf, buildZip, template, DEFAULTS, memberSection };
 })();

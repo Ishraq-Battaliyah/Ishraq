@@ -286,28 +286,38 @@ const Home = (() => {
     $$('.reveal', root).forEach(el => io.observe(el));
   }
 
-  /* نموذج تسجيل الاهتمام */
+  /* نموذج التسجيل في الدفعة المعلنة */
   function openInterestForm() {
     const fields = Store.list('form/fields').sort(byOrder);
+    const ann = Store.get('announcement') || {}, cohort = ann.cohort && Data.cohort(ann.cohort);
     const body = `<form class="form-grid interest-form" novalidate>
-      <p class="form-intro">سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق، وسيتواصل معك فريق البرنامج.</p>
+      <p class="form-intro">${cohort ? `سجّل للالتحاق بـ<b>${esc(cohort.name)} ${esc(cohort.year)}</b> من إشراق` : 'سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق'}، وسيتواصل معك فريق البرنامج.</p>
       ${fieldInput({ k: '__role', label: 'أرغب بالانضمام بصفتي', type: 'radio', required: true, options: [{ value: 'mentor', label: 'مرشد' }, { value: 'mentee', label: 'مستفيد' }], wide: true }, '')}
-      ${fields.map(f => fieldInput({ ...f, k: f.id, options: String(f.options || '').split('\n').map(o => o.trim()).filter(Boolean), wide: f.type === 'textarea' })).join('')}
+      ${fieldInput({ k: '__prev', label: 'هل سبق لك التسجيل في إشراق كمرشد أو مستفيد؟', type: 'radio', required: true, options: [{ value: 'yes', label: 'نعم' }, { value: 'no', label: 'لا' }], wide: true }, 'no')}
+      <div class="field wide" data-prev-code hidden><label>رقم العضوية السابق <em>*</em></label><input name="__prevCode" dir="ltr" placeholder="مثال: M211" autocomplete="off"><small class="hint">الرقم الذي وصلك في الدفعة السابقة (حرف ثم أرقام)، ويُعتمد نفسه لك مع رمز دخول جديد.</small></div>
+      ${fields.map(f => (f.type === 'info' ? `<p class="form-note wide">${nl2br(f.label)}</p>`
+        : fieldInput({ ...f, k: f.id, options: String(f.options || '').split('\n').map(o => o.trim()).filter(Boolean), wide: f.type === 'textarea' }))).join('')}
     </form>`;
     openModal({
-      title: '<i class="fa-solid fa-pen-to-square"></i> تسجيل الاهتمام بالدفعة القادمة', size: 'md', body,
+      title: `<i class="fa-solid fa-pen-to-square"></i> ${cohort ? `التسجيل في ${esc(cohort.name)}` : 'التسجيل في الدفعة القادمة'}`, size: 'md', body,
+      onOpen: m => {
+        const sync = () => { const yes = $('input[name=__prev]:checked', m.body)?.value === 'yes'; $('[data-prev-code]', m.body).hidden = !yes; };
+        $$('input[name=__prev]', m.body).forEach(r => r.addEventListener('change', sync)); sync();
+      },
       actions: [
         {
           label: '<i class="fa-solid fa-paper-plane"></i> إرسال', cls: 'primary', onClick: m => {
             const form = $('form', m.body);
             if (!validateForm(form)) return false;
             const v = readForm(form);
+            const prev = v.__prev === 'yes', prevCode = toEnDigits(String(v.__prevCode || '')).trim().toUpperCase().replace(/\s+/g, '');
+            if (prev && !/^[MB]\d{2,}$/.test(prevCode)) { toast('اكتب رقم العضوية السابق بصيغته الصحيحة، مثل M211', 'error'); return false; }
             const answers = {};
-            fields.forEach(f => { answers[f.id] = v[f.id] ?? ''; });
+            fields.filter(f => f.type !== 'info').forEach(f => { answers[f.id] = v[f.id] ?? ''; });
             const name = answers.f_name || Object.values(answers)[0] || '';
-            Store.push('interests', { role: v.__role, answers, ts: Date.now() });
-            Data.notify('admin', `تسجيل اهتمام جديد (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'}): ${name}`, { icon: 'fa-user-plus' });
-            openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك بنجاح، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'حسناً', cls: 'primary' }] });
+            Store.push('interests', { role: v.__role, answers, ts: Date.now(), ...(cohort ? { cohort: cohort.id } : {}), ...(prev ? { prev: true, prevCode } : {}) });
+            Data.notify('admin', `تسجيل جديد (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'})${cohort ? ` في ${cohort.name}` : ''}: ${name}`, { icon: 'fa-user-plus' });
+            openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك بنجاح، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'إغلاق', cls: 'primary' }] });
           }
         },
         { label: 'إلغاء', cls: 'ghost' }

@@ -11,7 +11,8 @@ const Portal = (() => {
     // بيانات تواصل الطرف المرتبط تُقرأ من مسار خاص تسمح به القواعد لهذا العضو فقط
     if (other && String(Store.scope || '').startsWith('member:')) Store.watch(`contacts/${other.id}`);
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
-    const bookings = Data.bookings(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id });
+    const bookings = Data.bookings({ ...(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id }), cohort: me.cohort });
+    const cstate = Bands.state(me.cohort);   // prelaunch | live | archived
     const msgs = Data.messagesFor(me);
 
     root.innerHTML = `<div class="dash member-portal ${kind}">
@@ -22,10 +23,14 @@ const Portal = (() => {
           <div>${avatar(me, 'lg')}</div>
           <div><small>${kind === 'mentor' ? 'لوحة تحكم المرشد' : 'لوحة تحكم المستفيد'} · ${esc(Data.cohort(me.cohort)?.name || '')}</small>
           <h1>أهلاً، ${esc(me.name)}</h1><span class="code-chip">${esc(me.code)}</span></div>
-          <div class="hello-stats">${progressRing(Data.doneCount(kind === 'mentor' ? 'mentorId' : 'menteeId', me.id))}</div>
+          <div class="hello-stats">${(me.prevCohorts || []).length ? '<button class="btn light sm" data-open-archive><i class="fa-solid fa-box-archive"></i> الدفعات السابقة</button>' : ''}${progressRing(bookings.filter(b => b.status === 'done').length)}</div>
         </section>
 
         ${notifyPrefPanel(me)}
+
+        ${cohortBanner(me, cstate)}
+
+        ${Certs.memberSection(me)}
 
         ${Events.portalSection(me)}
 
@@ -51,6 +56,30 @@ const Portal = (() => {
       </main>
     </div>`;
     wire(root, kind, me, other);
+  }
+
+  // حالة دفعة العضو: قبل الإطلاق أو بعد الأرشفة يبقى الدخول وقراءة البيانات وتعديل البطاقة فقط
+  function cohortBanner(me, st) {
+    if (st === 'live') return '';
+    return `<div class="cohort-banner ${st}"><i class="fa-solid ${st === 'archived' ? 'fa-box-archive' : 'fa-hourglass-start'}"></i><div><b>${st === 'archived' ? 'دفعتك مؤرشفة' : 'لم تُطلق دفعتك رسمياً بعد'}</b>
+      <p>${st === 'archived' ? 'يمكنك الدخول لعرض بطاقتك وجلساتك وتقييماتك وشهادتك، ولا يمكن إضافة مواعيد أو جلسات أو تعديل الجلسات السابقة.' : 'يمكنك تعديل بطاقتك الآن، وتُفتح إضافة المواعيد وحجز الجلسات وتحديثها وكتابة التقييمات بعد الإطلاق الرسمي للدفعة.'}</p></div></div>`;
+  }
+  const LOCKED_SEL = '[data-book],[data-bk],[data-add-slot],[data-add-extra-slot],[data-del-slot],[data-add-wish],[data-add-extra-wish],[data-wish-withdraw],[data-wish-accept],[data-wish-decline],[data-final],[data-review-form] button,[data-add-slot-alert]';
+
+  // الدفعات السابقة للعضو (سبق تسجيله ثم أُعيد تسجيله في دفعة أحدث): جلساته وتقييماته للعرض فقط
+  function openArchive(kind, me) {
+    const key = kind === 'mentor' ? 'mentorId' : 'menteeId', since = me.cohortSince || 0;
+    const blocks = (me.prevCohorts || []).map(cid => {
+      const c = Data.cohort(cid), bks = Data.bookings({ [key]: me.id }).filter(b => b.cohort === cid).concat(Data.bookings({ [key]: me.id, extra: true }).filter(b => b.cohort === cid));
+      return `<h3 class="sub"><i class="fa-solid fa-box-archive"></i> ${esc(c?.name || cid)} <small class="muted">${esc(c?.year || '')}</small></h3>
+        ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الجلسة</th><th>الموعد</th><th>الحالة</th></tr></thead><tbody>${bks.map(b => `<tr><td data-l="الجلسة">${esc(Data.bookingName(b))}</td><td data-l="الموعد">${fmtDate(b.date)}<br><small>${tRange(b.start, b.end)}</small></td><td data-l="الحالة">${bookingPill(b, kind)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">لا توجد جلسات مسجلة.</p>'}`;
+    }).join('');
+    const revs = Data.reviews({ authorId: me.id }).filter(r => (r.ts || 0) < since);
+    openModal({
+      title: '<i class="fa-solid fa-box-archive"></i> الدفعات السابقة', size: 'lg',
+      body: `${blocks}${revs.length ? `<h3 class="sub"><i class="fa-solid fa-star"></i> تقييماتي السابقة</h3><ul class="review-list">${revs.map(r => `<li class="review"><header><b>${r.type === 'final' ? 'التقييم الختامي' : r.type === 'program' ? 'تقييم البرنامج' : r.extraSession ? 'جلسة إضافية' : sessionName(r.session)}</b><small>${fmtTs(r.ts)}</small></header><p>${nl2br(r.text)}</p></li>`).join('')}</ul>` : ''}`,
+      actions: [{ label: 'إغلاق', cls: 'primary' }]
+    });
   }
 
   function topbar(kind, me) {
@@ -94,7 +123,7 @@ const Portal = (() => {
   function slotsPanel(me) {
     const launched = !!Bands.launchedAt(me.cohort);
     const slots = Data.slots(me.id);
-    const booked = new Set(Data.bookings({ mentorId: me.id }).filter(b => b.status !== 'absent_mentor' && b.status !== 'absent_mentee').map(b => b.slotId));
+    const booked = new Set(Data.bookings({ mentorId: me.id, cohort: me.cohort }).filter(b => b.status !== 'absent_mentor' && b.status !== 'absent_mentee').map(b => b.slotId));
     const group = n => {
       const list = slots.filter(s => s.session === n);
       return `<div class="slot-group"><h3>${sessionName(n)} <span class="count">${list.length}</span></h3>
@@ -158,10 +187,10 @@ const Portal = (() => {
   function bookingPanel(me, mentor) {
     if (!mentor) return `<section class="panel"><h2><i class="fa-solid fa-calendar-check"></i> المواعيد المتاحة</h2>${emptyState('ستظهر المواعيد هنا بعد تعيين مرشد لك', 'fa-calendar')}</section>`;
     const slots = Data.slots(mentor.id);
-    const taken = new Set(Data.bookings({ mentorId: mentor.id }).filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
+    const taken = new Set(Data.bookings({ mentorId: mentor.id, cohort: me.cohort }).filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
     const group = n => {
       const active = Data.activeBooking(me.id, n);
-      const prevDone = n === 1 || Data.bookings({ menteeId: me.id }).some(b => b.session === n - 1 && b.status === 'done');
+      const prevDone = n === 1 || Data.bookings({ menteeId: me.id, cohort: me.cohort }).some(b => b.session === n - 1 && b.status === 'done');
       let inner;
       if (active) inner = `<div class="slot-state">${bookingPill(active, 'mentee')} <span>${fmtSlot(active)}</span></div>`;
       else if (!prevDone) inner = `<div class="slot-state locked"><i class="fa-solid fa-lock"></i> يُتاح الحجز بعد إنجاز ${sessionName(n - 1)}</div>`;
@@ -232,7 +261,7 @@ const Portal = (() => {
   function extraMentorPanel(me) {
     if (!Data.extraOn()) return '';
     const slots = Data.slots(me.id, true);
-    const bks = Data.bookings({ mentorId: me.id, extra: true });
+    const bks = Data.bookings({ mentorId: me.id, extra: true, cohort: me.cohort });
     const booked = new Set(bks.filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
     const st = Data.extraStats(me.id);
     const takenAll = new Set(Object.keys(Store.get('extraTaken') || {}));
@@ -253,7 +282,7 @@ const Portal = (() => {
   function extraMenteePanel(me) {
     if (!Data.extraOn()) return '';
     const taken = new Set(Object.keys(Store.get('extraTaken') || {}));
-    const bks = Data.bookings({ menteeId: me.id, extra: true });
+    const bks = Data.bookings({ menteeId: me.id, extra: true, cohort: me.cohort });
     const mine = new Set(bks.filter(b => ['upcoming', 'done'].includes(b.status)).map(b => b.slotId));
     const open = Store.list('slots').filter(x => x.extra && !taken.has(x.id) && !mine.has(x.id) && dateTimeOf(x.date, x.start) > new Date())
       .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
@@ -514,7 +543,7 @@ const Portal = (() => {
     const mine = Store.list('wishes').filter(w => w.menteeId === me.id && !w.extra && w.status !== 'withdrawn').sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const group = n => {
       const active = Data.activeBooking(me.id, n);
-      const prevDone = n === 1 || Data.bookings({ menteeId: me.id }).some(x => x.session === n - 1 && x.status === 'done');
+      const prevDone = n === 1 || Data.bookings({ menteeId: me.id, cohort: me.cohort }).some(x => x.session === n - 1 && x.status === 'done');
       const list = mine.filter(w => w.session === n);
       let inner;
       if (active) inner = `<p class="muted small">${sessionName(n)} مجدولة: ${fmtSlot(active)}</p>`;
@@ -641,11 +670,12 @@ const Portal = (() => {
   function reviewsPanel(kind, me, other, bookings) {
     const done = bookings.filter(b => b.status === 'done');
     // الجلسات الإضافية المنجزة تدخل في التقييمات أيضاً (وتُميَّز بشارة)
-    const extraDone = Data.bookings({ [kind === 'mentor' ? 'mentorId' : 'menteeId']: me.id, extra: true }).filter(b => b.status === 'done');
-    const mine = Data.reviews({ authorId: me.id });
+    const extraDone = Data.bookings({ [kind === 'mentor' ? 'mentorId' : 'menteeId']: me.id, extra: true, cohort: me.cohort }).filter(b => b.status === 'done');
+    const since = me.cohortSince || 0;   // تقييمات الدفعات السابقة في زر «الدفعات السابقة»
+    const mine = Data.reviews({ authorId: me.id }).filter(r => (r.ts || 0) >= since);
     const reviewedBookings = new Set(mine.filter(r => r.type === 'session').map(r => r.bookingId));
     const pendingDone = done.concat(extraDone).filter(b => !reviewedBookings.has(b.id));
-    const received = Data.reviews({ targetId: me.id }).filter(r => r.status === 'approved');
+    const received = Data.reviews({ targetId: me.id }).filter(r => r.status === 'approved' && (r.ts || 0) >= since);
     const finalDone = mine.some(r => r.type === 'final');
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const revItem = (r, showStatus) => `<li class="review">
@@ -747,6 +777,14 @@ const Portal = (() => {
 
   function wire(root, kind, me, other) {
     $('[data-logout]', root).onclick = () => Auth.logout();
+    $('[data-open-archive]', root)?.addEventListener('click', () => openArchive(kind, me));
+    // قبل إطلاق الدفعة أو بعد أرشفتها: تُمنع إجراءات الجلسات (والقواعد تمنعها في قاعدة البيانات أيضاً)
+    const st = Bands.state(me.cohort);
+    if (st !== 'live') {
+      const block = e => { if (e.target.closest?.(LOCKED_SEL)) { e.stopImmediatePropagation(); e.preventDefault(); toast(st === 'archived' ? 'دفعتك مؤرشفة؛ لا يمكن إضافة أو تعديل الجلسات' : 'تُفتح هذه الإجراءات بعد الإطلاق الرسمي لدفعتك', 'error'); } };
+      root.addEventListener('click', block, true); root.addEventListener('submit', block, true);
+      root.classList.add('cohort-locked');
+    }
     $('[data-edit-me]', root)?.addEventListener('click', () => editProfile(me));
     $('[data-download-card]', root)?.addEventListener('click', () => CardImage.download(Data.member(me.id)));
     $('[data-add-slot]', root)?.addEventListener('click', () => openAddSlot(me));
@@ -764,7 +802,7 @@ const Portal = (() => {
     const rf = $('[data-review-form]', root);
     rf && rf.addEventListener('submit', e => {
       e.preventDefault();
-      const own = kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id };
+      const own = { ...(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id }), cohort: me.cohort };
       const done = Data.bookings(own).concat(Data.bookings({ ...own, extra: true })).filter(b => b.status === 'done');
       submitReview(kind, me, other, rf, done);
     });

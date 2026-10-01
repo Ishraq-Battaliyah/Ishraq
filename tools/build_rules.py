@@ -32,6 +32,9 @@ REL_TO = lambda who: f"({R}extraPairs/' + {ME} + '_' + {who}).exists() || {R}ext
 
 
 MY_ROLE = f"{R}members/' + {ME} + '/role').val()"
+# دفعة العضو «فعّالة» بعد إطلاقها وقبل أرشفتها: لا يضيف العضو مواعيد ولا يحجز ولا يقيّم قبل الإطلاق أو بعد الأرشفة (يبقى له الدخول وقراءة بياناته)
+MY_COHORT = f"{R}members/' + {ME} + '/cohort').val()"
+LIVE = f"({R}launches/' + {MY_COHORT} + '/ts').exists() && !{R}launches/' + {MY_COHORT} + '/archivedAt').exists())"
 OWNER = "(auth != null && auth.token.email_verified === true && (" + " || ".join(f"auth.token.email === '{e}'" for e in OWNERS) + "))"
 ADMIN_REC = f"{R}admins/' + auth.uid)"
 IS_ADMIN = f"({OWNER} || (auth != null && {ADMIN_REC}.exists()))"
@@ -122,8 +125,10 @@ REVIEW = fields({
     "featured": BOOL, "ts": NUM, "decidedAt": NUM, "extraSession": BOOL,
 }, required=('type', 'authorId', 'text', 'status'))
 
+# التسجيل في الدفعة المعلنة: الزائر ينشئ السجل (دون حقول القرار)، والإدارة تقبله أو تعتذر وتسجّل قرارها فيه
 INTEREST = fields({"id": ID, "role": one_of('mentor', 'mentee'), "answers": {"$f": s(3000)}, "ts": NUM,
-                   "source": s(200), "seen": BOOL}, required=('role',))
+                   "source": s(200), "seen": BOOL, "cohort": ID, "prev": BOOL, "prevCode": s(30),
+                   "status": one_of('accepted', 'declined'), "memberId": ID, "decidedAt": NUM, "mailedAt": NUM}, required=('role',))
 
 EVENT_REG = fields({"id": ID, "eventId": ID, "memberId": ID, "role": one_of('mentor', 'mentee'), "code": s(20),
                     "name": s(120), "phone": s(30), "email": s(120),
@@ -147,10 +152,10 @@ TICKET = fields({"id": ID, "memberId": ID, "memberName": s(120), "role": one_of(
 CERT_TPL = fields({**{k: s(3000) for k in ['title', 'intro', 'body', 'org', 'signerName', 'signerTitle', 'footer', 'emailSubject', 'emailBody']},
                    "signature": s(600), "stamp": s(600), "showSignature": BOOL, "showStamp": BOOL, "showDate": BOOL})
 CERTS = {".read": can('certificates'), **w(can('certificates')),
-         "templates": {"$kind": {**CERT_TPL}},
-         "names": {"$k": s(120)},
+         "templates": {"$kind": {".read": f"{IS_MEMBER} && $kind === {MY_ROLE}", **CERT_TPL}},
+         "names": {"$k": {".read": f"{IS_MEMBER} && $k === {ME}", **s(120)}},
          "mailer": fields({"url": s(400), "secret": s(120), "name": s(120)}),
-         "issued": {"$k": fields({"ts": NUM, "by": s(120), "via": s(20)})}}
+         "issued": {"$k": {".read": f"{IS_MEMBER} && $k === {ME}", **fields({"ts": NUM, "by": s(120), "via": s(20), "date": s(10)})}}}
 
 CONTACT = fields({**{k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram']}, "emailNotify": BOOL})
 
@@ -246,18 +251,18 @@ rules = {
     "slots": {
         ".read": any_of(can('sessions', 'cohorts'), f"({IS_MEMBER} && ((query.orderByChild === 'mentorId' && (query.equalTo === {ME} || query.equalTo === {PARTNER}.val())) || (query.orderByChild === 'extra' && query.equalTo === true && {EXTRA_ON})))"),
         **w(can('sessions')), ".indexOn": ["mentorId", "extra"],
-        "$sid": {**w(f"{IS_MEMBER} && ((data.exists() && {d('mentorId')} === {ME}) || (!data.exists() && {n('mentorId')} === {ME}"
+        "$sid": {**w(f"{IS_MEMBER} && {LIVE} && ((data.exists() && {d('mentorId')} === {ME}) || (!data.exists() && {n('mentorId')} === {ME}"
                      f" && (({n('extra')} === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentor') || newData.child('session').exists())))"), **SLOT},
     },
     "bookings": {
         ".read": any_of(can('sessions', 'cohorts', 'reviews'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
         **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
-        "$bid": {**w(f"{IS_MEMBER} && (({BOOKING_CREATE}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
+        "$bid": {**w(f"{IS_MEMBER} && {LIVE} && (({BOOKING_CREATE}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
     },
     "wishes": {
         ".read": any_of(can('sessions'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
         **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
-        "$wid": {**w(f"{IS_MEMBER} && ((!data.exists() && {n('menteeId')} === {ME} && {n('status')} === 'open'"
+        "$wid": {**w(f"{IS_MEMBER} && {LIVE} && ((!data.exists() && {n('menteeId')} === {ME} && {n('status')} === 'open'"
                      f" && (({n('mentorId')} === {PARTNER}.val() && newData.child('session').exists() && !newData.child('extra').exists())"
                      f" || ({n('extra')} === true && !newData.child('session').exists() && {EXTRA_ON} && {MY_ROLE} === 'mentee' && {REL_TO(n('mentorId'))})))"
                      f" || (data.exists() && {d('status')} === 'open' && {n('menteeId')} === {d('menteeId')} && {n('mentorId')} === {d('mentorId')}"
@@ -272,7 +277,7 @@ rules = {
     "reviews": {
         ".read": any_of(can('reviews'), f"({IS_MEMBER} && {query('authorId', ME)})"),
         **w(can('reviews')), ".indexOn": ["authorId"],
-        "$rid": {**w(f"{IS_MEMBER} && {REVIEW_CREATE}"), **REVIEW},
+        "$rid": {**w(f"{IS_MEMBER} && {LIVE} && {REVIEW_CREATE}"), **REVIEW},
     },
     # نسخة التقييم المعتمد لدى الطرف المستهدف: يقرأ كل عضو ما اعتُمد له فقط
     "approvedReviews": {".read": can('reviews'), **w(can('reviews')),
@@ -317,7 +322,7 @@ rules = {
     "extraPairs": {".read": can('sessions'), **w(can('sessions')),
                    "$k": {".write": f"{IS_MEMBER} && newData.val() === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentee' && $k.beginsWith({ME} + '_')",
                           ".validate": "newData.val() === true"}},
-    "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists()"), **INTEREST}},
+    "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists()"), **INTEREST}},
     "eventRegs": {".read": can('events', 'certificates'), **w(can('events')),
                   "$rid": {**w(f"(!data.exists() && newData.child('eventId').isString() && (!newData.child('memberId').exists() || (auth != null && {ME} === {n('memberId')}))) || (data.exists() && !newData.exists() && auth != null && {ME} === {d('memberId')})"),
                            **EVENT_REG}},

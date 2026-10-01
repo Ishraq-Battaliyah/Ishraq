@@ -10,7 +10,7 @@ const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'eve
 const q = (path, child, equalTo) => ({ path, child, equalTo });
 function memberPaths(id, role, partner) {
   const mentorId = role === 'mentor' ? id : partner;
-  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`, 'extraTaken',
+  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `certs/templates/${role}`, `certs/names/${id}`, `certs/issued/${id}`, `pairs/${id}`, `approvedReviews/${id}`, 'extraTaken',
     q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('wishes', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
     q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id), q('tickets', 'memberId', id),
     // مواعيد المرشد الأساسية (المرشد نفسه أو مرشد المستفيد)، ومواعيد الجلسات الإضافية المفتوحة لكل المستفيدين
@@ -39,9 +39,9 @@ const PERMISSIONS = [
   { k: 'announce', label: 'الإعلان المنبثق', desc: 'نافذة الإعلان في الصفحة الرئيسية', icon: 'fa-bullhorn' },
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
-  { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
+  { k: 'interests', label: 'المسجلون', desc: 'تسجيلات الدفعة المعلنة: مراجعتها وقبولها والاعتذار وإرسال الرسائل', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 10;
+const RULES_VERSION = 11;
 
 const Auth = {
   KEY: 'ishraq-auth',
