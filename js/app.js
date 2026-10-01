@@ -65,6 +65,7 @@
   }
 
   const mode = await Store.init();
+  if (window.ISHRAQ_DEMO) Demo.start();   // إطار المعاينة: بيانات وحساب افتراضيان
   await Security.restore();
 
   // التعبئة الافتراضية والترقيات البسيطة: من الإدارة فقط في الوضع الآمن (القواعد لا تسمح لغيرها بالكتابة)
