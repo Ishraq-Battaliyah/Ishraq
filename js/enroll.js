@@ -1,8 +1,9 @@
-/* إعلان دفعة جديدة: اختيار الدفعة وإطلاق التسجيل، نموذج التسجيل، المسجلون وقبولهم، ورسائل القبول والاعتذار بالبريد */
+/* إعلان دفعة جديدة: اختيار الدفعة وإطلاق التسجيل، نموذج التسجيل، المسجلون وقبولهم، ورسائل القبول والاعتذار بالبريد.
+   منفصل تماماً عن «المهتمين»: نموذجه regform/fields ونتائجه registrations، بينما نموذج المهتمين form/fields ونتائجه interests. */
 
 const Enroll = (() => {
   const ui = { regCohort: '', sel: new Set() };
-  const fieldsList = () => Store.list('form/fields').sort(byOrder);
+  const fieldsList = () => Store.list('regform/fields').sort(byOrder);
   const answerFields = () => fieldsList().filter(f => f.type !== 'info');
   const announced = () => Data.cohort(Store.get('announcement/cohort'));
   const siteUrl = () => window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '');
@@ -74,8 +75,8 @@ const Enroll = (() => {
           if (!validateForm(form)) return false;
           const v = readForm(form);
           if (v.type === 'info') v.required = false;
-          if (f.id) Store.update(`form/fields/${f.id}`, v);
-          else { const max = Math.max(0, ...Store.list('form/fields').map(x => x.order || 0)); Store.push('form/fields', { ...v, order: max + 1 }); }
+          if (f.id) Store.update(`regform/fields/${f.id}`, v);
+          else { const max = Math.max(0, ...Store.list('regform/fields').map(x => x.order || 0)); Store.push('regform/fields', { ...v, order: max + 1 }); }
           done && done();
         }
       }, { label: 'إلغاء', cls: 'ghost' }]
@@ -112,11 +113,11 @@ const Enroll = (() => {
     m.el.addEventListener('click', e => {
       const t = e.target;
       if (t.closest('[data-ff-add]')) return editField(null);
-      if (t.closest('[data-ff-preview]')) return Home.openInterestForm();
+      if (t.closest('[data-ff-preview]')) return Home.openRegistrationForm();
       const li = t.closest('li[data-id]'); if (!li) return;
-      const f = Store.get(`form/fields/${li.dataset.id}`); if (!f) return;
+      const f = Store.get(`regform/fields/${li.dataset.id}`); if (!f) return;
       if (t.closest('[data-ff-edit]')) return editField(f);
-      if (t.closest('[data-ff-del]')) return confirmDialog(`حذف «${esc(String(f.label).slice(0, 60))}» من النموذج؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`form/fields/${f.id}`));
+      if (t.closest('[data-ff-del]')) return confirmDialog(`حذف «${esc(String(f.label).slice(0, 60))}» من النموذج؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`regform/fields/${f.id}`));
       const mv = t.closest('[data-ff-move]');
       if (mv) {
         const list = fieldsList(), i = list.findIndex(x => x.id === f.id), j = i + Number(mv.dataset.ffMove);
@@ -124,7 +125,7 @@ const Enroll = (() => {
         const a = list[i], b = list[j], upd = {};
         const oa = a.order ?? i + 1, ob = b.order ?? j + 1;
         upd[`${a.id}/order`] = oa === ob ? ob + (j > i ? 1 : -1) : ob; upd[`${b.id}/order`] = oa === ob ? oa : oa;
-        Store.update('form/fields', upd);
+        Store.update('regform/fields', upd);
       }
     });
   }
@@ -144,7 +145,7 @@ const Enroll = (() => {
   function regList(role) {
     const cur = announced();
     const cf = ui.regCohort || (cur ? cur.id : 'all');
-    return Store.list('interests').filter(x => x.role === role && (cf === 'all' || (x.cohort || '') === cf)).sort((a, b) => b.ts - a.ts);
+    return Store.list('registrations').filter(x => x.role === role && (cf === 'all' || (x.cohort || '') === cf)).sort((a, b) => b.ts - a.ts);
   }
 
   function regCard(x, h) {
@@ -164,23 +165,23 @@ const Enroll = (() => {
   }
 
   function regsPanel(h) {
-    if (!Security.can('interests')) return '';
-    const all = Store.list('interests'), cur = announced();
+    if (!Security.can('announce')) return '';
+    const all = Store.list('registrations'), cur = announced();
     const cf = ui.regCohort || (cur ? cur.id : 'all');
     const used = new Set(all.map(x => x.cohort || '').filter(Boolean));
     const chips = [...(cur ? [{ id: cur.id, name: `${cur.name} (المعلنة)` }] : []), { id: 'all', name: 'كل الدفعات' },
       ...Data.cohorts().filter(c => used.has(c.id) && c.id !== cur?.id)];
-    setTimeout(() => regList('mentor').concat(regList('mentee')).filter(x => !x.seen).forEach(x => Store.set(`interests/${x.id}/seen`, true)), 1500);
+    setTimeout(() => regList('mentor').concat(regList('mentee')).filter(x => !x.seen).forEach(x => Store.set(`registrations/${x.id}/seen`, true)), 1500);
     const section = role => {
       const list = regList(role);
       return `<section class="reg-section"><div class="block-head"><h3><i class="fa-solid ${role === 'mentor' ? 'fa-user-tie' : 'fa-user-graduate'}"></i> ${role === 'mentor' ? 'المرشدون' : 'المستفيدون'} <span class="count">${list.length}</span></h3>
         ${list.length ? `<label class="check"><input type="checkbox" data-reg-all="${role}" ${list.every(x => ui.sel.has(x.id)) ? 'checked' : ''}><span>تحديد الكل</span></label>` : ''}</div>
         ${list.length ? `<div class="reg-grid">${list.map(x => regCard(x, h)).join('')}</div>` : emptyState(`لا يوجد ${role === 'mentor' ? 'مرشدون' : 'مستفيدون'} مسجلون`, 'fa-user-plus')}</section>`;
     };
-    const nSel = [...ui.sel].filter(id => Store.get(`interests/${id}`)).length;
+    const nSel = [...ui.sel].filter(id => Store.get(`registrations/${id}`)).length;
     return `<div class="panel" id="enroll-regs">
       <div class="panel-head"><h2><i class="fa-solid fa-user-plus"></i> المسجلون في النموذج <span class="count">${all.length}</span></h2>
-        <div class="head-actions">${h.exportBar('interests')}</div></div>
+        <div class="head-actions">${h.exportBar('registrations')}</div></div>
       <div class="chip-filter">${chips.map(c => `<button class="${cf === c.id ? 'active' : ''}" data-reg-cohort="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>
       <div class="reg-bar"><span class="muted small">${nSel ? `محدد: <b>${nSel}</b>` : 'حدّد مسجلين لإرسال رسالة لهم دفعة واحدة'}</span>
         <button class="btn sm primary" data-reg-mail="accept" ${nSel ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال إشعار القبول عبر الإيميل</button>
@@ -259,7 +260,7 @@ const Enroll = (() => {
       const r = await Data.addMember(x.role, cohortId, data);
       member = r; secret = r.secret; error = r.error;
     }
-    Store.update(`interests/${x.id}`, { status: 'accepted', memberId: member.id, cohort: cohortId, decidedAt: Date.now() });
+    Store.update(`registrations/${x.id}`, { status: 'accepted', memberId: member.id, cohort: cohortId, decidedAt: Date.now() });
     Security.log(returning ? 'قبول مسجّل سابق برمز جديد' : 'قبول مسجّل', member.name, `${roleLabel(x.role)} ${member.code} — ${Data.cohort(cohortId)?.name || cohortId}`);
     openModal({
       title: '<i class="fa-solid fa-circle-check"></i> تم القبول', size: 'sm',
@@ -308,7 +309,7 @@ const Enroll = (() => {
   };
 
   function mailDialog(kind) {
-    const list = [...ui.sel].map(id => Store.get(`interests/${id}`)).filter(Boolean);
+    const list = [...ui.sel].map(id => Store.get(`registrations/${id}`)).filter(Boolean);
     if (!list.length) return toast('حدّد مسجلاً واحداً على الأقل', 'error');
     const withMail = list.filter(emailOf), without = list.length - withMail.length;
     if (!withMail.length) return toast('لا يوجد بريد مسجل لأي من المحددين', 'error');
@@ -330,7 +331,7 @@ const Enroll = (() => {
           if (!subject || !body.trim()) { toast('اكتب العنوان والنص', 'error'); return false; }
           try { localStorage.setItem(MAIL_KEY, provider); } catch { /* ignore */ }
           const btn = $('[data-act="0"]', mm.el); btn.disabled = true;
-          const stamp = xs => xs.forEach(x => Store.update(`interests/${x.id}`, { mailedAt: Date.now() }));
+          const stamp = xs => xs.forEach(x => Store.update(`registrations/${x.id}`, { mailedAt: Date.now() }));
           if (provider === 'direct') {
             let ok = 0, fail = [];
             for (const x of withMail) {
@@ -376,6 +377,11 @@ const Enroll = (() => {
   let H = {};   // دوال من لوحة الإدارة: التصدير، مشاركة بيانات الدخول، نموذج نافذة الإعلان
   function panel(h) {
     H = h;
+    // أول استخدام: نبدأ نموذج التسجيل بالحقول الأساسية (الاسم والجوال والإيميل والنبذة) ثم يعدّلها المشرف
+    if (Security.can('announce') && !Store.list('regform/fields').length && !Store.get('regform/seeded')) {
+      DEFAULT_FORM_FIELDS.forEach(f => Store.set(`regform/fields/${f.id}`, { ...f }));
+      Store.set('regform/seeded', true);
+    }
     return `<div id="enroll-root">${cohortPanel()}${h.announcementForm()}${regsPanel(h)}</div>`;
   }
 
@@ -386,11 +392,11 @@ const Enroll = (() => {
     if (t.closest('[data-enroll-launch]')) return launchRegistration(root);
     if (t.closest('[data-enroll-close]')) return confirmDialog('إغلاق التسجيل؟ يبقى النموذج ظاهراً لكن تُفصل التسجيلات الجديدة عن الدفعة المعلنة.', { danger: true, ok: 'إغلاق التسجيل' }).then(ok => { if (ok) { Store.update('announcement', { cohort: null }); Security.log('إغلاق التسجيل'); } });
     const cc = t.closest('[data-reg-cohort]'); if (cc) { ui.regCohort = cc.dataset.regCohort; ui.sel.clear(); return rerender(); }
-    const acc = t.closest('[data-reg-accept]'); if (acc) return acceptDialog(Store.get(`interests/${acc.dataset.regAccept}`), h);
+    const acc = t.closest('[data-reg-accept]'); if (acc) return acceptDialog(Store.get(`registrations/${acc.dataset.regAccept}`), h);
     const dec = t.closest('[data-reg-decline]');
-    if (dec) return confirmDialog('تسجيل الاعتذار لهذا المسجّل؟ (لا تُرسل له رسالة إلا بزر الإيميل)', { ok: 'اعتذار' }).then(ok => ok && Store.update(`interests/${dec.dataset.regDecline}`, { status: 'declined', decidedAt: Date.now() }));
+    if (dec) return confirmDialog('تسجيل الاعتذار لهذا المسجّل؟ (لا تُرسل له رسالة إلا بزر الإيميل)', { ok: 'اعتذار' }).then(ok => ok && Store.update(`registrations/${dec.dataset.regDecline}`, { status: 'declined', decidedAt: Date.now() }));
     const del = t.closest('[data-reg-del]');
-    if (del) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { ui.sel.delete(del.dataset.regDel); Store.remove(`interests/${del.dataset.regDel}`); } });
+    if (del) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { ui.sel.delete(del.dataset.regDel); Store.remove(`registrations/${del.dataset.regDel}`); } });
     const ml = t.closest('[data-reg-mail]'); if (ml && !ml.disabled) return mailDialog(ml.dataset.regMail);
   });
   document.addEventListener('change', e => {

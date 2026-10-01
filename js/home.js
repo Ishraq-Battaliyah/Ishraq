@@ -286,9 +286,9 @@ const Home = (() => {
     $$('.reveal', root).forEach(el => io.observe(el));
   }
 
-  /* نموذج التسجيل في الدفعة المعلنة */
-  function openInterestForm() {
-    const fields = Store.list('form/fields').sort(byOrder);
+  /* نموذج التسجيل في الدفعة المعلنة (منفصل عن نموذج المهتمين) */
+  function openRegistrationForm() {
+    const fields = Store.list('regform/fields').sort(byOrder);
     const ann = Store.get('announcement') || {}, cohort = ann.cohort && Data.cohort(ann.cohort);
     const body = `<form class="form-grid interest-form" novalidate>
       <p class="form-intro">${cohort ? `سجّل للالتحاق بـ<b>${esc(cohort.name)} ${esc(cohort.year)}</b> من إشراق` : 'سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق'}، وسيتواصل معك فريق البرنامج.</p>
@@ -315,9 +315,38 @@ const Home = (() => {
             const answers = {};
             fields.filter(f => f.type !== 'info').forEach(f => { answers[f.id] = v[f.id] ?? ''; });
             const name = answers.f_name || Object.values(answers)[0] || '';
-            Store.push('interests', { role: v.__role, answers, ts: Date.now(), ...(cohort ? { cohort: cohort.id } : {}), ...(prev ? { prev: true, prevCode } : {}) });
+            Store.push('registrations', { role: v.__role, answers, ts: Date.now(), ...(cohort ? { cohort: cohort.id } : {}), ...(prev ? { prev: true, prevCode } : {}) });
             Data.notify('admin', `تسجيل جديد (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'})${cohort ? ` في ${cohort.name}` : ''}: ${name}`, { icon: 'fa-user-plus' });
             openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك بنجاح، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'إغلاق', cls: 'primary' }] });
+          }
+        },
+        { label: 'إلغاء', cls: 'ghost' }
+      ]
+    });
+  }
+
+  /* نموذج تسجيل الاهتمام */
+  function openInterestForm() {
+    const fields = Store.list('form/fields').sort(byOrder);
+    const body = `<form class="form-grid interest-form" novalidate>
+      <p class="form-intro">سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق، وسيتواصل معك فريق البرنامج.</p>
+      ${fieldInput({ k: '__role', label: 'أرغب بالانضمام بصفتي', type: 'radio', required: true, options: [{ value: 'mentor', label: 'مرشد' }, { value: 'mentee', label: 'مستفيد' }], wide: true }, '')}
+      ${fields.map(f => fieldInput({ ...f, k: f.id, options: String(f.options || '').split('\n').map(o => o.trim()).filter(Boolean), wide: f.type === 'textarea' })).join('')}
+    </form>`;
+    openModal({
+      title: '<i class="fa-solid fa-pen-to-square"></i> تسجيل الاهتمام بالدفعة القادمة', size: 'md', body,
+      actions: [
+        {
+          label: '<i class="fa-solid fa-paper-plane"></i> إرسال', cls: 'primary', onClick: m => {
+            const form = $('form', m.body);
+            if (!validateForm(form)) return false;
+            const v = readForm(form);
+            const answers = {};
+            fields.forEach(f => { answers[f.id] = v[f.id] ?? ''; });
+            const name = answers.f_name || Object.values(answers)[0] || '';
+            Store.push('interests', { role: v.__role, answers, ts: Date.now() });
+            Data.notify('admin', `تسجيل اهتمام جديد (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'}): ${name}`, { icon: 'fa-user-plus' });
+            openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك بنجاح، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'حسناً', cls: 'primary' }] });
           }
         },
         { label: 'إلغاء', cls: 'ghost' }
@@ -343,7 +372,7 @@ const Home = (() => {
       actions: [
         ...(a.button ? [{
           label: esc(a.button), cls: 'primary', onClick: () => {
-            if (a.link) window.open(a.link, '_blank'); else setTimeout(openInterestForm, 220);
+            if (a.link) window.open(a.link, '_blank'); else setTimeout(openRegistrationForm, 220);
           }
         }] : []),
         { label: 'إغلاق', cls: 'ghost' }
@@ -439,5 +468,5 @@ const Home = (() => {
     if (l) openLogin(l.dataset.login);
   });
 
-  return { render, renderMembers, maybeAnnouncement, openInterestForm };
+  return { render, renderMembers, maybeAnnouncement, openInterestForm, openRegistrationForm };
 })();

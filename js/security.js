@@ -5,7 +5,7 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail'];
+const PUBLIC_PATHS = ['content', 'form', 'regform', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
 function memberPaths(id, role, partner) {
@@ -19,7 +19,7 @@ function memberPaths(id, role, partner) {
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
-  content: [], announce: [], interests: ['interests'],
+  content: [], announce: ['registrations', 'regform', 'cohorts', 'launches'], interests: ['interests'],
   cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
   sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraTaken', 'extraPairs', 'wishes'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
@@ -39,7 +39,7 @@ const PERMISSIONS = [
   { k: 'announce', label: 'الإعلان المنبثق', desc: 'نافذة الإعلان في الصفحة الرئيسية', icon: 'fa-bullhorn' },
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
-  { k: 'interests', label: 'المسجلون', desc: 'تسجيلات الدفعة المعلنة: مراجعتها وقبولها والاعتذار وإرسال الرسائل', icon: 'fa-user-plus' }
+  { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
 const RULES_VERSION = 11;
 

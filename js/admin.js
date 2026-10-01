@@ -11,13 +11,14 @@ const Admin = (() => {
     { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
     { id: 'certificates', label: 'الشهادات', icon: 'fa-award' },
     { id: 'announce', label: 'إعلان دفعة جديدة', icon: 'fa-bullhorn' },
+    { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
   const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
 
   // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
   const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
-  const tabAllowed = id => (id === 'admins' ? Security.isOwner() : id === 'announce' ? (Security.can('announce') || Security.can('interests')) : Security.can(TAB_PERM[id]));
+  const tabAllowed = id => (id === 'admins' ? Security.isOwner() : Security.can(TAB_PERM[id]));
 
   let lastRoot = null;
   function render(root) {
@@ -25,7 +26,7 @@ const Admin = (() => {
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, announce: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
+    const badges = { reviews: pendingReviews, announce: Store.list('registrations').filter(x => !x.seen).length, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -147,8 +148,54 @@ const Admin = (() => {
           <button class="icon-btn danger" data-del-sec title="حذف"><i class="fa-solid fa-trash"></i></button>
         </div></li>`).join('')}</ul>
     </div>
-    ${News.adminPanel()}`;
+    ${News.adminPanel()}
+    ${formBuilderPanel()}`;
   };
+
+  function formBuilderPanel() {
+    const fields = Store.list('form/fields').sort(byOrder);
+    const types = { text: 'نص قصير', textarea: 'نص طويل', tel: 'رقم جوال', email: 'بريد إلكتروني', url: 'رابط', select: 'قائمة اختيار', number: 'رقم', date: 'تاريخ' };
+    return `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-clipboard-list"></i> حقول نموذج التسجيل</h2>
+      <button class="btn primary" data-add-field><i class="fa-solid fa-plus"></i> إضافة حقل</button></div>
+      <p class="muted small">يحتوي النموذج دائماً على اختيار «مرشد / مستفيد». أضف ما تحتاجه من حقول: بيانات التواصل، الخبرات، روابط السير الذاتية والملفات والمصادر (كروابط دون رفع ملفات). تظهر الردود في تبويب «المهتمون».</p>
+      <ul class="sortable fields" data-sortable-fields>
+        <li class="locked"><span class="drag"><i class="fa-solid fa-lock"></i></span><div class="sec-info"><b>مرشد أو مستفيد</b><small>اختيار إلزامي</small></div></li>
+        ${fields.map(f => `<li draggable="true" data-id="${esc(f.id)}"><span class="drag"><i class="fa-solid fa-grip-vertical"></i></span>
+        <div class="sec-info"><b>${esc(f.label)} ${f.required ? '<em class="req">*</em>' : ''}</b><small>${types[f.type] || f.type}</small></div>
+        <div class="sec-actions"><button class="icon-btn" data-edit-field title="تعديل"><i class="fa-solid fa-pen"></i></button>
+        <button class="icon-btn danger" data-del-field title="حذف"><i class="fa-solid fa-trash"></i></button></div></li>`).join('')}
+      </ul>
+      <button class="btn ghost" data-preview-form><i class="fa-solid fa-eye"></i> معاينة النموذج</button>
+    </div>`;
+  }
+
+  function editField(f) {
+    const types = [['text', 'نص قصير'], ['textarea', 'نص طويل'], ['tel', 'رقم جوال'], ['email', 'بريد إلكتروني'], ['url', 'رابط (سيرة ذاتية، ملف، مصدر...)'], ['select', 'قائمة اختيار'], ['number', 'رقم'], ['date', 'تاريخ']];
+    f = f || {};
+    openModal({
+      title: f.id ? 'تعديل حقل' : 'إضافة حقل', size: 'sm',
+      body: `<form class="form-grid one">
+        ${fieldInput({ k: 'label', label: 'عنوان الحقل', required: true }, f.label || '')}
+        <div class="field"><label>نوع الحقل</label><select name="type">${types.map(([v, l]) => `<option value="${esc(v)}" ${f.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        ${fieldInput({ k: 'options', label: 'الخيارات (سطر لكل خيار) — لقائمة الاختيار', type: 'textarea', rows: 3 }, f.options || '')}
+        ${fieldInput({ k: 'placeholder', label: 'نص إرشادي داخل الحقل (اختياري)' }, f.placeholder || '')}
+        ${fieldInput({ k: 'required', label: 'حقل إلزامي', type: 'checkbox' }, f.required)}
+      </form>`,
+      actions: [{
+        label: 'حفظ', cls: 'primary', onClick: m => {
+          const form = $('form', m.body);
+          if (!validateForm(form)) return false;
+          const v = readForm(form);
+          if (f.id) Store.update(`form/fields/${f.id}`, v);
+          else {
+            const max = Math.max(0, ...Store.list('form/fields').map(x => x.order || 0));
+            Store.push('form/fields', { ...v, order: max + 1 });
+          }
+        }
+      }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
 
   function editSection(s) {
     const T = SECTION_TYPES[s.type] || { fields: ['title', 'body'] };
@@ -862,8 +909,17 @@ const Admin = (() => {
 
   /* =============== 7) المهتمون =============== */
   function interestRows() {
-    const fields = Store.list('form/fields').sort(byOrder).filter(f => f.type !== 'info');
+    const fields = Store.list('form/fields').sort(byOrder);
     const list = Store.list('interests').filter(x => ui.intRole === 'all' || x.role === ui.intRole).sort((a, b) => b.ts - a.ts);
+    const headers = ['التاريخ', 'الصفة', 'المصدر', ...fields.map(f => f.label)];
+    const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.source || 'نموذج التسجيل', ...fields.map(f => x.answers?.[f.id] ?? '')]);
+    return { fields, list, headers, rows };
+  }
+
+  // تسجيلات الدفعة المعلنة (قسم «إعلان دفعة جديدة») منفصلة عن المهتمين
+  function registrationRows() {
+    const fields = Store.list('regform/fields').sort(byOrder).filter(f => f.type !== 'info');
+    const list = Store.list('registrations').sort((a, b) => b.ts - a.ts);
     const headers = ['التاريخ', 'الصفة', 'الدفعة', 'مسجّل سابقاً', 'الحالة', ...fields.map(f => f.label)];
     const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', Data.cohort(x.cohort)?.name || '', x.prev ? (x.prevCode || 'نعم') : 'لا', x.status === 'accepted' ? 'مقبول' : x.status === 'declined' ? 'معتذَر' : 'جديد', ...fields.map(f => x.answers?.[f.id] ?? '')]);
     return { fields, list, headers, rows };
@@ -1066,6 +1122,30 @@ const Admin = (() => {
     });
   }
 
+  P.interests = () => {
+    const { fields, list } = interestRows();
+    const all = Store.list('interests');
+    const cell = (f, v) => {
+      v = String(v ?? '');
+      if (!v) return '—';
+      if (f.type === 'url' || /^https?:\/\//.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener"><i class="fa-solid fa-link"></i> فتح الرابط</a>`;
+      if (f.type === 'email') return `<a href="mailto:${esc(v)}" dir="ltr">${esc(v)}</a>`;
+      if (f.type === 'tel') return `<a href="${esc(waLink(v))}" target="_blank" rel="noopener" dir="ltr"><i class="fa-brands fa-whatsapp"></i> ${esc(v)}</a>`;
+      return nl2br(v);
+    };
+    setTimeout(() => all.filter(x => !x.seen).forEach(x => Store.set(`interests/${x.id}/seen`, true)), 1500);
+    return `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-user-plus"></i> المسجلون في نموذج الاهتمام <span class="count">${all.length}</span></h2>
+      <div class="head-actions">${exportBar('interests')}<button class="btn ghost sm" data-goto-form><i class="fa-solid fa-clipboard-list"></i> تعديل حقول النموذج</button></div></div>
+      <div class="chip-filter">${[['all', 'الكل'], ['mentor', 'مرشد'], ['mentee', 'مستفيد']].map(([k, l]) => `<button class="${ui.intRole === k ? 'active' : ''}" data-int-role="${esc(k)}">${l} <span>${k === 'all' ? all.length : all.filter(x => x.role === k).length}</span></button>`).join('')}</div>
+      ${list.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>التاريخ</th><th>الصفة</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead><tbody>
+        ${list.map(x => `<tr class="${x.seen ? '' : 'new'}"><td data-l="التاريخ"><small>${fmtTs(x.ts)}</small>${x.source ? `<br><span class="chip source-chip"><i class="fa-solid fa-person-chalkboard"></i> ${esc(x.source)}</span>` : ''}</td><td data-l="الصفة"><span class="chip ${esc(x.role)}">${x.role === 'mentor' ? 'مرشد' : 'مستفيد'}</span></td>
+          ${fields.map(f => `<td data-l="${esc(f.label)}">${cell(f, x.answers?.[f.id])}</td>`).join('')}
+          <td><button class="icon-btn danger" data-del-interest="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
+      </tbody></table></div>` : emptyState('لا توجد تسجيلات بعد', 'fa-user-plus')}
+    </div>`;
+  };
+
   /* =============== التصدير =============== */
   function exportData(key) {
     const [kind, a, b] = key.split(':');
@@ -1092,6 +1172,7 @@ const Admin = (() => {
       case 'event': case 'events': return Events.exportData(key);
       case 'adminLog': return { title: 'سجل إجراءات المشرفين', headers: ['الوقت', 'المشرف', 'البريد', 'الإجراء', 'على', 'التفاصيل'], rows: Store.list('adminLog').sort((a, b) => b.ts - a.ts).map(l => [fmtTs(l.ts), l.by?.name || '', l.by?.email || '', l.action, l.target || '', l.details || '']) };
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
+      case 'registrations': { const r = registrationRows(); return { title: 'المسجلون في الدفعة المعلنة', headers: r.headers, rows: r.rows }; }
     }
     return null;
   }
@@ -1134,6 +1215,14 @@ const Admin = (() => {
         }
       }
       if (t.closest('[data-add-section]')) return addSection();
+      if (t.closest('[data-add-field]')) return editField();
+      const fl = t.closest('[data-sortable-fields] li[data-id]');
+      if (fl) {
+        const f = Store.get(`form/fields/${fl.dataset.id}`);
+        if (t.closest('[data-edit-field]')) return editField(f);
+        if (t.closest('[data-del-field]')) return confirmDialog(`حذف حقل «${esc(f.label)}»؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`form/fields/${f.id}`));
+      }
+      if (t.closest('[data-preview-form]')) return Home.openInterestForm();
       // الدفعات
       const cb = t.closest('[data-cohort]');
       if (cb) { ui.cohort = ui.cohort === cb.dataset.cohort ? null : cb.dataset.cohort; ui.sub = ui.cohort ? (ui.sub || 'mentor') : null; return render(root); }
@@ -1199,6 +1288,9 @@ const Admin = (() => {
       const st = t.closest('[data-stat]');
       if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
       const la = t.closest('[data-launch]'); if (la) return launchCohort(la.dataset.launch);
+      const ir = t.closest('[data-int-role]'); if (ir) { ui.intRole = ir.dataset.intRole; return render(root); }
+      const dint = t.closest('[data-del-interest]'); if (dint) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`interests/${dint.dataset.delInterest}`));
+      if (t.closest('[data-goto-form]')) { ui.tab = 'content'; render(root); return $('[data-sortable-fields]')?.scrollIntoView({ behavior: 'smooth' }); }
       const gc = t.closest('[data-goto-cohorts]'); if (gc) { ui.tab = 'cohorts'; ui.cohort = gc.dataset.gotoCohorts; ui.sub = ui.sub || 'mentor'; return render(root); }
       const ar = t.closest('[data-archive]');
       if (ar) {
@@ -1288,6 +1380,7 @@ const Admin = (() => {
     };
 
     const ul = $('[data-sortable]', root); ul && enableSortable(ul, 'content/sections');
+    const fl = $('[data-sortable-fields]', root); fl && enableSortable(fl, 'form/fields');
     $$('[data-drop]', root).forEach(z => {
       ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
       ['dragleave', 'drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));

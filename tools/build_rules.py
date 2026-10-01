@@ -125,10 +125,16 @@ REVIEW = fields({
     "featured": BOOL, "ts": NUM, "decidedAt": NUM, "extraSession": BOOL,
 }, required=('type', 'authorId', 'text', 'status'))
 
-# التسجيل في الدفعة المعلنة: الزائر ينشئ السجل (دون حقول القرار)، والإدارة تقبله أو تعتذر وتسجّل قرارها فيه
 INTEREST = fields({"id": ID, "role": one_of('mentor', 'mentee'), "answers": {"$f": s(3000)}, "ts": NUM,
-                   "source": s(200), "seen": BOOL, "cohort": ID, "prev": BOOL, "prevCode": s(30),
-                   "status": one_of('accepted', 'declined'), "memberId": ID, "decidedAt": NUM, "mailedAt": NUM}, required=('role',))
+                   "source": s(200), "seen": BOOL}, required=('role',))
+
+# التسجيل في الدفعة المعلنة (منفصل عن المهتمين): الزائر ينشئ السجل دون حقول القرار، والإدارة تقبله أو تعتذر وتسجّل قرارها فيه
+REGISTRATION = fields({"id": ID, "role": one_of('mentor', 'mentee'), "answers": {"$f": s(3000)}, "ts": NUM, "seen": BOOL,
+                       "cohort": ID, "prev": BOOL, "prevCode": s(30),
+                       "status": one_of('accepted', 'declined'), "memberId": ID, "decidedAt": NUM, "mailedAt": NUM}, required=('role',))
+# حقول نموذج التسجيل في الدفعة المعلنة (منفصلة عن حقول نموذج المهتمين form/fields)
+REG_FIELD = fields({"id": ID, "label": s(1000), "type": one_of('text', 'textarea', 'tel', 'email', 'url', 'select', 'number', 'date', 'info'),
+                    "options": s(2000), "placeholder": s(200), "required": BOOL, "order": NUM})
 
 EVENT_REG = fields({"id": ID, "eventId": ID, "memberId": ID, "role": one_of('mentor', 'mentee'), "code": s(20),
                     "name": s(120), "phone": s(30), "email": s(120),
@@ -322,7 +328,10 @@ rules = {
     "extraPairs": {".read": can('sessions'), **w(can('sessions')),
                    "$k": {".write": f"{IS_MEMBER} && newData.val() === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentee' && $k.beginsWith({ME} + '_')",
                           ".validate": "newData.val() === true"}},
-    "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists()"), **INTEREST}},
+    "interests": {".read": can('interests'), **w(can('interests')), "$id": {**w("!data.exists()"), **INTEREST}},
+    "regform": {".read": True, **w(can('announce')), "fields": {"$fid": REG_FIELD}, "seeded": BOOL},
+    "registrations": {".read": can('announce'), **w(can('announce')), ".indexOn": ["cohort"],
+                      "$id": {**w("!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists()"), **REGISTRATION}},
     "eventRegs": {".read": can('events', 'certificates'), **w(can('events')),
                   "$rid": {**w(f"(!data.exists() && newData.child('eventId').isString() && (!newData.child('memberId').exists() || (auth != null && {ME} === {n('memberId')}))) || (data.exists() && !newData.exists() && auth != null && {ME} === {d('memberId')})"),
                            **EVENT_REG}},
