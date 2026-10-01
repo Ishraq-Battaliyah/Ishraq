@@ -701,10 +701,14 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
       <div class="panel-head"><h2><i class="fa-solid fa-award"></i> الشهادات</h2>
         <div class="head-actions"><button class="btn ghost" data-cert-mailer><i class="fa-solid fa-paper-plane"></i> إعداد الإرسال المباشر${mailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>
         <button class="btn ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل قوالب الشهادات</button></div></div>
+      <div class="cert-top">
+        <div class="cert-controls">
       <div class="sub-tabs">${Object.entries(KINDS).map(([k, v]) => `<button class="${ui.kind === k ? 'active' : ''}" data-cert-kind="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
       <div class="cert-filters">${filter}<label class="cert-date" title="الافتراضي يوم الإصدار">تاريخ الإصدار <input type="date" data-cert-date value="${esc(ui.issueDate)}"><button type="button" class="btn xs ghost" data-cert-date-reset ${ui.issueDate ? '' : 'disabled'}>اليوم</button></label>
         <input class="search" data-cert-search placeholder="ابحث بالاسم أو البريد..." value="${esc(ui.q)}"></div>
+        </div>
       ${livePreview()}
+      </div>
       <div class="cert-bar">
         <label class="check"><input type="checkbox" data-cert-all ${allSel ? 'checked' : ''} ${list.length ? '' : 'disabled'}><span>تحديد الكل (${list.length})</span></label>
         <span class="muted small">${sel.length ? `محدد: <b>${sel.length}</b>` : ''}</span>
