@@ -579,9 +579,10 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
   }
 
   /* ===== محرر القالب ===== */
-  function templateDialog() {
-    const drafts = {}; let cur = ui.kind;
-    Object.keys(KINDS).forEach(k => { drafts[k] = template(k); });
+  // يحرّر قالب نوع واحد فقط (الزر بجوار معاينة كل شهادة)
+  function templateDialog(only = ui.kind) {
+    const drafts = {}; let cur = only;
+    [only].forEach(k => { drafts[k] = template(k); });
     const hasEvent = k => k === 'event' || k === 'speaker';
     const sample = k => ({ id: 'sample', cert: { event: 'اسم الحاضر', mentor: 'اسم المرشد', mentee: 'اسم المستفيد', speaker: 'اسم المتحدث' }[k], name: '', email: '',
       cohortId: hasEvent(k) ? null : (Data.cohorts().slice(-1)[0]?.id || null), event: hasEvent(k) ? ((k === 'speaker' && ui.spEvent && Store.get(`events/${ui.spEvent}`)) || currentEvent() || { title: 'عنوان الفعالية', date: todayISO() }) : null });
@@ -610,14 +611,13 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
         ${F_('emailBody', 'نص الرسالة', 'textarea', 'يمكن استخدام: <code>{name}</code> <code>{type}</code> نوع الشهادة، <code>{cohort}</code> <code>{event}</code>')}
       </div>`;
     const m = openModal({
-      title: '<i class="fa-solid fa-pen-ruler"></i> قوالب الشهادات', size: 'xl', cls: 'cert-tpl', dismissible: false,
+      title: `<i class="fa-solid fa-pen-ruler"></i> قالب شهادة ${KINDS[only].label}`, size: 'xl', cls: 'cert-tpl', dismissible: false,
       body: `<div class="cert-tpl-grid"><div class="cert-tpl-form">
-          <div class="sub-tabs" data-kinds>${Object.entries(KINDS).map(([k, v]) => `<button type="button" class="${k === cur ? 'active' : ''}" data-k="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
           <div data-tpl-form>${formHtml()}</div></div>
           <div class="cert-tpl-prev"><h4>معاينة</h4><div class="cert-preview" data-prev><div class="cert-loading"><i class="fa-solid fa-spinner fa-spin"></i></div></div></div></div>`,
-      actions: [{ label: 'حفظ القوالب', cls: 'primary', onClick: () => {
+      actions: [{ label: 'حفظ القالب', cls: 'primary', onClick: () => {
           collect();
-          Object.keys(KINDS).forEach(k => {
+          [only].forEach(k => {
             const diff = {}; TEXT_KEYS.forEach(f => { if ((drafts[k][f] || '') !== (DEFAULTS[k][f] || '')) diff[f] = drafts[k][f] || ''; });
             BOOL_KEYS.forEach(f => { if (!!drafts[k][f] !== !!DEFAULTS[k][f]) diff[f] = !!drafts[k][f]; });
             const saved = Store.get(`certs/templates/${k}`) || {};
@@ -625,8 +625,8 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
             const full = {}; TEXT_KEYS.forEach(f => { full[f] = drafts[k][f] || ''; }); BOOL_KEYS.forEach(f => { full[f] = !!drafts[k][f]; });
             if (Object.keys(diff).length || Object.keys(saved).length) Store.set(`certs/templates/${k}`, full);
           });
-          Security.log('تعديل قوالب الشهادات');
-          toast('تم حفظ القوالب');
+          Security.log('تعديل قالب شهادة', KINDS[only].label);
+          toast('تم حفظ القالب');
         } },
         { label: 'استعادة الافتراضي لهذه الشهادة', cls: 'ghost', onClick: () => { drafts[cur] = { ...DEFAULTS[cur] }; redraw(); return false; } },
         { label: 'إلغاء', cls: 'ghost' }]
@@ -700,7 +700,7 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     return `<div class="panel" id="certs-panel">
       <div class="panel-head"><h2><i class="fa-solid fa-award"></i> الشهادات</h2>
         <div class="head-actions"><button class="btn ghost" data-cert-mailer><i class="fa-solid fa-paper-plane"></i> إعداد الإرسال المباشر${mailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>
-        <button class="btn ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل قوالب الشهادات</button></div></div>
+        </div></div>
       <div class="cert-top">
         <div class="cert-controls">
       <div class="sub-tabs">${Object.entries(KINDS).map(([k, v]) => `<button class="${ui.kind === k ? 'active' : ''}" data-cert-kind="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
@@ -732,7 +732,7 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     const kind = t.closest('[data-cert-kind]'); if (kind) { ui.kind = kind.dataset.certKind; ui.sel.clear(); ui.q = ''; return rerender(); }
     const co = t.closest('[data-cert-cohort]'); if (co) { ui.cohort = co.dataset.certCohort; ui.sel.clear(); return rerender(); }
     if (t.closest('[data-cert-date-reset]')) { ui.issueDate = ''; return rerender(); }
-    if (t.closest('[data-cert-tpl]')) return templateDialog();
+    if (t.closest('[data-cert-tpl]')) return templateDialog(ui.kind);
     if (t.closest('[data-cert-mailer]')) return mailerDialog();
     if (t.closest('[data-cert-bulk]')) return bulkDialog();
     const ed = t.closest('[data-cert-edit]'); if (ed) return editName(ed.dataset.certEdit);
