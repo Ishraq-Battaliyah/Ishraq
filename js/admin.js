@@ -10,7 +10,7 @@ const Admin = (() => {
     { id: 'messages', label: 'الرسائل', icon: 'fa-envelope' },
     { id: 'events', label: 'فعاليات', icon: 'fa-person-chalkboard' },
     { id: 'certificates', label: 'الشهادات', icon: 'fa-award' },
-    { id: 'announce', label: 'الإعلان', icon: 'fa-bullhorn' },
+    { id: 'announce', label: 'إعلان دفعة جديدة', icon: 'fa-bullhorn' },
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
@@ -26,7 +26,7 @@ const Admin = (() => {
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
+    const badges = { reviews: pendingReviews, announce: Store.list('registrations').filter(x => !x.seen).length, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -329,13 +329,26 @@ const Admin = (() => {
       <button class="btn primary" data-add-cohort><i class="fa-solid fa-plus"></i> إضافة دفعة جديدة</button></div>
       <div class="cohort-list">${cohorts.map(c => `<div class="cohort ${ui.cohort === c.id ? 'open' : ''}">
         <div class="cohort-row"><button class="cohort-btn" data-cohort="${esc(c.id)}"><i class="fa-solid fa-users"></i> ${esc(c.name)} <span class="year">${esc(c.year)}</span>
-          <small>${Data.members('mentor', c.id).length} مرشد · ${Data.members('mentee', c.id).length} مستفيد</small><i class="fa-solid fa-chevron-down caret"></i></button>
+          <small>${Data.cohortMembers('mentor', c.id).length} مرشد · ${Data.cohortMembers('mentee', c.id).length} مستفيد</small><i class="fa-solid fa-chevron-down caret"></i></button>
+          ${launchControls(c)}
           <button class="icon-btn" data-edit-cohort="${esc(c.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
           <button class="icon-btn danger" data-del-cohort="${esc(c.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></div>
         ${ui.cohort === c.id ? cohortBody(c) : ''}
       </div>`).join('')}</div>
     </div>`;
   };
+
+  // إطلاق الدفعة (أخضر) ثم أرشفتها: تظهر في شريط الدفعة بجانب التعديل والحذف
+  function launchControls(c) {
+    if (!Security.can('sessions')) return '';
+    const st = Bands.state(c.id), L = Bands.launch(c.id);
+    if (st === 'prelaunch') return `<button class="btn success sm launch-btn" data-launch="${esc(c.id)}" title="يُتاح للمرشدين والمستفيدين إضافة المواعيد وحجز الجلسات وتقييمها"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button>`;
+    if (st === 'live') return `<span class="pill st-done" title="أُطلقت ${esc(fmtTs(L.ts))}"><i class="fa-solid fa-rocket"></i> مُطلقة</span>
+      <button class="btn warn sm" data-archive="${esc(c.id)}" title="إيقاف إضافة الجلسات وتعديلها مع بقاء الدخول للقراءة"><i class="fa-solid fa-box-archive"></i> أرشفة الدفعة</button>
+      <button class="icon-btn" data-unlaunch="${esc(c.id)}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button>`;
+    return `<span class="pill st-absent-mentee"><i class="fa-solid fa-box-archive"></i> مؤرشفة</span>
+      <button class="icon-btn" data-unarchive="${esc(c.id)}" title="إلغاء الأرشفة"><i class="fa-solid fa-box-open"></i></button>`;
+  }
 
   function cohortBody(c) {
     const subs = [['mentor', 'معلومات المرشدين', 'fa-user-tie'], ['mentee', 'معلومات المستفيدين', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project']];
@@ -347,7 +360,7 @@ const Admin = (() => {
   }
 
   function membersBlock(c, role) {
-    const list = Data.members(role, c.id);
+    const list = Data.cohortMembers(role, c.id);
     const full = Security.isFull();
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
     return `<div class="members-block">
@@ -542,9 +555,9 @@ const Admin = (() => {
   const inCohort = (key, m) => ui[key] === 'all' || m.cohort === ui[key];
 
   P.sessions = () => {
-    const mentors = Data.members('mentor').filter(m => inCohort('sessCohort', m));
+    const mentors = ui.sessCohort === 'all' ? Data.members('mentor') : Data.cohortMembers('mentor', ui.sessCohort);
     const ids = new Set(mentors.map(m => m.id));
-    const all = Data.bookings().filter(b => ids.has(b.mentorId));
+    const all = Data.bookings().filter(b => ids.has(b.mentorId) && (ui.sessCohort === 'all' || !b.cohort || b.cohort === ui.sessCohort));
     const sel = mentors.find(m => m.id === ui.sessMentor);
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
@@ -575,12 +588,12 @@ const Admin = (() => {
     const now = Date.now();
     const person = m => `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>`;
     const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
-      ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span><button class="btn xs ghost" data-unlaunch="${esc(cid)}" title="إلغاء الإطلاق"><i class="fa-solid fa-rotate-left"></i></button></div>` : ''}</div>
+      ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span>${Bands.archivedAt(cid) ? '<span class="pill st-absent-mentee"><i class="fa-solid fa-box-archive"></i> مؤرشفة</span>' : ''}</div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
     const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
       : `<div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
-      <p>عند الضغط على «إطلاق الدفعة» يبدأ حساب المدد: فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12. ويظهر للمرشدين شريط «تم إطلاق الدفعة رسمياً» وتُفتح لهم إضافة المواعيد.</p></div>
-      <button class="btn primary lg" data-launch="${esc(cid)}"><i class="fa-solid fa-rocket"></i> إطلاق الدفعة</button></div>`;
+      <p>يبدأ حساب المدد بعد الضغط على «إطلاق الدفعة» من صفحة الدفعات (زر أخضر في شريط الدفعة): فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12.</p></div>
+      <button class="btn primary" data-goto-cohorts="${esc(cid)}"><i class="fa-solid fa-people-group"></i> الانتقال لصفحة الدفعات</button></div>`;
 
     // إحصائية إضافة المواعيد
     const addedFor = n => mentors.filter(m => Bands.addedAt(m.id, n) != null);
@@ -618,14 +631,15 @@ const Admin = (() => {
     </div>`;
   }
 
-  // بيانات الجلسات التجريبية لأعضاء الدفعة: المواعيد والحجوزات وتقييمات الطرفين
+  // بيانات الجلسات التجريبية لأعضاء الدفعة (دفعتهم الحالية): المواعيد والحجوزات وتقييمات الطرفين.
+  // من انتقل إلى هذه الدفعة من دفعة سابقة (cohortSince) لا يُمسح ما سبق انتقاله، ولا حجوزات الدفعات الأخرى.
   function trialData(cid) {
-    const ids = new Set(Data.members(null, cid).map(m => m.id));
-    const mine = x => ids.has(x.mentorId) || ids.has(x.menteeId) || ids.has(x.authorId) || ids.has(x.targetId);
+    const ms = Data.members(null, cid), ids = new Set(ms.map(m => m.id)), since = new Map(ms.map(m => [m.id, m.cohortSince || 0]));
+    const after = (id, ts) => ids.has(id) && (ts || 0) >= since.get(id);
     return {
-      slots: Store.list('slots').filter(x => ids.has(x.mentorId) && !x.extra),
-      bookings: Store.list('bookings').filter(x => mine(x) && !x.extra),
-      reviews: Store.list('reviews').filter(mine)
+      slots: Store.list('slots').filter(x => !x.extra && after(x.mentorId, x.ts)),
+      bookings: Store.list('bookings').filter(x => !x.extra && (!x.cohort || x.cohort === cid) && (ids.has(x.mentorId) || ids.has(x.menteeId))),
+      reviews: Store.list('reviews').filter(x => [x.mentorId, x.menteeId, x.authorId, x.targetId].some(id => after(id, x.ts)))
     };
   }
 
@@ -634,8 +648,8 @@ const Admin = (() => {
     const d = trialData(cid);
     const total = d.slots.length + d.bookings.length + d.reviews.length;
     if (total && !(Security.can('sessions') && Security.can('reviews'))) return toast('مسح بيانات الجلسات التجريبية يتطلب صلاحية «الجلسات» و«التقييمات»', 'error');
-    const msg = `إطلاق «${esc(c?.name || '')}» الآن؟ يبدأ من هذه اللحظة حساب مدد الجلسات، ويظهر للمرشدين شريط الإطلاق وتُفتح لهم إضافة المواعيد.`
-      + (total ? `<br><br><b class="danger-text"><i class="fa-solid fa-broom"></i> سيُمسح قبل الإطلاق كل المحتوى التجريبي لهذه الدفعة:</b>
+    const msg = `إطلاق «${esc(c?.name || '')}» الآن؟ يُتاح للمرشدين والمستفيدين من هذه اللحظة إضافة المواعيد وحجز الجلسات وتحديثها وكتابة التقييمات، ويبدأ عدّاد جديد لمدد الجلسات.`
+      + (total ? `<br><br><b class="danger-text"><i class="fa-solid fa-broom"></i> سيُمسح قبل الإطلاق كل ما أنشأته الإدارة باسم هذه الدفعة من جلسات وإحصاءات وتقييمات تجريبية، وتبدأ الدفعة من الصفر:</b>
         <span class="wipe-list"><span>• ${d.slots.length} موعد مقترح من المرشدين</span><span>• ${d.bookings.length} جلسة محجوزة أو منجزة</span><span>• ${d.reviews.length} تقييم (من المرشدين والمستفيدين وتقييمات البرنامج)</span></span>
         <small class="muted">تُنزَّل نسخة احتياطية تلقائياً قبل المسح، ولا يمكن التراجع عن المسح من المنصة.</small>` : '');
     if (!(await confirmDialog(msg, { ok: total ? 'مسح البيانات التجريبية وإطلاق الدفعة' : 'إطلاق الدفعة', danger: !!total }))) return;
@@ -869,10 +883,12 @@ const Admin = (() => {
   P.certificates = () => Certs.adminPanel();
 
   /* =============== 6) الإعلان =============== */
-  P.announce = () => {
+  P.announce = () => Enroll.panel({ exportBar, sendCredentials, announcementForm });
+
+  function announcementForm() {
     const a = Store.get('announcement') || {};
     return `<div class="panel">
-      <div class="panel-head"><h2><i class="fa-solid fa-bullhorn"></i> النافذة المنبثقة للإعلان</h2></div>
+      <div class="panel-head"><h2><i class="fa-solid fa-window-restore"></i> النافذة المنبثقة للإعلان</h2></div>
       <form class="form-grid" data-ann-form>
         <label class="switch wide"><input type="checkbox" name="enabled" ${a.enabled ? 'checked' : ''}><span></span> تفعيل الإعلان عند زيارة الصفحة الرئيسية</label>
         ${fieldInput({ k: 'title', label: 'عنوان الإعلان', required: true }, a.title || '')}
@@ -883,12 +899,13 @@ const Admin = (() => {
         ${fieldInput({ k: 'body', label: 'نص الإعلان', type: 'textarea', wide: true }, a.body || '')}
         ${fieldInput({ k: 'image', label: 'رابط صورة (اختياري)', type: 'url' }, a.image || '')}
         ${fieldInput({ k: 'button', label: 'نص الزر (اختياري)' }, a.button || '')}
-        ${fieldInput({ k: 'link', label: 'رابط الزر (اتركه فارغاً لفتح نموذج التسجيل)', type: 'url', wide: true }, a.link || '')}
+        <div class="field wide"><label>رابط الزر <small class="hint-inline">(اتركه فارغاً لفتح نموذج التسجيل الافتراضي)</small></label><input type="url" name="link" value="${esc(a.link || '')}" placeholder="اتركه فارغاً لفتح نموذج التسجيل الافتراضي"></div>
         <div class="wide form-actions"><button class="btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> حفظ الإعلان</button>
-        <button class="btn ghost" type="button" data-ann-preview><i class="fa-solid fa-eye"></i> معاينة</button></div>
+        <button class="btn ghost" type="button" data-ann-preview><i class="fa-solid fa-eye"></i> معاينة</button>
+        <button class="btn ghost" type="button" data-enroll-form><i class="fa-solid fa-clipboard-list"></i> نموذج التسجيل</button></div>
       </form>
     </div>`;
-  };
+  }
 
   /* =============== 7) المهتمون =============== */
   function interestRows() {
@@ -896,6 +913,15 @@ const Admin = (() => {
     const list = Store.list('interests').filter(x => ui.intRole === 'all' || x.role === ui.intRole).sort((a, b) => b.ts - a.ts);
     const headers = ['التاريخ', 'الصفة', 'المصدر', ...fields.map(f => f.label)];
     const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', x.source || 'نموذج التسجيل', ...fields.map(f => x.answers?.[f.id] ?? '')]);
+    return { fields, list, headers, rows };
+  }
+
+  // تسجيلات الدفعة المعلنة (قسم «إعلان دفعة جديدة») منفصلة عن المهتمين
+  function registrationRows() {
+    const fields = Store.list('regform/fields').sort(byOrder).filter(f => f.type !== 'info');
+    const list = Store.list('registrations').sort((a, b) => b.ts - a.ts);
+    const headers = ['التاريخ', 'الصفة', 'الدفعة', 'مسجّل سابقاً', 'الحالة', ...fields.map(f => f.label)];
+    const rows = list.map(x => [fmtTs(x.ts), x.role === 'mentor' ? 'مرشد' : 'مستفيد', Data.cohort(x.cohort)?.name || '', x.prev ? (x.prevCode || 'نعم') : 'لا', x.status === 'accepted' ? 'مقبول' : x.status === 'declined' ? 'معتذَر' : 'جديد', ...fields.map(f => x.answers?.[f.id] ?? '')]);
     return { fields, list, headers, rows };
   }
   P.events = () => Events.panel();
@@ -1051,7 +1077,7 @@ const Admin = (() => {
       <button class="btn primary sm" data-migrate><i class="fa-solid fa-wand-magic-sparkles"></i> ابدأ الترقية</button></div></div>`;
     const rulesV = Number(Store.get('meta/rulesVersion') || (Store.get('meta/rulesPublished') ? 2 : 0));
     if (rulesV < Security.RULES_VERSION && Security.isOwner()) return `<div class="sec-banner"><i class="fa-solid fa-shield-halved"></i><div><b>${rulesV ? 'حدّث قواعد الحماية' : 'انشر قواعد الحماية الجديدة'}</b>
-      <p>${rulesV ? 'أُضيفت ميزات جديدة (إلغاء المواعيد، والموعد البديل، والمواعيد المقترحة من المستفيد، وإشعارات البريد) تحتاج نسخة جديدة من القواعد، وقبل نشرها قد لا تُحفظ هذه الميزات.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
+      <p>${rulesV ? 'أُضيفت ميزات جديدة (إعلان الدفعات والتسجيل وقبول المسجلين، وإطلاق الدفعات وأرشفتها، وشهادة العضو في صفحته) تحتاج نسخة جديدة من القواعد، وقبل نشرها قد لا تُحفظ هذه الميزات.' : 'اكتملت ترقية البيانات.'} انسخ القواعد وانشرها في Firebase Console ← Realtime Database ← Rules ← Publish${rulesV ? '' : '، ثم أرسل للأعضاء رموزهم الجديدة'}.</p>
       <button class="btn primary sm" data-show-rules><i class="fa-solid fa-copy"></i> عرض القواعد ونسخها</button>
       <button class="btn ghost sm" data-rules-done><i class="fa-solid fa-check"></i> نشرتها</button></div></div>`;
     return '';
@@ -1146,6 +1172,7 @@ const Admin = (() => {
       case 'event': case 'events': return Events.exportData(key);
       case 'adminLog': return { title: 'سجل إجراءات المشرفين', headers: ['الوقت', 'المشرف', 'البريد', 'الإجراء', 'على', 'التفاصيل'], rows: Store.list('adminLog').sort((a, b) => b.ts - a.ts).map(l => [fmtTs(l.ts), l.by?.name || '', l.by?.email || '', l.action, l.target || '', l.details || '']) };
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
+      case 'registrations': { const r = registrationRows(); return { title: 'المسجلون في الدفعة المعلنة', headers: r.headers, rows: r.rows }; }
     }
     return null;
   }
@@ -1261,6 +1288,21 @@ const Admin = (() => {
       const st = t.closest('[data-stat]');
       if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
       const la = t.closest('[data-launch]'); if (la) return launchCohort(la.dataset.launch);
+      const ir = t.closest('[data-int-role]'); if (ir) { ui.intRole = ir.dataset.intRole; return render(root); }
+      const dint = t.closest('[data-del-interest]'); if (dint) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`interests/${dint.dataset.delInterest}`));
+      if (t.closest('[data-goto-form]')) { ui.tab = 'content'; render(root); return $('[data-sortable-fields]')?.scrollIntoView({ behavior: 'smooth' }); }
+      const gc = t.closest('[data-goto-cohorts]'); if (gc) { ui.tab = 'cohorts'; ui.cohort = gc.dataset.gotoCohorts; ui.sub = ui.sub || 'mentor'; return render(root); }
+      const ar = t.closest('[data-archive]');
+      if (ar) {
+        const c = Data.cohort(ar.dataset.archive);
+        return confirmDialog(`أرشفة «${esc(c?.name || '')}»؟ لن يستطيع مرشدو الدفعة ومستفيدوها إضافة مواعيد أو جلسات إضافية أو تعديل الجلسات السابقة أو إضافة تقييمات، ويبقى بإمكانهم تسجيل الدخول لقراءة بياناتهم وصفحاتهم فقط. يمكنك إلغاء الأرشفة لاحقاً.`, { ok: 'أرشفة الدفعة', danger: true }).then(ok => {
+          if (!ok) return;
+          Bands.doArchive(c.id);
+          Data.members(null, c.id).forEach(m => Data.notify(m.id, 'أُرشفت دفعتك: يمكنك الدخول لعرض بياناتك وجلساتك دون إضافة أو تعديل', { icon: 'fa-box-archive' }));
+          toast('تمت أرشفة الدفعة');
+        });
+      }
+      const uar = t.closest('[data-unarchive]'); if (uar) return confirmDialog('إلغاء أرشفة الدفعة وإعادة فتح الإضافة والتعديل للأعضاء؟', { ok: 'إلغاء الأرشفة' }).then(ok => { if (ok) { Bands.undoArchive(uar.dataset.unarchive); toast('أُلغيت الأرشفة'); } });
       const ul = t.closest('[data-unlaunch]');
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
       const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }
@@ -1305,9 +1347,6 @@ const Admin = (() => {
         return openModal({ title: '', size: 'md', cls: 'announce', body: `<div class="ann">${v.image ? `<img src="${esc(driveImg(v.image))}" alt="" referrerpolicy="no-referrer">` : '<div class="ann-icon"><i class="fa-solid fa-bullhorn"></i></div>'}<h2>${esc(v.title)}</h2><p>${nl2br(v.body)}</p></div>`, actions: [...(v.button ? [{ label: esc(v.button), cls: 'primary' }] : []), { label: 'إغلاق', cls: 'ghost' }] });
       }
       // المهتمون
-      const ir = t.closest('[data-int-role]'); if (ir) { ui.intRole = ir.dataset.intRole; return render(root); }
-      const dint = t.closest('[data-del-interest]'); if (dint) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`interests/${dint.dataset.delInterest}`));
-      if (t.closest('[data-goto-form]')) { ui.tab = 'content'; render(root); return $('[data-sortable-fields]')?.scrollIntoView({ behavior: 'smooth' }); }
     };
 
     root.onchange = e => {
@@ -1335,7 +1374,7 @@ const Admin = (() => {
         e.preventDefault();
         if (!validateForm(f)) return;
         const prev = Store.get('announcement') || {};
-        Store.set('announcement', { ...readForm(f), version: (prev.version || 0) + 1 });
+        Store.set('announcement', { ...readForm(f), ...(prev.cohort ? { cohort: prev.cohort } : {}), version: (prev.version || 0) + 1 });
         toast('تم حفظ الإعلان');
       }
     };
@@ -1349,5 +1388,5 @@ const Admin = (() => {
     });
   }
 
-  return { render, ui };
+  return { render, ui, sendCredentials };
 })();

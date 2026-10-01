@@ -11,8 +11,9 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     if (d.secret !== SECRET) return out({ ok: false, error: 'auth' });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.to || '')) return out({ ok: false, error: 'bad address' });
-    const pdf = Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf');
-    GmailApp.sendEmail(d.to, d.subject || '', d.body || '', { attachments: [pdf], name: d.senderName || SENDER_NAME });
+    // المرفق اختياري: الشهادات بملف PDF، ورسائل القبول والاعتذار بلا مرفق
+    const attachments = d.pdf ? [Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf')] : [];
+    GmailApp.sendEmail(d.to, d.subject || '', d.body || '', { attachments, name: d.senderName || SENDER_NAME });
     return out({ ok: true });
   } catch (err) {
     return out({ ok: false, error: String(err) });

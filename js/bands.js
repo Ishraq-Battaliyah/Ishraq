@@ -21,6 +21,9 @@ const Bands = (() => {
 
   const launch = cohortId => Store.get(`launches/${cohortId}`) || null;
   const launchedAt = cohortId => launch(cohortId)?.ts || null;
+  const archivedAt = cohortId => launch(cohortId)?.archivedAt || null;
+  // حالة الدفعة: prelaunch قبل الإطلاق (تجريب الإدارة فقط)، live بعد الإطلاق، archived بعد الأرشفة (دخول وقراءة فقط)
+  const state = cohortId => (!launchedAt(cohortId) ? 'prelaunch' : archivedAt(cohortId) ? 'archived' : 'live');
   const windowStart = (ts, n) => ts + (n - 1) * 4 * WEEK;
   const weekOf = (t, start) => Math.max(1, Math.floor((t - start) / WEEK) + 1);
   const levelOf = week => LEVELS[week <= 4 ? Math.max(0, week - 1) : week <= 6 ? 4 : 5];
@@ -82,10 +85,18 @@ const Bands = (() => {
     Data.members('mentor', cohortId).forEach(m => Data.notify(m.id, 'تم إطلاق الدفعة رسمياً، سارع بتحديد مواعيد الجلسات', { icon: 'fa-rocket' }));
     Security.log('إطلاق الدفعة', c?.name || cohortId);
   }
+  function doArchive(cohortId) {
+    Store.update(`launches/${cohortId}`, { archivedAt: Date.now() });
+    Security.log('أرشفة الدفعة', Data.cohort(cohortId)?.name || cohortId);
+  }
+  function undoArchive(cohortId) {
+    Store.update(`launches/${cohortId}`, { archivedAt: null });
+    Security.log('إلغاء أرشفة الدفعة', Data.cohort(cohortId)?.name || cohortId);
+  }
   function undoLaunch(cohortId) {
     Store.remove(`launches/${cohortId}`);
     Security.log('إلغاء إطلاق الدفعة', Data.cohort(cohortId)?.name || cohortId);
   }
 
-  return { WEEK, SESSIONS, LEVELS, launch, launchedAt, windowStart, weekOf, levelOf, addedAt, status, reminderText, mentorAlertText, passedText, doLaunch, undoLaunch };
+  return { WEEK, SESSIONS, LEVELS, launch, launchedAt, windowStart, weekOf, levelOf, addedAt, status, reminderText, mentorAlertText, passedText, doLaunch, undoLaunch, archivedAt, state, doArchive, undoArchive };
 })();

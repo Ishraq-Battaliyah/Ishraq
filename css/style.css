@@ -1227,3 +1227,43 @@ a.tk-item { color: #fff; }
 .demo-mode .dash-top-actions { margin-inline-start: auto; }
 .cert-controls .cert-date { flex-wrap: wrap; }
 .cert-controls .cert-date input { flex: 1 1 140px; min-width: 0; }
+
+/* حالة دفعة العضو: قبل الإطلاق أو بعد الأرشفة */
+.cohort-banner { display: flex; gap: 14px; align-items: flex-start; padding: 14px 18px; border-radius: 16px; margin-bottom: 18px; border: 1px solid #F2D58A; background: #FFF6DC; color: #5C4600; }
+.cohort-banner.archived { background: #EFEDF5; border-color: #D5D0DC; color: #4E4B63; }
+.cohort-banner > i { font-size: 1.4rem; margin-top: 3px; }
+.cohort-banner p { margin: 4px 0 0; font-size: .92rem; }
+.cohort-locked [data-book], .cohort-locked [data-bk], .cohort-locked [data-add-slot], .cohort-locked [data-add-extra-slot], .cohort-locked [data-add-wish], .cohort-locked [data-add-extra-wish], .cohort-locked [data-final] { opacity: .45; cursor: not-allowed; }
+
+/* إعلان دفعة جديدة */
+.enroll-current { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--ok-l, #E6F6EC); margin-bottom: 14px; }
+.enroll-pick { align-items: end; }
+.enroll-go { display: flex; align-items: end; }
+.hint-inline { color: var(--muted); font-weight: 500; font-size: .85em; }
+.form-note { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--p-l); color: var(--p-d); font-size: .92rem; line-height: 1.8; }
+.reg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0 14px; }
+.reg-bar .muted { flex: 1; min-width: 160px; }
+.reg-section { margin-top: 18px; }
+.reg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.reg-card { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: #fff; display: grid; gap: 8px; align-content: start; }
+.reg-card.new { border-color: var(--p); box-shadow: 0 0 0 2px var(--p-l); }
+.reg-card.accepted { background: #F3FBF6; }
+.reg-card.declined { background: #FBF3F3; opacity: .85; }
+.reg-card header { display: flex; align-items: flex-start; gap: 10px; }
+.reg-card header > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.reg-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.reg-answers { margin: 0; display: grid; gap: 6px; font-size: .9rem; }
+.reg-answers dt { color: var(--muted); font-size: .8rem; }
+.reg-answers dd { margin: 0; overflow-wrap: anywhere; }
+.reg-card footer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px dashed var(--line); padding-top: 8px; }
+.reg-card footer .muted { flex: 1 1 100%; }
+.launch-btn { margin-inline-start: 6px; }
+.ok-note { color: #14663A; } .warn-note { color: #8A5A00; }
+.mail-rcpt { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.my-cert .panel-head { margin-bottom: 4px; }
+
+/* قسم التسجيل في الدفعة الجديدة (تحت الواجهة الرئيسية) */
+.enroll-sec { background: linear-gradient(135deg, var(--p-l), #fff 70%); border-block: 1px solid var(--line); padding-block: 48px; }
+.enroll-in { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 760px; }
+.enroll-in h2 { margin: 0; }
+.enroll-in .lead { margin: 0; }

@@ -5,12 +5,12 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail'];
+const PUBLIC_PATHS = ['content', 'form', 'regform', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
 function memberPaths(id, role, partner) {
   const mentorId = role === 'mentor' ? id : partner;
-  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `pairs/${id}`, `approvedReviews/${id}`, 'extraTaken',
+  return [...PUBLIC_PATHS, `contacts/${id}`, `notifications/${id}`, `myRegs/${id}`, `certs/templates/${role}`, `certs/names/${id}`, `certs/issued/${id}`, `pairs/${id}`, `approvedReviews/${id}`, 'extraTaken',
     q('bookings', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('wishes', role === 'mentor' ? 'mentorId' : 'menteeId', id), q('reviews', 'authorId', id),
     q('messages', 'aud', 'all'), q('messages', 'aud', role), q('messages', 'aud', id), q('tickets', 'memberId', id),
     // مواعيد المرشد الأساسية (المرشد نفسه أو مرشد المستفيد)، ومواعيد الجلسات الإضافية المفتوحة لكل المستفيدين
@@ -19,7 +19,7 @@ function memberPaths(id, role, partner) {
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
-  content: [], announce: [], interests: ['interests'],
+  content: [], announce: ['registrations', 'regform', 'cohorts', 'launches'], interests: ['interests'],
   cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
   sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraTaken', 'extraPairs', 'wishes'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
@@ -41,7 +41,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 10;
+const RULES_VERSION = 11;
 
 const Auth = {
   KEY: 'ishraq-auth',

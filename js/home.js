@@ -12,17 +12,33 @@ const Home = (() => {
       ${s.subtitle ? `<p class="sec-sub">${esc(s.subtitle)}</p>` : ''}
     </div>`;
   }
+  // التسجيل في الدفعة المعلنة مفتوح عند وجود announcement/cohort (يغلقه زر «إيقاف التسجيل» في لوحة الإدارة)
+  const regCohort = () => Data.cohort(Store.get('announcement/cohort')) || null;
+  function enrollSection() {
+    const c = regCohort();
+    if (!c) return '';
+    const a = Store.get('announcement') || {};
+    return `<section class="sec enroll-sec" id="sec-enroll"><div class="container enroll-in reveal">
+      <span class="pill st-done"><i class="fa-solid fa-door-open"></i> التسجيل مفتوح</span>
+      <h2>${esc(a.title || `سجّل الآن في ${c.name} ${c.year}`)}</h2>
+      <p class="lead">${nl2br(a.body || `يسرّنا فتح باب التسجيل في ${c.name} من برنامج إشراق، مرشداً كنت أو مستفيداً.`)}</p>
+      <button class="btn primary lg" data-open-registration><i class="fa-solid fa-pen-to-square"></i> ${esc(a.button || 'سجّل في الدفعة')}</button>
+    </div></section>`;
+  }
+  // النموذج الافتراضي: نموذج التسجيل أثناء فتح التسجيل، وإلا نموذج تسجيل الاهتمام
+  const openDefaultForm = () => (regCohort() ? openRegistrationForm() : openInterestForm());
   const faIcon = ic => `<i class="fa-solid ${esc(ic || 'fa-star')}"></i>`;
 
   const R = {
     header(s) {
-      const links = visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
+      const rc = regCohort();
+      const links = (rc ? `<a href="#sec-enroll" data-scroll>التسجيل في ${esc(rc.name)}</a>` : '') + visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
       return `<header class="site-header" id="sec-${esc(s.id)}">
         <div class="container hdr-in">
           <a class="brand" href="#/" data-top><img src="assets/ishraq-mark.png" alt=""><span><b>${esc(s.brand || 'إشراق')}</b><small>${esc(s.tagline || '')}</small></span></a>
           <nav class="main-nav">${links}</nav>
           <div class="hdr-actions">
-            <button class="btn primary sm" data-open-form><i class="fa-solid fa-pen-to-square"></i> سجّل اهتمامك</button>
+            ${rc ? '<button class="btn primary sm" data-open-registration><i class="fa-solid fa-pen-to-square"></i> سجّل الآن</button>' : '<button class="btn primary sm" data-open-form><i class="fa-solid fa-pen-to-square"></i> سجّل اهتمامك</button>'}
             <button class="icon-btn nav-toggle" aria-label="القائمة"><i class="fa-solid fa-bars"></i></button>
           </div>
         </div>
@@ -193,7 +209,8 @@ const Home = (() => {
   }
 
   function render(root, instant = false) {
-    const html = visibleSections().map(s => (R[s.type] ? R[s.type](s) : '')).join('');
+    // قسم التسجيل في الدفعة الجديدة يظهر تحت الواجهة الرئيسية (hero) وهو منفصل عن قسم تسجيل الاهتمام
+    const html = visibleSections().map(s => (R[s.type] ? R[s.type](s) : '') + (s.type === 'hero' ? enrollSection() : '')).join('');
     root.innerHTML = `<div class="home">${News.tickerBar()}${html || emptyState('لا يوجد محتوى للعرض')}</div>`;
     if (instant) $$('.reveal', root).forEach(el => el.classList.add('in'));
     wire(root);
@@ -286,6 +303,46 @@ const Home = (() => {
     $$('.reveal', root).forEach(el => io.observe(el));
   }
 
+  /* نموذج التسجيل في الدفعة المعلنة (منفصل عن نموذج المهتمين) */
+  function openRegistrationForm(opts = {}) {
+    const fields = Store.list('regform/fields').sort(byOrder);
+    const cohort = regCohort();
+    if (!cohort && !opts.preview) return toast('التسجيل مغلق حالياً', 'error');
+    const body = `<form class="form-grid interest-form" novalidate>
+      <p class="form-intro">${cohort ? `سجّل للالتحاق بـ<b>${esc(cohort.name)} ${esc(cohort.year)}</b> من إشراق` : 'سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق'}، وسيتواصل معك فريق البرنامج.</p>
+      ${fieldInput({ k: '__role', label: 'أرغب بالانضمام بصفتي', type: 'radio', required: true, options: [{ value: 'mentor', label: 'مرشد' }, { value: 'mentee', label: 'مستفيد' }], wide: true }, '')}
+      ${fieldInput({ k: '__prev', label: 'هل سبق لك التسجيل في إشراق كمرشد أو مستفيد؟', type: 'radio', required: true, options: [{ value: 'yes', label: 'نعم' }, { value: 'no', label: 'لا' }], wide: true }, 'no')}
+      <div class="field wide" data-prev-code hidden><label>رقم العضوية السابق <em>*</em></label><input name="__prevCode" dir="ltr" placeholder="مثال: M211" autocomplete="off"><small class="hint">الرقم الذي وصلك في الدفعة السابقة (حرف ثم أرقام)، ويُعتمد نفسه لك مع رمز دخول جديد.</small></div>
+      ${fields.map(f => (f.type === 'info' ? `<p class="form-note wide">${nl2br(f.label)}</p>`
+        : fieldInput({ ...f, k: f.id, options: String(f.options || '').split('\n').map(o => o.trim()).filter(Boolean), wide: f.type === 'textarea' }))).join('')}
+    </form>`;
+    openModal({
+      title: `<i class="fa-solid fa-pen-to-square"></i> ${cohort ? `التسجيل في ${esc(cohort.name)}` : 'التسجيل في الدفعة القادمة'}`, size: 'md', body,
+      onOpen: m => {
+        const sync = () => { const yes = $('input[name=__prev]:checked', m.body)?.value === 'yes'; $('[data-prev-code]', m.body).hidden = !yes; };
+        $$('input[name=__prev]', m.body).forEach(r => r.addEventListener('change', sync)); sync();
+      },
+      actions: [
+        {
+          label: '<i class="fa-solid fa-paper-plane"></i> إرسال', cls: 'primary', onClick: m => {
+            const form = $('form', m.body);
+            if (!validateForm(form)) return false;
+            const v = readForm(form);
+            const prev = v.__prev === 'yes', prevCode = toEnDigits(String(v.__prevCode || '')).trim().toUpperCase().replace(/\s+/g, '');
+            if (prev && !/^[MB]\d{2,}$/.test(prevCode)) { toast('اكتب رقم العضوية السابق بصيغته الصحيحة، مثل M211', 'error'); return false; }
+            const answers = {};
+            fields.filter(f => f.type !== 'info').forEach(f => { answers[f.id] = v[f.id] ?? ''; });
+            const name = answers.f_name || Object.values(answers)[0] || '';
+            Store.push('registrations', { role: v.__role, answers, ts: Date.now(), ...(cohort ? { cohort: cohort.id } : {}), ...(prev ? { prev: true, prevCode } : {}) });
+            Data.notify('admin', `تسجيل جديد (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'})${cohort ? ` في ${cohort.name}` : ''}: ${name}`, { icon: 'fa-user-plus' });
+            openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك بنجاح، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'إغلاق', cls: 'primary' }] });
+          }
+        },
+        { label: 'إلغاء', cls: 'ghost' }
+      ]
+    });
+  }
+
   /* نموذج تسجيل الاهتمام */
   function openInterestForm() {
     const fields = Store.list('form/fields').sort(byOrder);
@@ -333,7 +390,7 @@ const Home = (() => {
       actions: [
         ...(a.button ? [{
           label: esc(a.button), cls: 'primary', onClick: () => {
-            if (a.link) window.open(a.link, '_blank'); else setTimeout(openInterestForm, 220);
+            if (a.link) window.open(a.link, '_blank'); else setTimeout(openDefaultForm, 220);
           }
         }] : []),
         { label: 'إغلاق', cls: 'ghost' }
@@ -424,10 +481,11 @@ const Home = (() => {
   }
 
   document.addEventListener('click', e => {
-    if (e.target.closest('[data-open-form]')) { e.preventDefault(); openInterestForm(); }
+    if (e.target.closest('[data-open-registration]')) { e.preventDefault(); openRegistrationForm(); }
+    else if (e.target.closest('[data-open-form]')) { e.preventDefault(); openDefaultForm(); }
     const l = e.target.closest('[data-login]');
     if (l) openLogin(l.dataset.login);
   });
 
-  return { render, renderMembers, maybeAnnouncement, openInterestForm };
+  return { render, renderMembers, maybeAnnouncement, openInterestForm, openRegistrationForm };
 })();

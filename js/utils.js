@@ -357,6 +357,10 @@ const Data = {
     .map(m => Data.withContacts(m))
     .sort((a, b) => (a.cohort === b.cohort ? (a.seq - b.seq) : String(a.cohort).localeCompare(b.cohort))),
   member: id => (id ? Data.withContacts(Store.get(`members/${id}`)) : null),
+  // أعضاء الدفعة سواء كانت دفعتهم الحالية أو انتقلوا منها لدفعة أحدث (مرشد أو مستفيد سبق تسجيله): لعرض سجل الدفعة وإحصاءاتها
+  cohortMembers: (role, cohortId) => Store.list('members')
+    .filter(m => (!role || m.role === role) && (m.cohort === cohortId || (m.prevCohorts || []).includes(cohortId)))
+    .map(m => Data.withContacts(m)).sort((a, b) => (a.seq || 0) - (b.seq || 0)),
   // حفظ بيانات العضو: الحقول العامة في members وبيانات التواصل في contacts
   saveMember(id, values) {
     const pub = {}, priv = {};
@@ -407,11 +411,12 @@ const Data = {
     });
   },
   // الجلسات الإضافية (extra:true) منفصلة عن الجلسات الأساسية: لا تدخل في الإحصاءات ولا في التقدم ولا النطاقات
-  slots: (mentorId, extra = false) => Store.list('slots').filter(s => s.mentorId === mentorId && !!s.extra === extra)
+  // مواعيد المرشد الحالية فقط: ما أُضيف قبل انتقاله لدفعته الحالية (cohortSince) يخص دفعة سابقة
+  slots: (mentorId, extra = false) => Store.list('slots').filter(s => s.mentorId === mentorId && !!s.extra === extra && (s.ts || 0) >= (Store.get(`members/${mentorId}/cohortSince`) || 0))
     .sort((a, b) => (a.session || 0) - (b.session || 0) || (a.date + a.start).localeCompare(b.date + b.start)),
   bookings: filter => {
-    const { extra, ...f } = filter || {};
-    return Store.list('bookings').filter(b => !!b.extra === !!extra && Object.entries(f).every(([k, v]) => b[k] === v))
+    const { extra, cohort, ...f } = filter || {};
+    return Store.list('bookings').filter(b => !!b.extra === !!extra && (!cohort || !b.cohort || b.cohort === cohort) && Object.entries(f).every(([k, v]) => b[k] === v))
       .sort((a, b) => (a.session || 0) - (b.session || 0) || (a.date + a.start).localeCompare(b.date + b.start));
   },
   /* ===== جلسات إرشادية إضافية (تفعّلها الإدارة، وتُحسب منفصلة عن الجلسات الأساسية) ===== */
@@ -448,7 +453,7 @@ const Data = {
     return s;
   },
   activeBooking(menteeId, session) {
-    return Data.bookings({ menteeId }).find(b => b.session === session && ['upcoming', 'done'].includes(b.status));
+    return Data.bookings({ menteeId, cohort: Store.get(`members/${menteeId}/cohort`) }).find(b => b.session === session && ['upcoming', 'done'].includes(b.status));
   },
   doneCount: (key, id) => Data.bookings({ [key]: id }).filter(b => b.status === 'done').length,
   notify(to, text, extra = {}) {
