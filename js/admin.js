@@ -32,7 +32,8 @@ const Admin = (() => {
       <main class="container dash-main">
         <section class="dash-hello admin-hello">
           <div><small>لوحة تحكم الإدارة</small><h1>أهلاً بك في إدارة إشراق</h1>
-          <span class="muted small">${Store.mode === 'firebase' ? '<i class="fa-solid fa-cloud"></i> متصل بقاعدة البيانات' : '<i class="fa-solid fa-hard-drive"></i> وضع محلي (البيانات في هذا المتصفح فقط)'}</span></div>
+          <span class="muted small">${Store.mode === 'firebase' ? '<i class="fa-solid fa-cloud"></i> متصل بقاعدة البيانات' : '<i class="fa-solid fa-hard-drive"></i> وضع محلي (البيانات في هذا المتصفح فقط)'}</span>
+          <div class="demo-actions"><button class="btn light sm" data-demo-open="mentor"><i class="fa-solid fa-user-tie"></i> معاينة كمرشد</button><button class="btn light sm" data-demo-open="mentee"><i class="fa-solid fa-user-graduate"></i> معاينة كمستفيد</button></div></div>
           <div class="kpis">${kpis()}</div>
         </section>
         ${securityBanner()}

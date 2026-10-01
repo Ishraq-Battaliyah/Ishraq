@@ -1,7 +1,8 @@
 /* طبقة البيانات: Firebase Realtime Database (أو localStorage عند عدم إعداد Firebase) */
 const Store = (() => {
   const CFG = window.ISHRAQ_CONFIG || {};
-  const LOCAL_KEY = 'ishraq-db-v1';
+  // المعاينة التجريبية (js/demo.js) تحفظ بياناتها بمفتاح مستقل ولا تتصل بقاعدة البيانات الحقيقية
+  const LOCAL_KEY = window.ISHRAQ_DEMO ? 'ishraq-demo-db-v1' : 'ishraq-db-v1';
   const FB_VER = '10.12.2';
   let state = {};
   let mode = 'local';
