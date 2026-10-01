@@ -1199,7 +1199,7 @@ a.tk-item { color: #fff; }
 .cert-live p { text-align: center; margin: 8px 0 0; }
 
 /* الشهادات: الأزرار والفلاتر في عمود على اليمين، وقالب الشهادة مقابلها على اليسار */
-.cert-top { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cert-top { display: grid; grid-template-columns: minmax(190px, 270px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .cert-controls { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .cert-controls .sub-tabs { flex-direction: column; margin: 0; }
 .cert-controls .sub-tabs button { width: 100%; text-align: start; }
@@ -1208,7 +1208,7 @@ a.tk-item { color: #fff; }
 .cert-controls .chip-filter { margin: 0; }
 .cert-controls .cert-date { justify-content: space-between; }
 .cert-top .cert-live { margin: 0; }
-@media (max-width: 900px) { .cert-top { grid-template-columns: 1fr; } .cert-controls .sub-tabs { flex-direction: row; } .cert-controls .sub-tabs button { width: auto; } }
+@media (max-width: 560px) { .cert-top { grid-template-columns: 1fr; } .cert-controls .sub-tabs { flex-direction: row; } .cert-controls .sub-tabs button { width: auto; } }
 
 /* معاينة المرشد والمستفيد: أزرار الإدارة، والنوافذ العائمة، وشريط الإطار التجريبي */
 .demo-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
@@ -1225,3 +1225,5 @@ a.tk-item { color: #fff; }
 .demo-banner { background: #FFF4CC; color: #5C4600; text-align: center; font-weight: 700; padding: 6px 10px; font-size: .85rem; position: sticky; top: 0; z-index: 50; }
 .demo-mode [data-logout], .demo-mode .dash-top .brand { display: none; }
 .demo-mode .dash-top-actions { margin-inline-start: auto; }
+.cert-controls .cert-date { flex-wrap: wrap; }
+.cert-controls .cert-date input { flex: 1 1 140px; min-width: 0; }
