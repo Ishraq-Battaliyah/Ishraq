@@ -1197,3 +1197,15 @@ a.tk-item { color: #fff; }
 .cert-live img { display: block; width: 100%; max-width: 760px; margin: 0 auto; border-radius: 10px; box-shadow: 0 2px 14px rgba(46, 37, 99, .12); background: #f4f2fa; aspect-ratio: 3 / 2; object-fit: contain; }
 .cert-live.loading img { opacity: .35; }
 .cert-live p { text-align: center; margin: 8px 0 0; }
+
+/* الشهادات: الأزرار والفلاتر في عمود على اليمين، وقالب الشهادة مقابلها على اليسار */
+.cert-top { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cert-controls { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cert-controls .sub-tabs { flex-direction: column; margin: 0; }
+.cert-controls .sub-tabs button { width: 100%; text-align: start; }
+.cert-controls .cert-filters { flex-direction: column; align-items: stretch; margin: 0; gap: 12px; }
+.cert-controls .cert-filters select, .cert-controls .cert-filters .search { width: 100%; }
+.cert-controls .chip-filter { margin: 0; }
+.cert-controls .cert-date { justify-content: space-between; }
+.cert-top .cert-live { margin: 0; }
+@media (max-width: 900px) { .cert-top { grid-template-columns: 1fr; } .cert-controls .sub-tabs { flex-direction: row; } .cert-controls .sub-tabs button { width: auto; } }
