@@ -1191,3 +1191,9 @@ a.tk-item { color: #fff; }
 
 .cert-date { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
 .cert-date input { font: inherit; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+
+.cert-live { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.cert-live-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cert-live img { display: block; width: 100%; max-width: 760px; margin: 0 auto; border-radius: 10px; box-shadow: 0 2px 14px rgba(46, 37, 99, .12); background: #f4f2fa; aspect-ratio: 3 / 2; object-fit: contain; }
+.cert-live.loading img { opacity: .35; }
+.cert-live p { text-align: center; margin: 8px 0 0; }
