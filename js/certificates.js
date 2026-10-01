@@ -13,29 +13,29 @@ const Certs = (() => {
   const DEFAULTS = {
     mentor: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بخالص الشكر والتقدير إلى',
-      body: 'على مشاركتهم مرشداً في برنامج إشراق الإرشادي ({cohort} {year})، وما بذلوه من وقتٍ وخبرةٍ ودعمٍ لمستفيدهم، سائلين الله لهم التوفيق والسداد.',
-      org: 'جمعية البطالية الخيرية — برنامج إشراق', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على مشاركتهم مرشداً في **برنامج إشراق الإرشادي ({cohort} {year}م)**، وما بذلوه من وقتٍ وخبرةٍ ودعمٍ لمستفيدهم، سائلين الله لهم التوفيق والسداد.',
+      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير من برنامج إشراق',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nيسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية، تقديراً لمشاركتكم مرشداً في {cohort}.\n\nمع خالص الشكر والتقدير،\nإدارة برنامج إشراق'
     },
     mentee: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بالشكر والتقدير إلى',
-      body: 'على مشاركته مستفيداً في برنامج إشراق الإرشادي ({cohort} {year}) والتزامه بجلسات الإرشاد المقررة، متمنّين له دوام التوفيق والنجاح.',
-      org: 'جمعية البطالية الخيرية — برنامج إشراق', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على مشاركته مستفيداً في **برنامج إشراق الإرشادي ({cohort} {year}م)** والتزامه بجلسات الإرشاد المقررة، متمنّين له دوام التوفيق والنجاح.',
+      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير من برنامج إشراق',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nيسعدنا أن نرفق لكم {type} في برنامج إشراق التابع لجمعية البطالية الخيرية ({cohort}).\n\nمع أطيب التمنيات بدوام التوفيق،\nإدارة برنامج إشراق'
     },
     event: {
       title: 'شهادة حضور', intro: 'تشهد جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بأن',
-      body: 'قد حضر فعالية «{event}» التي أُقيمت بتاريخ {date}، وشارك فيها ضمن فعاليات برنامج إشراق.',
-      org: 'جمعية البطالية الخيرية — برنامج إشراق', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'قد حضر فعالية «**{event}**» التي أُقيمت بتاريخ {date}، وشارك فيها ضمن فعاليات **برنامج إشراق**.',
+      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة حضور فعالية «{event}»',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nشكراً لحضوركم فعالية «{event}». يسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية.\n\nمع خالص التقدير،\nإدارة برنامج إشراق'
     },
     speaker: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بخالص الشكر والتقدير إلى',
-      body: 'على تقديمه «{event}» ضمن فعاليات برنامج إشراق بتاريخ {date}، وما بذله من جهدٍ وعطاءٍ في إثراء المرشدين والمستفيدين، سائلين الله أن يجعل ذلك في ميزان حسناته.',
-      org: 'جمعية البطالية الخيرية — برنامج إشراق', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على تقديمه «**{event}**» ضمن فعاليات **برنامج إشراق** بتاريخ {date}، وما بذله من جهدٍ وعطاءٍ في إثراء المرشدين والمستفيدين، سائلين الله أن يجعل ذلك في ميزان حسناته.',
+      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير لتقديم «{event}»',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nشكراً لكم على تقديم «{event}» ضمن فعاليات برنامج إشراق. يسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية.\n\nمع خالص الشكر والتقدير،\nإدارة برنامج إشراق'
     }
@@ -94,15 +94,17 @@ const Certs = (() => {
      والمتغير (النصوص والاسم داخل إطاره والتوقيع والختم والتاريخ) يُرسم فوقها. مواضع النصوص نسب من أبعاد كل تصميم. */
   const A = 'assets/certs/';
   // x/y نسب من العرض/الارتفاع. frame.w: عرض إطار الاسم، frame.cy: مركزه الرأسي. foot: خط التوقيع، ويقع الختم في الوسط والتاريخ يساراً والتوقيع يميناً
-  const MENTOR_DESIGN = { img: `${A}mentor.webp`, intro: { y: .44, w: .66 }, frame: { cy: .545, w: .43 }, body: { y: .655, w: .58 }, foot: { y: .84, xs: [.3, .5, .7] }, org: .9 };
+  const MENTOR_DESIGN = { img: `${A}mentor.webp`, intro: { y: .44, w: .66 }, frame: { cy: .545, w: .43 }, body: { y: .65, w: .62 }, foot: { y: .84, xs: [.7, .5, .3] }, org: .93 };
   const DESIGNS = {
     mentor: MENTOR_DESIGN,
     speaker: MENTOR_DESIGN,                      // شهادة المتحدثين بتصميم شهادة المرشدين نفسه
-    mentee: { img: `${A}mentee.webp`, intro: { y: .45, w: .66 }, frame: { cy: .55, w: .45 }, body: { y: .66, w: .6 }, foot: { y: .81, xs: [.34, .5, .66] }, org: .885 },
-    event: { img: `${A}event.webp`, intro: { y: .475, w: .66 }, frame: { cy: .585, w: .45 }, body: { y: .7, w: .6 }, foot: { y: .86, xs: [.34, .5, .66] }, org: .905 }
+    mentee: { img: `${A}mentee.webp`, intro: { y: .45, w: .66 }, frame: { cy: .55, w: .45 }, body: { y: .655, w: .64 }, foot: { y: .81, xs: [.66, .5, .34] }, org: .925 },
+    event: { img: `${A}event.webp`, intro: { y: .475, w: .66 }, frame: { cy: .585, w: .45 }, body: { y: .695, w: .64 }, foot: { y: .86, xs: [.66, .5, .34] }, org: .93 }
   };
-  const F = { head: "'Cairo', 'Noto Sans Arabic', sans-serif", ui: "'IBM Plex Sans Arabic', 'Noto Sans Arabic', sans-serif", body: "'Noto Sans Arabic', 'IBM Plex Sans Arabic', sans-serif" };
-  const C = { ink: '#2E2563', ink2: '#4E4B63', muted: '#7C7A8E', p: '#8776C4', pd: '#5B4A9E', b: '#7FB1D4', line: '#E6E3F0' };
+  // خط الشهادات كما في النموذج المعتمد (Tajawal)، والتمييز (اسم البرنامج والدفعة) بنفس الخط بوزن أثقل ولون بنفسجي
+  const FONT = "'Tajawal', 'Noto Sans Arabic', sans-serif";
+  const F = { head: FONT, ui: FONT, body: FONT };
+  const C = { ink: '#2E2563', ink2: '#3F4358', muted: '#7C7A8E', p: '#8776C4', pd: '#5B4A9E', b: '#5C9ACB', hl: '#7A4FA6', line: '#E6E3F0' };
   // حدود الجزء الملوّن من إطار الاسم داخل صورته (نسب)، ومنه يُحسب الوسط والعرض المتاح للاسم
   const FRAME = { cy: .521, inner: .76 };
 
@@ -124,23 +126,51 @@ const Certs = (() => {
   };
   let fontsReady = null;
   const ensureFonts = () => fontsReady || (fontsReady = Promise.all([
-    document.fonts.load(`800 30px ${F.head}`, 'إشراق'), document.fonts.load(`700 18px ${F.head}`, 'إشراق'),
-    document.fonts.load(`400 17px ${F.body}`, 'إشراق'), document.fonts.load(`600 15px ${F.ui}`, 'إشراق')
+    document.fonts.load(`800 30px ${FONT}`, 'إشراق'), document.fonts.load(`700 18px ${FONT}`, 'إشراق'),
+    document.fonts.load(`500 17px ${FONT}`, 'إشراق'), document.fonts.load(`400 17px ${FONT}`, 'إشراق')
   ]).then(() => document.fonts.ready).catch(() => {}));
   const assetCache = {};
   const asset = src => assetCache[src] || (assetCache[src] = loadImg(src));
 
-  function wrapLines(ctx, text, maxW) {
-    const lines = [];
-    String(text || '').split('\n').forEach(par => {
-      let line = '';
-      par.split(/\s+/).filter(Boolean).forEach(word => {
-        const t = line ? `${line} ${word}` : word;
-        if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = word; } else line = t;
+  // نص غني: **نص** يُميَّز (أثقل ولون بنفسجي). تُقسَّم الكلمات ويُقاس كل منها بخطه ثم تُرسم من اليمين لليسار فيبقى التمييز في أي موضع
+  function tokenize(text) {
+    return String(text || '').split('\n').map(par => {
+      const line = []; let pending = false;
+      par.split('**').forEach((seg, si) => {
+        const re = /(\s*)(\S+)/g; let m;
+        while ((m = re.exec(seg))) { line.push({ w: m[2], bold: si % 2 === 1, sp: line.length > 0 && (m[1].length > 0 || pending) }); pending = false; }
+        if (/\s$/.test(seg)) pending = true;          // مسافة قبل حدّ التمييز تفصل الكلمتين، وغيابها يُبقيهما ملتصقتين («**{event}**»)
       });
-      lines.push(line);
+      return line;
+    });
+  }
+  const fontOf = (size, bold) => `${bold ? 700 : 500} ${size}px ${FONT}`;
+  function layoutRich(ctx, text, maxW, size) {
+    const lines = [];
+    tokenize(text).forEach(par => {
+      let cur = [], width = 0;
+      const spaceW = (ctx.font = fontOf(size, false), ctx.measureText(' ').width);
+      par.forEach(t => {
+        ctx.font = fontOf(size, t.bold);
+        const w = ctx.measureText(t.w).width, gap = cur.length && t.sp ? spaceW : 0;
+        if (cur.length && width + gap + w > maxW) { lines.push({ tokens: cur, width }); cur = []; width = 0; }
+        const g2 = cur.length && t.sp ? spaceW : 0;
+        cur.push({ ...t, width: w, gap: g2 }); width += g2 + w;
+      });
+      lines.push({ tokens: cur, width });
     });
     return lines;
+  }
+  function drawRichLine(ctx, line, cx, y, size, normal, hl) {
+    let x = cx + line.width / 2;
+    ctx.textAlign = 'right';
+    line.tokens.forEach(t => {
+      x -= t.gap;
+      ctx.font = fontOf(size, t.bold); ctx.fillStyle = t.bold ? hl : normal;
+      ctx.fillText(t.w, x, y);
+      x -= t.width;
+    });
+    ctx.textAlign = 'center';
   }
 
   // الاسم داخل إطاره وفي منتصفه: يصغَّر الخط حتى يتسع، فإن لم يكفِ كُبِّر الإطار قليلاً، وبعد ذلك يُصغَّر أكثر؛ فلا يخرج حرف عن الإطار
@@ -189,39 +219,38 @@ const Certs = (() => {
     // الجملة التمهيدية
     ctx.fillStyle = C.ink2; ctx.font = `500 ${23 * k}px ${F.body}`;
     // إن طالت الجملة صُغِّر الخط قليلاً لتبقى في سطر واحد، وإلا التفّت وآخر سطر فيها فوق الإطار مباشرة
-    let isz = 23 * k; ctx.font = `500 ${isz}px ${F.body}`;
     const introText = fill(tpl.intro, v);
-    while (ctx.measureText(introText).width > W * D.intro.w && isz > 19 * k) { isz -= k; ctx.font = `500 ${isz}px ${F.body}`; }
-    const introLines = wrapLines(ctx, introText, W * D.intro.w);
-    let y = H * D.intro.y - (introLines.length - 1) * 36 * k;
-    introLines.forEach(l => { ctx.fillText(l, cx, y); y += 36 * k; });
+    let isz = 22 * k;
+    while (isz > 19 * k && layoutRich(ctx, introText, 1e9, isz)[0].width > W * D.intro.w) isz -= k;
+    const introLines = layoutRich(ctx, introText, W * D.intro.w, isz);
+    let y = H * D.intro.y - (introLines.length - 1) * 38 * k;
+    introLines.forEach(l => { drawRichLine(ctx, l, cx, y, isz, C.ink2, C.hl); y += 38 * k; });
 
     // الاسم داخل إطاره
     if (frame) drawName(ctx, frame, v.name, cx, H * D.frame.cy, W * D.frame.w, W);
     else { ctx.fillStyle = C.ink; ctx.font = `800 ${50 * k}px ${F.head}`; ctx.fillText(v.name, cx, H * D.frame.cy); }
 
-    // النص
-    ctx.textAlign = 'center'; ctx.fillStyle = C.ink2; ctx.font = `400 ${24 * k}px ${F.body}`;
+    // النص (يدعم تمييز **اسم البرنامج والدفعة**)
     y = H * D.body.y;
-    wrapLines(ctx, fill(tpl.body, v), W * D.body.w).forEach(l => { ctx.fillText(l, cx, y); y += 44 * k; });
+    layoutRich(ctx, fill(tpl.body, v), W * D.body.w, 22 * k).forEach(l => { drawRichLine(ctx, l, cx, y, 22 * k, C.ink2, C.hl); y += 40 * k; });
 
-    // أسفل الشهادة: التاريخ (يسار)، الختم (وسط)، التوقيع (يمين)
+    // أسفل الشهادة كما في النموذج: التاريخ يميناً، والختم وسطاً، والموقِّع (الجهة أو الشخص) يساراً
     const by = H * D.foot.y, [dx, sx0, gx] = D.foot.xs.map(f => W * f);
     if (tpl.showDate) {
-      ctx.fillStyle = C.ink2; ctx.font = `600 ${16 * k}px ${F.ui}`;
-      ctx.fillText('التاريخ', dx, by + 6 * k);
-      ctx.font = `700 ${18 * k}px ${F.head}`; ctx.fillStyle = C.ink; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(new Date()), dx, by + 34 * k); ctx.direction = 'rtl';
+      ctx.fillStyle = C.b; ctx.font = `700 ${20 * k}px ${FONT}`; ctx.fillText('التاريخ:', dx, by + 6 * k);
+      ctx.font = `500 ${20 * k}px ${FONT}`; ctx.fillStyle = C.ink2; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(new Date()), dx, by + 38 * k); ctx.direction = 'rtl';
     }
     if (stamp) { const sh = 110 * k, sw = Math.min(sh * stamp.width / stamp.height, 200 * k); ctx.drawImage(stamp, sx0 - sw / 2, by - 72 * k, sw, sh); }
     if (sig) { const sh = 62 * k, sw = Math.min(sh * sig.width / sig.height, 190 * k); ctx.drawImage(sig, gx - sw / 2, by - 66 * k, sw, sh); }
-    if (tpl.signerName || tpl.signerTitle || sig) {
-      ctx.strokeStyle = C.muted; ctx.lineWidth = 1 * k; ctx.beginPath(); ctx.moveTo(gx - 95 * k, by - 2 * k); ctx.lineTo(gx + 95 * k, by - 2 * k); ctx.stroke();
-      ctx.fillStyle = C.ink; ctx.font = `700 ${18 * k}px ${F.head}`; ctx.fillText(tpl.signerName || '', gx, by + 22 * k);
-      ctx.fillStyle = C.ink2; ctx.font = `500 ${14 * k}px ${F.ui}`; ctx.fillText(tpl.signerTitle || '', gx, by + 44 * k);
-    }
+    if (tpl.signerName || sig) { ctx.strokeStyle = C.muted; ctx.lineWidth = 1 * k; ctx.beginPath(); ctx.moveTo(gx - 95 * k, by - 2 * k); ctx.lineTo(gx + 95 * k, by - 2 * k); ctx.stroke(); }
+    ctx.fillStyle = C.ink;
+    if (tpl.signerName) {
+      ctx.font = `700 ${20 * k}px ${FONT}`; ctx.fillText(tpl.signerName, gx, by + 24 * k);
+      ctx.fillStyle = C.ink2; ctx.font = `500 ${15 * k}px ${FONT}`; ctx.fillText(tpl.signerTitle || '', gx, by + 48 * k);
+    } else if (tpl.signerTitle) { ctx.font = `700 ${21 * k}px ${FONT}`; ctx.fillText(tpl.signerTitle, gx, by + 6 * k); }
     // سطر الجهة والسطر الإضافي
     const foot = [tpl.org, tpl.footer].filter(Boolean).join('  •  ');
-    if (foot) { ctx.fillStyle = C.muted; ctx.font = `500 ${13 * k}px ${F.ui}`; ctx.fillText(foot, cx, H * D.org); }
+    if (foot) { ctx.fillStyle = C.muted; ctx.font = `500 ${14 * k}px ${FONT}`; ctx.fillText(foot, cx, H * D.org); }
     return { canvas: cv, imgFailed };
   }
 
@@ -552,8 +581,8 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     const chk = (k, label) => `<label class="check"><input type="checkbox" name="${k}" ${drafts[cur][k] ? 'checked' : ''}><span>${label}</span></label>`;
     const formHtml = () => `<div class="form-grid">
         ${F_('org', 'اسم الجهة (يظهر أسفل الشهادة)')}
-        ${F_('intro', 'الجملة التمهيدية (قبل الاسم)', 'textarea')}
-        ${F_('body', 'نص الشهادة (بعد الاسم)', 'textarea', 'يمكن استخدام: <code>{name}</code> الاسم، <code>{cohort}</code> الدفعة، <code>{year}</code> السنة، <code>{event}</code> عنوان الفعالية، <code>{date}</code> تاريخ الفعالية')}
+        ${F_('intro', 'الجملة التمهيدية (قبل الاسم)', 'textarea', 'يمكن تمييز جزء منها بوضعه بين <code>**</code>')}
+        ${F_('body', 'نص الشهادة (بعد الاسم)', 'textarea', 'يمكن استخدام: <code>{name}</code> الاسم، <code>{cohort}</code> الدفعة، <code>{year}</code> السنة، <code>{event}</code> عنوان الفعالية، <code>{date}</code> تاريخ الفعالية، ولتمييز جزء من النص (بخط أثقل ولون بنفسجي) ضعه بين <code>**</code> مثل: <code>**برنامج إشراق الإرشادي**</code>')}
         ${F_('signerName', 'اسم الموقِّع (الشخص الممثل للجهة)')}${F_('signerTitle', 'صفة الموقِّع')}
         ${F_('signature', 'رابط صورة التوقيع (اختياري)', 'text', 'صورة PNG بخلفية شفافة تعطي أفضل نتيجة')}${F_('stamp', 'رابط صورة الختم (اختياري)')}
         <div class="check-row wide">${chk('showSignature', 'إظهار التوقيع')}${chk('showStamp', 'إظهار الختم')}${chk('showDate', 'إظهار تاريخ الإصدار')}</div>
