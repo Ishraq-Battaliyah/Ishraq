@@ -111,7 +111,7 @@ const Store = (() => {
     if (window.firebase.auth && CFG.firebase.apiKey) {
       authApi = app.auth();
       if (CFG.emulators?.auth) authApi.useEmulator(CFG.emulators.auth, { disableWarnings: true });
-      await authApi.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(() => {});
+      // لا نضبط نوع التخزين هنا: يحدده الدخول نفسه (دائم للإدارة، وللجلسة فقط للأعضاء). ضبطه عند كل فتح للصفحة ينقل جلسة المشرف إلى تخزين مؤقت فيفقدها عند إغلاق المتصفح
     }
     mode = 'firebase';
     fbApp = app;
