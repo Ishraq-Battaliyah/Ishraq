@@ -1188,3 +1188,6 @@ a.tk-item { color: #fff; }
 .notify-pref { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
 .notify-pref h2 { margin: 0; font-size: 1.05rem; }
 .notify-pref p { margin: 4px 0 0; }
+
+.cert-date { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+.cert-date input { font: inherit; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); }

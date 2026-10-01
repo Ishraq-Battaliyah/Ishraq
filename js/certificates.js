@@ -13,42 +13,52 @@ const Certs = (() => {
   const DEFAULTS = {
     mentor: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بخالص الشكر والتقدير إلى',
-      body: 'على مشاركتهم مرشداً في **برنامج إشراق الإرشادي ({cohort} {year}م)**، وما بذلوه من وقتٍ وخبرةٍ ودعمٍ لمستفيدهم، سائلين الله لهم التوفيق والسداد.',
-      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على مشاركتهم مرشداً في **برنامج إشراق الإرشادي ({cohort} {year}م)**، وما بذلوه من وقتٍ وخبرةٍ ودعمٍ لمستفيدهم،\nسائلين الله لهم التوفيق والسداد.',
+      signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير من برنامج إشراق',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nيسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية، تقديراً لمشاركتكم مرشداً في {cohort}.\n\nمع خالص الشكر والتقدير،\nإدارة برنامج إشراق'
     },
     mentee: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بالشكر والتقدير إلى',
-      body: 'على مشاركته مستفيداً في **برنامج إشراق الإرشادي ({cohort} {year}م)** والتزامه بجلسات الإرشاد المقررة، متمنّين له دوام التوفيق والنجاح.',
-      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على مشاركته مستفيداً في **برنامج إشراق الإرشادي ({cohort} {year}م)** والتزامه بجلسات الإرشاد المقررة،\nمتمنّين له دوام التوفيق والنجاح.',
+      signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير من برنامج إشراق',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nيسعدنا أن نرفق لكم {type} في برنامج إشراق التابع لجمعية البطالية الخيرية ({cohort}).\n\nمع أطيب التمنيات بدوام التوفيق،\nإدارة برنامج إشراق'
     },
     event: {
       title: 'شهادة حضور', intro: 'تشهد جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بأن',
       body: 'قد حضر فعالية «**{event}**» التي أُقيمت بتاريخ {date}، وشارك فيها ضمن فعاليات **برنامج إشراق**.',
-      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة حضور فعالية «{event}»',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nشكراً لحضوركم فعالية «{event}». يسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية.\n\nمع خالص التقدير،\nإدارة برنامج إشراق'
     },
     speaker: {
       title: 'شهادة شكر وتقدير', intro: 'تتقدّم جمعية البطالية الخيرية ممثلةً ببرنامج إشراق بخالص الشكر والتقدير إلى',
-      body: 'على تقديمه «**{event}**» ضمن فعاليات **برنامج إشراق** بتاريخ {date}، وما بذله من جهدٍ وعطاءٍ في إثراء المرشدين والمستفيدين، سائلين الله أن يجعل ذلك في ميزان حسناته.',
-      org: '', signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
+      body: 'على تقديمه «**{event}**» ضمن فعاليات **برنامج إشراق** بتاريخ {date}، وما بذله من جهدٍ وعطاءٍ في إثراء المرشدين والمستفيدين،\nسائلين الله أن يجعل ذلك في ميزان حسناته.',
+      signerName: '', signerTitle: 'إدارة برنامج إشراق', signature: '', stamp: '', showSignature: true, showStamp: true, showDate: true, footer: '',
       emailSubject: 'شهادة شكر وتقدير لتقديم «{event}»',
       emailBody: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nشكراً لكم على تقديم «{event}» ضمن فعاليات برنامج إشراق. يسعدنا أن نرفق لكم {type} من برنامج إشراق التابع لجمعية البطالية الخيرية.\n\nمع خالص الشكر والتقدير،\nإدارة برنامج إشراق'
     }
   };
   // عنوان الشهادة ثابت في التصميم فلا يُحرَّر ولا يُحفظ
-  const TEXT_KEYS = ['intro', 'body', 'org', 'signerName', 'signerTitle', 'signature', 'stamp', 'footer', 'emailSubject', 'emailBody'];
+  const TEXT_KEYS = ['intro', 'body', 'signerName', 'signerTitle', 'signature', 'stamp', 'footer', 'emailSubject', 'emailBody'];
   const BOOL_KEYS = ['showSignature', 'showStamp', 'showDate'];
 
-  const template = kind => ({ ...DEFAULTS[kind], ...(Store.get(`certs/templates/${kind}`) || {}), title: DEFAULTS[kind].title });
+    // القوالب المحفوظة قبل التمييز: نميّز اسم البرنامج والدفعة (أو عنوان الفعالية) ونضع العبارة الختامية في سطر مستقل
+  const normalizeBody = t => {
+    t = String(t || '');
+    if (!t.includes('**')) t = t.replace(/(برنامج إشراق الإرشادي\s*\([^)]*\))/, '**$1**').replace(/«\{event\}»/g, '«**{event}**»');
+    if (!/\n/.test(t)) t = t.replace(/\s*(سائلين الله[^.\n]*\.|متمنّين[^.\n]*\.)\s*$/, '\n$1');
+    return t;
+  };
+  const template = kind => {
+    const t = { ...DEFAULTS[kind], ...(Store.get(`certs/templates/${kind}`) || {}), title: DEFAULTS[kind].title };
+    return { ...t, body: normalizeBody(t.body) };
+  };
   const fill = (text, v) => String(text || '').replace(/\{(name|cohort|year|event|date|type)\}/g, (_, k) => v[k] ?? '');
 
   /* ===== الحالة ===== */
-  const ui = { kind: 'mentor', cohort: 'all', event: '', spEvent: '', q: '', sel: new Set() };
+  const ui = { kind: 'mentor', cohort: 'all', event: '', spEvent: '', issueDate: '', q: '', sel: new Set() };   // issueDate فارغ = يوم الإصدار
 
   /* ===== المستلمون ===== */
   const nameOf = (id, fallback) => (Store.get(`certs/names/${id}`) || fallback || '').trim();
@@ -238,7 +248,7 @@ const Certs = (() => {
     const by = H * D.foot.y, [dx, sx0, gx] = D.foot.xs.map(f => W * f);
     if (tpl.showDate) {
       ctx.fillStyle = C.b; ctx.font = `700 ${20 * k}px ${FONT}`; ctx.fillText('التاريخ:', dx, by + 6 * k);
-      ctx.font = `500 ${20 * k}px ${FONT}`; ctx.fillStyle = C.ink2; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(new Date()), dx, by + 38 * k); ctx.direction = 'rtl';
+      ctx.font = `500 ${20 * k}px ${FONT}`; ctx.fillStyle = C.ink2; ctx.direction = 'ltr'; ctx.fillText(fmtLatin(ui.issueDate ? parseISO(ui.issueDate) : new Date()), dx, by + 38 * k); ctx.direction = 'rtl';
     }
     if (stamp) { const sh = 110 * k, sw = Math.min(sh * stamp.width / stamp.height, 200 * k); ctx.drawImage(stamp, sx0 - sw / 2, by - 72 * k, sw, sh); }
     if (sig) { const sh = 62 * k, sw = Math.min(sh * sig.width / sig.height, 190 * k); ctx.drawImage(sig, gx - sw / 2, by - 66 * k, sw, sh); }
@@ -249,7 +259,7 @@ const Certs = (() => {
       ctx.fillStyle = C.ink2; ctx.font = `500 ${15 * k}px ${FONT}`; ctx.fillText(tpl.signerTitle || '', gx, by + 48 * k);
     } else if (tpl.signerTitle) { ctx.font = `700 ${21 * k}px ${FONT}`; ctx.fillText(tpl.signerTitle, gx, by + 6 * k); }
     // سطر الجهة والسطر الإضافي
-    const foot = [tpl.org, tpl.footer].filter(Boolean).join('  •  ');
+    const foot = tpl.footer;
     if (foot) { ctx.fillStyle = C.muted; ctx.font = `500 ${14 * k}px ${FONT}`; ctx.fillText(foot, cx, H * D.org); }
     return { canvas: cv, imgFailed };
   }
@@ -574,15 +584,23 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     Object.keys(KINDS).forEach(k => { drafts[k] = template(k); });
     const hasEvent = k => k === 'event' || k === 'speaker';
     const sample = k => ({ id: 'sample', cert: { event: 'اسم الحاضر', mentor: 'اسم المرشد', mentee: 'اسم المستفيد', speaker: 'اسم المتحدث' }[k], name: '', email: '',
-      cohortId: hasEvent(k) ? null : (Data.cohorts().slice(-1)[0]?.id || null), event: hasEvent(k) ? (currentEvent() || { title: 'عنوان الفعالية', date: todayISO() }) : null });
+      cohortId: hasEvent(k) ? null : (Data.cohorts().slice(-1)[0]?.id || null), event: hasEvent(k) ? ((k === 'speaker' && ui.spEvent && Store.get(`events/${ui.spEvent}`)) || currentEvent() || { title: 'عنوان الفعالية', date: todayISO() }) : null });
     const F_ = (k, label, type = 'text', hint = '') => type === 'textarea'
       ? `<div class="field wide"><label>${label}</label><textarea name="${k}" rows="${k === 'emailBody' ? 6 : 3}">${esc(drafts[cur][k] || '')}</textarea>${hint ? `<small class="hint">${hint}</small>` : ''}</div>`
       : `<div class="field"><label>${label}</label><input name="${k}" value="${esc(drafts[cur][k] || '')}" ${k === 'signature' || k === 'stamp' ? 'dir="ltr" placeholder="https://drive.google.com/..."' : ''}>${hint ? `<small class="hint">${hint}</small>` : ''}</div>`;
     const chk = (k, label) => `<label class="check"><input type="checkbox" name="${k}" ${drafts[cur][k] ? 'checked' : ''}><span>${label}</span></label>`;
+    // الفعالية التي تُصدر شهادتها (من الفعاليات المعلنة): يظهر اسمها وتاريخها في الشهادة، وتحدد الأسماء المعروضة في القائمة
+    const eventPicker = () => {
+      if (!hasEvent(cur)) return '';
+      const evs = events(), val = cur === 'speaker' ? ui.spEvent : (currentEvent()?.id || '');
+      return `<div class="field wide"><label>الفعالية</label><select name="__event" data-event-pick>${cur === 'speaker' ? `<option value="" ${val ? '' : 'selected'}>كل الفعاليات وورش العمل</option>` : ''}${evs.map(e => `<option value="${esc(e.id)}" ${val === e.id ? 'selected' : ''}>${esc(e.title)} — ${fmtDate(e.date)}</option>`).join('')}</select>
+        ${evs.length ? '' : '<small class="hint">لا توجد فعاليات معلنة؛ أعلن عن فعالية من تبويب «الفعاليات» أولاً.</small>'}</div>`;
+    };
     const formHtml = () => `<div class="form-grid">
-        ${F_('org', 'اسم الجهة (يظهر أسفل الشهادة)')}
+        ${eventPicker()}
+        
         ${F_('intro', 'الجملة التمهيدية (قبل الاسم)', 'textarea', 'يمكن تمييز جزء منها بوضعه بين <code>**</code>')}
-        ${F_('body', 'نص الشهادة (بعد الاسم)', 'textarea', 'يمكن استخدام: <code>{name}</code> الاسم، <code>{cohort}</code> الدفعة، <code>{year}</code> السنة، <code>{event}</code> عنوان الفعالية، <code>{date}</code> تاريخ الفعالية، ولتمييز جزء من النص (بخط أثقل ولون بنفسجي) ضعه بين <code>**</code> مثل: <code>**برنامج إشراق الإرشادي**</code>')}
+        ${F_('body', 'نص الشهادة (بعد الاسم)', 'textarea', 'يمكن استخدام: <code>{name}</code> الاسم، <code>{cohort}</code> الدفعة، <code>{year}</code> السنة، <code>{event}</code> عنوان الفعالية، <code>{date}</code> تاريخ الفعالية، ولتمييز جزء من النص (بخط أثقل ولون بنفسجي) ضع قبله وبعده <code>**</code>')}
         ${F_('signerName', 'اسم الموقِّع (الشخص الممثل للجهة)')}${F_('signerTitle', 'صفة الموقِّع')}
         ${F_('signature', 'رابط صورة التوقيع (اختياري)', 'text', 'صورة PNG بخلفية شفافة تعطي أفضل نتيجة')}${F_('stamp', 'رابط صورة الختم (اختياري)')}
         <div class="check-row wide">${chk('showSignature', 'إظهار التوقيع')}${chk('showStamp', 'إظهار الختم')}${chk('showDate', 'إظهار تاريخ الإصدار')}</div>
@@ -626,7 +644,11 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
       box.innerHTML = `<img src="${canvas.toDataURL('image/jpeg', .75)}" alt="معاينة">`;
     }, 350); };
     function redraw() { $('[data-tpl-form]', m.body).innerHTML = formHtml(); $$('[data-kinds] button', m.body).forEach(b => b.classList.toggle('active', b.dataset.k === cur)); preview(); }
-    m.body.addEventListener('input', preview); m.body.addEventListener('change', preview);
+    m.body.addEventListener('input', preview);
+    m.body.addEventListener('change', e => {
+      if (e.target.matches('[data-event-pick]')) { if (cur === 'speaker') ui.spEvent = e.target.value; else ui.event = e.target.value; ui.sel.clear(); rerender(); }
+      preview();
+    });
     m.body.addEventListener('click', e => { const b = e.target.closest('[data-kinds] [data-k]'); if (b) { collect(); cur = b.dataset.k; redraw(); } });
     preview();
   }
@@ -648,7 +670,8 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
         <div class="head-actions"><button class="btn ghost" data-cert-mailer><i class="fa-solid fa-paper-plane"></i> إعداد الإرسال المباشر${mailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>
         <button class="btn ghost" data-cert-tpl><i class="fa-solid fa-pen-ruler"></i> تعديل قوالب الشهادات</button></div></div>
       <div class="sub-tabs">${Object.entries(KINDS).map(([k, v]) => `<button class="${ui.kind === k ? 'active' : ''}" data-cert-kind="${k}"><i class="fa-solid ${v.icon}"></i> ${v.label}</button>`).join('')}</div>
-      <div class="cert-filters">${filter}<input class="search" data-cert-search placeholder="ابحث بالاسم أو البريد..." value="${esc(ui.q)}"></div>
+      <div class="cert-filters">${filter}<label class="cert-date" title="الافتراضي يوم الإصدار">تاريخ الإصدار <input type="date" data-cert-date value="${esc(ui.issueDate)}"><button type="button" class="btn xs ghost" data-cert-date-reset ${ui.issueDate ? '' : 'disabled'}>اليوم</button></label>
+        <input class="search" data-cert-search placeholder="ابحث بالاسم أو البريد..." value="${esc(ui.q)}"></div>
       <div class="cert-bar">
         <label class="check"><input type="checkbox" data-cert-all ${allSel ? 'checked' : ''} ${list.length ? '' : 'disabled'}><span>تحديد الكل (${list.length})</span></label>
         <span class="muted small">${sel.length ? `محدد: <b>${sel.length}</b>` : ''}</span>
@@ -671,6 +694,7 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     const t = e.target;
     const kind = t.closest('[data-cert-kind]'); if (kind) { ui.kind = kind.dataset.certKind; ui.sel.clear(); ui.q = ''; return rerender(); }
     const co = t.closest('[data-cert-cohort]'); if (co) { ui.cohort = co.dataset.certCohort; ui.sel.clear(); return rerender(); }
+    if (t.closest('[data-cert-date-reset]')) { ui.issueDate = ''; return rerender(); }
     if (t.closest('[data-cert-tpl]')) return templateDialog();
     if (t.closest('[data-cert-mailer]')) return mailerDialog();
     if (t.closest('[data-cert-bulk]')) return bulkDialog();
@@ -682,6 +706,7 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
     const t = e.target;
     if (t.matches('[data-cert-event]')) { ui.event = t.value; ui.sel.clear(); return rerender(); }
     if (t.matches('[data-cert-spevent]')) { ui.spEvent = t.value; ui.sel.clear(); return rerender(); }
+    if (t.matches('[data-cert-date]')) { ui.issueDate = t.value || ''; return rerender(); }
     if (t.matches('[data-cert-all]')) { const l = recipients(); if (t.checked) l.forEach(r => ui.sel.add(r.id)); else l.forEach(r => ui.sel.delete(r.id)); return rerender(); }
     if (t.matches('[data-cert-pick]')) { t.checked ? ui.sel.add(t.dataset.certPick) : ui.sel.delete(t.dataset.certPick); return rerender(); }
   });
