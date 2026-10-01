@@ -12,17 +12,33 @@ const Home = (() => {
       ${s.subtitle ? `<p class="sec-sub">${esc(s.subtitle)}</p>` : ''}
     </div>`;
   }
+  // التسجيل في الدفعة المعلنة مفتوح عند وجود announcement/cohort (يغلقه زر «إيقاف التسجيل» في لوحة الإدارة)
+  const regCohort = () => Data.cohort(Store.get('announcement/cohort')) || null;
+  function enrollSection() {
+    const c = regCohort();
+    if (!c) return '';
+    const a = Store.get('announcement') || {};
+    return `<section class="sec enroll-sec" id="sec-enroll"><div class="container enroll-in reveal">
+      <span class="pill st-done"><i class="fa-solid fa-door-open"></i> التسجيل مفتوح</span>
+      <h2>${esc(a.title || `سجّل الآن في ${c.name} ${c.year}`)}</h2>
+      <p class="lead">${nl2br(a.body || `يسرّنا فتح باب التسجيل في ${c.name} من برنامج إشراق، مرشداً كنت أو مستفيداً.`)}</p>
+      <button class="btn primary lg" data-open-registration><i class="fa-solid fa-pen-to-square"></i> ${esc(a.button || 'سجّل في الدفعة')}</button>
+    </div></section>`;
+  }
+  // النموذج الافتراضي: نموذج التسجيل أثناء فتح التسجيل، وإلا نموذج تسجيل الاهتمام
+  const openDefaultForm = () => (regCohort() ? openRegistrationForm() : openInterestForm());
   const faIcon = ic => `<i class="fa-solid ${esc(ic || 'fa-star')}"></i>`;
 
   const R = {
     header(s) {
-      const links = visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
+      const rc = regCohort();
+      const links = (rc ? `<a href="#sec-enroll" data-scroll>التسجيل في ${esc(rc.name)}</a>` : '') + visibleSections().filter(x => x.nav).map(x => `<a href="#sec-${x.id}" data-scroll>${esc(x.nav)}</a>`).join('');
       return `<header class="site-header" id="sec-${esc(s.id)}">
         <div class="container hdr-in">
           <a class="brand" href="#/" data-top><img src="assets/ishraq-mark.png" alt=""><span><b>${esc(s.brand || 'إشراق')}</b><small>${esc(s.tagline || '')}</small></span></a>
           <nav class="main-nav">${links}</nav>
           <div class="hdr-actions">
-            <button class="btn primary sm" data-open-form><i class="fa-solid fa-pen-to-square"></i> سجّل اهتمامك</button>
+            ${rc ? '<button class="btn primary sm" data-open-registration><i class="fa-solid fa-pen-to-square"></i> سجّل الآن</button>' : '<button class="btn primary sm" data-open-form><i class="fa-solid fa-pen-to-square"></i> سجّل اهتمامك</button>'}
             <button class="icon-btn nav-toggle" aria-label="القائمة"><i class="fa-solid fa-bars"></i></button>
           </div>
         </div>
@@ -193,7 +209,8 @@ const Home = (() => {
   }
 
   function render(root, instant = false) {
-    const html = visibleSections().map(s => (R[s.type] ? R[s.type](s) : '')).join('');
+    // قسم التسجيل في الدفعة الجديدة يظهر تحت الواجهة الرئيسية (hero) وهو منفصل عن قسم تسجيل الاهتمام
+    const html = visibleSections().map(s => (R[s.type] ? R[s.type](s) : '') + (s.type === 'hero' ? enrollSection() : '')).join('');
     root.innerHTML = `<div class="home">${News.tickerBar()}${html || emptyState('لا يوجد محتوى للعرض')}</div>`;
     if (instant) $$('.reveal', root).forEach(el => el.classList.add('in'));
     wire(root);
@@ -287,9 +304,10 @@ const Home = (() => {
   }
 
   /* نموذج التسجيل في الدفعة المعلنة (منفصل عن نموذج المهتمين) */
-  function openRegistrationForm() {
+  function openRegistrationForm(opts = {}) {
     const fields = Store.list('regform/fields').sort(byOrder);
-    const ann = Store.get('announcement') || {}, cohort = ann.cohort && Data.cohort(ann.cohort);
+    const cohort = regCohort();
+    if (!cohort && !opts.preview) return toast('التسجيل مغلق حالياً', 'error');
     const body = `<form class="form-grid interest-form" novalidate>
       <p class="form-intro">${cohort ? `سجّل للالتحاق بـ<b>${esc(cohort.name)} ${esc(cohort.year)}</b> من إشراق` : 'سجّل اهتمامك بالالتحاق بالدفعة القادمة من إشراق'}، وسيتواصل معك فريق البرنامج.</p>
       ${fieldInput({ k: '__role', label: 'أرغب بالانضمام بصفتي', type: 'radio', required: true, options: [{ value: 'mentor', label: 'مرشد' }, { value: 'mentee', label: 'مستفيد' }], wide: true }, '')}
@@ -372,7 +390,7 @@ const Home = (() => {
       actions: [
         ...(a.button ? [{
           label: esc(a.button), cls: 'primary', onClick: () => {
-            if (a.link) window.open(a.link, '_blank'); else setTimeout(openRegistrationForm, 220);
+            if (a.link) window.open(a.link, '_blank'); else setTimeout(openDefaultForm, 220);
           }
         }] : []),
         { label: 'إغلاق', cls: 'ghost' }
@@ -463,7 +481,8 @@ const Home = (() => {
   }
 
   document.addEventListener('click', e => {
-    if (e.target.closest('[data-open-form]')) { e.preventDefault(); openInterestForm(); }
+    if (e.target.closest('[data-open-registration]')) { e.preventDefault(); openRegistrationForm(); }
+    else if (e.target.closest('[data-open-form]')) { e.preventDefault(); openDefaultForm(); }
     const l = e.target.closest('[data-login]');
     if (l) openLogin(l.dataset.login);
   });

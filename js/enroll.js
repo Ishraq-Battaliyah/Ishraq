@@ -10,6 +10,16 @@ const Enroll = (() => {
   const roleLabel = r => (r === 'mentor' ? 'مرشد' : 'مستفيد');
   const FIELD_TYPES = [['text', 'نص قصير'], ['textarea', 'نص طويل'], ['tel', 'رقم جوال'], ['email', 'بريد إلكتروني'], ['url', 'رابط (سيرة ذاتية، ملف، مصدر...)'], ['select', 'قائمة اختيار'], ['number', 'رقم'], ['date', 'تاريخ'], ['info', 'فقرة نصية (للقراءة فقط، بلا إدخال)']];
 
+  // نموذج الإعلان المنبثق يحتفظ بقيمه عند إعادة رسم الصفحة؛ بعد الإطلاق أو الإيقاف نحدّثه ليعكس ما حُفظ فعلاً
+  function syncAnnForm() {
+    setTimeout(() => {
+      const f = $('[data-ann-form]'), a = Store.get('announcement') || {};
+      if (!f) return;
+      ['title', 'body', 'button', 'link', 'frequency'].forEach(k => { if (f[k]) f[k].value = a[k] ?? (k === 'frequency' ? 'session' : ''); });
+      if (f.enabled) f.enabled.checked = !!a.enabled;
+    }, 250);
+  }
+
   /* ===== الدفعات المقترحة: الثالثة 2027 ... العاشرة 2034 (السنة = 2024 + رقم الدفعة) ===== */
   const STD = n => ({ id: `c${n}`, num: n, name: `الدفعة ${ORDINALS[n - 1]}`, year: 2024 + n });
   const stdList = () => [3, 4, 5, 6, 7, 8, 9, 10].map(STD);
@@ -23,7 +33,7 @@ const Enroll = (() => {
       <div class="panel-head"><h2><i class="fa-solid fa-bullhorn"></i> إعلان دفعة جديدة</h2>
         <div class="head-actions"><button class="btn ghost" data-enroll-form><i class="fa-solid fa-clipboard-list"></i> نموذج التسجيل</button></div></div>
       ${cur ? `<div class="enroll-current"><span class="pill st-done"><i class="fa-solid fa-door-open"></i> التسجيل مفتوح</span> <b>${esc(cur.name)} ${esc(cur.year)}</b>
-        <button class="btn xs ghost danger" data-enroll-close><i class="fa-solid fa-door-closed"></i> إغلاق التسجيل</button></div>` : '<p class="muted small"><i class="fa-solid fa-circle-info"></i> لا توجد دفعة معلنة حالياً. اختر الدفعة ثم «إطلاق التسجيل».</p>'}
+        <button class="btn xs ghost danger" data-enroll-close><i class="fa-solid fa-circle-stop"></i> إيقاف التسجيل</button></div>` : '<p class="muted small"><i class="fa-solid fa-circle-info"></i> لا توجد دفعة معلنة حالياً. اختر الدفعة ثم «إطلاق التسجيل».</p>'}
       <div class="form-grid enroll-pick">
         <div class="field"><label>الدفعة</label><select data-enroll-pick>
           ${std.map(c => `<option value="${esc(c.id)}" ${pre === c.id ? 'selected' : ''}>${esc(c.name)} ${c.year}${Data.cohort(c.id) ? ' (مضافة)' : ''}</option>`).join('')}
@@ -33,7 +43,7 @@ const Enroll = (() => {
         <div class="field" data-enroll-custom hidden><label>السنة</label><input name="cyear" inputmode="numeric" value="${new Date().getFullYear()}"></div>
         <div class="field enroll-go"><button class="btn primary" data-enroll-launch><i class="fa-solid fa-rocket"></i> إطلاق التسجيل</button></div>
       </div>
-      <p class="muted small">عند إطلاق التسجيل تُضاف الدفعة إلى كل قوائم المنصة (الدفعات، الجلسات والإحصاءات، الشهادات...) ويُربط نموذج التسجيل بها، فيظهر كل مسجَّل في القسم أدناه.</p>
+      <p class="muted small">عند إطلاق التسجيل: تُضاف الدفعة إلى كل قوائم المنصة (الدفعات، الجلسات والإحصاءات، الشهادات...)، ويظهر الإعلان المنبثق لكل زائر مع زر التسجيل، ويظهر قسم «التسجيل في الدفعة الجديدة» تحت الواجهة الرئيسية بزر يفتح النموذج نفسه، ويصل كل مسجَّل إلى القسم أدناه. وأثناء التسجيل يتحول زر «سجّل اهتمامك» في الأعلى إلى «سجّل الآن». أخفِ قسم «تسجيل الاهتمام» من «محتوى الصفحة» إن أردت (نموذجه ونتائجه منفصلان في تبويب «المهتمون»). و«إيقاف التسجيل» يُخفي الإعلان والقسم معاً.</p>
     </div>`;
   }
 
@@ -48,12 +58,18 @@ const Enroll = (() => {
       c = { id: `c${num}`, num, name, year };
     } else c = Data.cohort(sel) || stdList().find(x => x.id === sel) || null;
     if (!c) return toast('اختر الدفعة', 'error');
-    confirmDialog(`إطلاق التسجيل في «${esc(c.name)} ${esc(c.year)}»؟ ${Data.cohort(c.id) ? '' : 'ستُضاف الدفعة إلى قوائم المنصة. '}يُربط نموذج التسجيل بها وتصل إليها تسجيلات الزوار.`, { ok: 'إطلاق التسجيل' }).then(ok => {
+    confirmDialog(`إطلاق التسجيل في «${esc(c.name)} ${esc(c.year)}»؟ ${Data.cohort(c.id) ? '' : 'ستُضاف الدفعة إلى قوائم المنصة. '}يُربط نموذج التسجيل بها وتصل إليها تسجيلات الزوار، ويظهر الإعلان المنبثق وقسم التسجيل في الصفحة الرئيسية بنصوص تلقائية يمكنك تعديلها بعد ذلك.`, { ok: 'إطلاق التسجيل' }).then(ok => {
       if (!ok) return;
       if (!Data.cohort(c.id)) Store.set(`cohorts/${c.id}`, { id: c.id, num: c.num, name: c.name, year: c.year });
-      Store.update('announcement', { cohort: c.id, version: Date.now() });
+      // يظهر الإعلان المنبثق لكل زائر وقسم التسجيل تحت الواجهة الرئيسية؛ تُولَّد نصوص الإعلان تلقائياً ويعدّلها المشرف بعد ذلك من النموذج أدناه
+      const a = Store.get('announcement') || {};
+      Store.update('announcement', {
+        cohort: c.id, enabled: true, version: Date.now(), frequency: a.frequency || 'session',
+        title: `التسجيل مفتوح في ${c.name} ${c.year}`, body: `سجّل الآن مرشداً أو مستفيداً في ${c.name} من برنامج إشراق.`, button: 'سجّل الآن', link: ''
+      });
       Security.log('إطلاق التسجيل في دفعة', c.name);
-      toast(`فُتح التسجيل في ${c.name}`);
+      toast(`فُتح التسجيل في ${c.name}: الإعلان المنبثق وقسم التسجيل ظاهران الآن`);
+      syncAnnForm();
     });
   }
 
@@ -113,7 +129,7 @@ const Enroll = (() => {
     m.el.addEventListener('click', e => {
       const t = e.target;
       if (t.closest('[data-ff-add]')) return editField(null);
-      if (t.closest('[data-ff-preview]')) return Home.openRegistrationForm();
+      if (t.closest('[data-ff-preview]')) return Home.openRegistrationForm({ preview: true });
       const li = t.closest('li[data-id]'); if (!li) return;
       const f = Store.get(`regform/fields/${li.dataset.id}`); if (!f) return;
       if (t.closest('[data-ff-edit]')) return editField(f);
@@ -390,7 +406,7 @@ const Enroll = (() => {
     const t = e.target, h = H;
     if (t.closest('[data-enroll-form]')) return openFormEditor();
     if (t.closest('[data-enroll-launch]')) return launchRegistration(root);
-    if (t.closest('[data-enroll-close]')) return confirmDialog('إغلاق التسجيل؟ يبقى النموذج ظاهراً لكن تُفصل التسجيلات الجديدة عن الدفعة المعلنة.', { danger: true, ok: 'إغلاق التسجيل' }).then(ok => { if (ok) { Store.update('announcement', { cohort: null }); Security.log('إغلاق التسجيل'); } });
+    if (t.closest('[data-enroll-close]')) return confirmDialog('إيقاف التسجيل؟ يختفي الإعلان المنبثق وقسم التسجيل من الصفحة الرئيسية، ويرجع زر التسجيل في الأعلى إلى «سجّل اهتمامك».', { danger: true, ok: 'إيقاف التسجيل' }).then(ok => { if (ok) { Store.update('announcement', { cohort: null, enabled: false }); Security.log('إيقاف التسجيل'); toast('أُوقف التسجيل'); syncAnnForm(); } });
     const cc = t.closest('[data-reg-cohort]'); if (cc) { ui.regCohort = cc.dataset.regCohort; ui.sel.clear(); return rerender(); }
     const acc = t.closest('[data-reg-accept]'); if (acc) return acceptDialog(Store.get(`registrations/${acc.dataset.regAccept}`), h);
     const dec = t.closest('[data-reg-decline]');

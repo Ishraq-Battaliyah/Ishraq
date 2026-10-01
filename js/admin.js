@@ -1374,7 +1374,7 @@ const Admin = (() => {
         e.preventDefault();
         if (!validateForm(f)) return;
         const prev = Store.get('announcement') || {};
-        Store.set('announcement', { ...readForm(f), version: (prev.version || 0) + 1 });
+        Store.set('announcement', { ...readForm(f), ...(prev.cohort ? { cohort: prev.cohort } : {}), version: (prev.version || 0) + 1 });
         toast('تم حفظ الإعلان');
       }
     };

@@ -1261,3 +1261,9 @@ a.tk-item { color: #fff; }
 .ok-note { color: #14663A; } .warn-note { color: #8A5A00; }
 .mail-rcpt { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .my-cert .panel-head { margin-bottom: 4px; }
+
+/* قسم التسجيل في الدفعة الجديدة (تحت الواجهة الرئيسية) */
+.enroll-sec { background: linear-gradient(135deg, var(--p-l), #fff 70%); border-block: 1px solid var(--line); padding-block: 48px; }
+.enroll-in { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 760px; }
+.enroll-in h2 { margin: 0; }
+.enroll-in .lead { margin: 0; }
