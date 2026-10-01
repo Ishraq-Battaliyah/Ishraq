@@ -98,6 +98,9 @@ input, textarea { font-family: var(--f-body); }
 .pill.st-done { background: var(--ok); color: #fff; }
 .pill.st-absent-mentor { background: var(--bad); color: #fff; }
 .pill.st-absent-mentee { background: var(--orange); color: #fff; }
+.pill.st-cancelled { background: #6B6577; color: #fff; }
+.pill.st-proposed { background: #DDF1F7; color: #0E5A73; box-shadow: inset 0 0 0 1.5px #5BB8D4; }
+.pill.st-proposed.mine { background: #0E7FA3; color: #fff; }
 .pill.st-await { background: var(--p-l); color: var(--p-d); box-shadow: inset 0 0 0 1.5px var(--p); }
 .pill.st-await.mine { background: var(--p); color: #fff; }
 .pill.st-overdue { background: #6B7280; color: #fff; }
@@ -1169,3 +1172,19 @@ a.tk-item { color: #fff; }
 .news-more-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .news-more-head h2 { margin: 0; }
 .news-all-wrap { margin-top: 18px; }
+
+/* ===== إلغاء الموعد، الموعد البديل، المواعيد المقترحة، إشعارات البريد ===== */
+.stat-box.st-cancelled { background: #EFEDF2; border-color: #D5D0DC; }
+.stat-box.st-cancelled b { color: #6B6577; }
+.stat-box.st-proposed { background: #E6F5FA; border-color: #BFE2EE; }
+.stat-box.st-proposed b { color: #0E7FA3; }
+.prop-note { display: block; margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: #E6F5FA; color: #0E5A73; font-size: .8rem; }
+.btn.xs.danger-ghost { color: var(--bad); border-color: var(--bad); background: transparent; }
+.wish-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.wish-list li { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line, #e3dff0); border-radius: 12px; background: #fff; }
+.wish-list li.is-declined, .wish-list li.is-withdrawn { opacity: .6; }
+.wish-list li > div { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.wish-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.notify-pref { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.notify-pref h2 { margin: 0; font-size: 1.05rem; }
+.notify-pref p { margin: 4px 0 0; }

@@ -91,15 +91,28 @@ NOTIF = fields({"id": ID, "to": ID, "text": s(2000), "ts": NUM, "read": BOOL, "i
 BOOKING = fields({
     "id": ID, "mentorId": ID, "menteeId": ID, "cohort": ID, "slotId": ID, "session": SESSION,
     "date": DATE, "start": TIME, "end": TIME, "mode": one_of('inperson', 'online', 'both'), "summary": s(1000),
-    "status": one_of('upcoming', 'done', 'absent_mentor', 'absent_mentee'), "ts": NUM,
+    "status": one_of('upcoming', 'done', 'absent_mentor', 'absent_mentee', 'cancelled'), "ts": NUM,
     "doneByMentor": NUM_OR_BOOL, "doneByMentee": NUM_OR_BOOL, "statusTs": NUM, "statusBy": one_of('mentor', 'mentee', 'both', 'admin'),
     "changedBy": one_of('mentor', 'mentee', 'admin'), "extra": BOOL,
+    # إلغاء الموعد بعد الحجز، وموعد بديل مقترح بانتظار موافقة الطرف الآخر، والجلسة الناتجة عن موعد مقترح من المستفيد
+    "cancelledBy": one_of('mentor', 'mentee'), "cancelTs": NUM, "cancelReason": s(300), "wishId": ID,
+    "proposal": fields({"date": DATE, "start": TIME, "end": TIME, "slotId": ID, "by": one_of('mentor', 'mentee'), "ts": NUM},
+                       required=('date', 'start', 'end', 'by')),
     "history": {"$i": fields({"date": DATE, "start": TIME, "end": TIME, "by": one_of('mentor', 'mentee', 'admin'), "ts": NUM})},
 }, required=('mentorId', 'menteeId', 'status'))
 
 SLOT = fields({"id": ID, "mentorId": ID, "session": SESSION, "date": DATE, "start": TIME, "end": TIME,
                "mode": one_of('inperson', 'online', 'both'), "summary": s(1000), "ts": NUM, "extra": BOOL},
               required=('mentorId', 'date'))
+
+# مواعيد يقترحها المستفيد لكل جلسة (أساسية أو إضافية) ويعتمد المرشد أحدها فتتحول إلى جلسة مجدولة
+WISH = fields({"id": ID, "menteeId": ID, "mentorId": ID, "session": SESSION, "extra": BOOL, "date": DATE, "start": TIME, "end": TIME,
+               "mode": one_of('inperson', 'online', 'both'), "note": s(500),
+               "status": one_of('open', 'accepted', 'declined', 'withdrawn'), "ts": NUM, "decidedAt": NUM, "bookingId": ID},
+              required=('menteeId', 'mentorId', 'date', 'start', 'end', 'status'))
+
+# طابور رسائل البريد: يملؤه التطبيق ويرسله سكربت tools/notify-mailer.gs ثم يحذفه
+MAILQ = fields({"id": ID, "to": ID, "text": s(500), "ts": NUM}, required=('to', 'text'))
 
 REVIEW = fields({
     "id": ID, "type": one_of('session', 'final', 'program'), "from": one_of('mentor', 'mentee'),
@@ -139,7 +152,7 @@ CERTS = {".read": can('certificates'), **w(can('certificates')),
          "mailer": fields({"url": s(400), "secret": s(120), "name": s(120)}),
          "issued": {"$k": fields({"ts": NUM, "by": s(120), "via": s(20)})}}
 
-CONTACT = fields({k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram']})
+CONTACT = fields({**{k: s(300) for k in ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram']}, "emailNotify": BOOL})
 
 # ===== قواعد كتابة العضو =====
 d = lambda k: f"data.child('{k}').val()"
@@ -151,14 +164,32 @@ BOOKING_CREATE = (f"!data.exists() && {n('menteeId')} === {ME} && {n('status')} 
                   " && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists()"
                   f" && (({n('mentorId')} === {PARTNER}.val() && newData.child('session').exists() && !newData.child('extra').exists())"
                   f" || ({n('extra')} === true && {EXTRA_LINK_NEW}))")
+# موعد بديل: يقترحه أي طرف (دون تغيير الموعد الحالي)، ولا يتغير الموعد إلا بموافقة الطرف الآخر على الاقتراح نفسه
+WISH_REF = f"{R}wishes/' + {n('wishId')})"
+BOOKING_FROM_WISH = (f"!data.exists() && {n('mentorId')} === {ME} && {n('status')} === 'upcoming' && newData.child('wishId').exists()"
+                     " && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists()"
+                     f" && {WISH_REF}.child('mentorId').val() === {ME} && {WISH_REF}.child('menteeId').val() === {n('menteeId')} && {WISH_REF}.child('status').val() === 'open'"
+                     f" && {n('date')} === {WISH_REF}.child('date').val() && {n('start')} === {WISH_REF}.child('start').val() && {n('end')} === {WISH_REF}.child('end').val()"
+                     f" && (({n('extra')} === true && {EXTRA_ON} && {WISH_REF}.child('extra').val() === true && $bid === 'xw_' + {n('wishId')})"
+                     f" || (!newData.child('extra').exists() && newData.child('session').exists() && {n('session')} === {WISH_REF}.child('session').val()))")
+TIME_SAME = f"{n('date')} === {d('date')} && {n('start')} === {d('start')} && {n('end')} === {d('end')} && {n('slotId')} === {d('slotId')}"
+MY_SIDE = f"({d('mentorId')} === {ME} ? 'mentor' : 'mentee')"
+OTHER_SIDE = f"({d('mentorId')} === {ME} ? 'mentee' : 'mentor')"
+PROP = "data.child('proposal/%s').val()"
+TIME_ACCEPT = (f"data.child('proposal').exists() && data.child('proposal/by').val() === {OTHER_SIDE} && !newData.child('proposal').exists()"
+               f" && {n('date')} === {PROP % 'date'} && {n('start')} === {PROP % 'start'} && {n('end')} === {PROP % 'end'} && {n('slotId')} === {PROP % 'slotId'}")
+TIME_OK = f"(({TIME_SAME} && (!newData.child('proposal').exists() || newData.child('proposal/by').val() === {MY_SIDE})) || ({TIME_ACCEPT}))"
+NOT_DONE = f"!data.child('doneByMentor').exists() && !data.child('doneByMentee').exists()"
 BOOKING_UPDATE = (f"data.exists() && newData.exists() && {d('status')} === 'upcoming' && ({d('mentorId')} === {ME} || {d('menteeId')} === {ME})"
                   f" && {n('mentorId')} === {d('mentorId')} && {n('menteeId')} === {d('menteeId')} && {n('session')} === {d('session')}"
+                  f" && {TIME_OK}"
                   # كل طرف يؤكد عن نفسه فقط
                   f" && ({n('doneByMentor')} === {d('doneByMentor')} || {d('mentorId')} === {ME})"
                   f" && ({n('doneByMentee')} === {d('doneByMentee')} || {d('menteeId')} === {ME})"
-                  # «منجزة» بتأكيد الطرفين فقط، وكل طرف يسجّل غياب الطرف الآخر فقط
+                  # «منجزة» بتأكيد الطرفين فقط، وكل طرف يسجّل غياب الطرف الآخر فقط، ويلغي أي طرف الموعد ما لم يؤكد أحد إنجازه
                   f" && ({n('status')} === 'upcoming' || ({n('status')} === 'done' && newData.child('doneByMentor').exists() && newData.child('doneByMentee').exists())"
-                  f" || ({n('status')} === 'absent_mentee' && {d('mentorId')} === {ME}) || ({n('status')} === 'absent_mentor' && {d('menteeId')} === {ME}))")
+                  f" || ({n('status')} === 'absent_mentee' && {d('mentorId')} === {ME}) || ({n('status')} === 'absent_mentor' && {d('menteeId')} === {ME})"
+                  f" || ({n('status')} === 'cancelled' && {NOT_DONE} && {n('cancelledBy')} === {MY_SIDE}))")
 # تقييم جلسة إضافية: بعد إنجاز الجلسة، وبين طرفيها فقط (المرشد والمستفيد المحجوز له)
 _BK = f"{R}bookings/' + {n('bookingId')})"
 EXTRA_REVIEW_OK = (f"{n('extraSession')} === true && {_BK}.child('extra').val() === true && {_BK}.child('status').val() === 'done'"
@@ -168,6 +199,7 @@ REVIEW_CREATE = (f"!data.exists() && {n('authorId')} === {ME}"
                  f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || ({n('targetId')} === {PARTNER}.val() && !newData.child('extraSession').exists()) || ({EXTRA_REVIEW_OK}))"
                  f" && ({n('status')} === 'pending' || ({n('type')} === 'program' && {n('status')} === 'approved' && {n('featured')} === false))")
 
+SLOT_MENTOR = f"{R}slots/' + $sid + '/mentorId').val()"
 OWN_TICKET = f"{R}tickets/' + $tid + '/memberId').val() === {ME}"
 
 rules = {
@@ -220,8 +252,23 @@ rules = {
     "bookings": {
         ".read": any_of(can('sessions', 'cohorts', 'reviews'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
         **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
-        "$bid": {**w(f"{IS_MEMBER} && (({BOOKING_CREATE}) || ({BOOKING_UPDATE}))"), **BOOKING},
+        "$bid": {**w(f"{IS_MEMBER} && (({BOOKING_CREATE}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
     },
+    "wishes": {
+        ".read": any_of(can('sessions'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
+        **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
+        "$wid": {**w(f"{IS_MEMBER} && ((!data.exists() && {n('menteeId')} === {ME} && {n('status')} === 'open'"
+                     f" && (({n('mentorId')} === {PARTNER}.val() && newData.child('session').exists() && !newData.child('extra').exists())"
+                     f" || ({n('extra')} === true && !newData.child('session').exists() && {EXTRA_ON} && {MY_ROLE} === 'mentee' && {REL_TO(n('mentorId'))})))"
+                     f" || (data.exists() && {d('status')} === 'open' && {n('menteeId')} === {d('menteeId')} && {n('mentorId')} === {d('mentorId')}"
+                     f" && {n('date')} === {d('date')} && {n('start')} === {d('start')} && {n('end')} === {d('end')}"
+                     f" && (({d('menteeId')} === {ME} && {n('status')} === 'withdrawn') || ({d('mentorId')} === {ME} && ({n('status')} === 'accepted' || {n('status')} === 'declined')))))"), **WISH},
+    },
+    # إشعارات البريد: تفعّلها الإدارة، والعضو يعطّلها لنفسه من contacts/{id}/emailNotify
+    "notifyMail": {".read": True, **w(can('messages')), "enabled": BOOL, "ts": NUM, "by": s(120)},
+    # طابور البريد: لا يقرؤه أحد من الأعضاء؛ يضيف إليه العضو لطرفه المرتبط فقط، ويقرؤه ويحذفه سكربت الإرسال بحساب مالك المشروع
+    "mailQueue": {".read": IS_FULL, **w(IS_ADMIN),
+                  "$qid": {**w(f"{IS_MEMBER} && !data.exists() && ({PARTNER}.val() === {n('to')} || {REL_TO(n('to'))})"), **MAILQ}},
     "reviews": {
         ".read": any_of(can('reviews'), f"({IS_MEMBER} && {query('authorId', ME)})"),
         **w(can('reviews')), ".indexOn": ["authorId"],
@@ -263,7 +310,8 @@ rules = {
     "extraConfig": {".read": True, **w(can('sessions')), "enabled": BOOL, "ts": NUM, "by": s(120)},
     # موعد إضافي محجوز (يُكتب عند الحجز فيراه بقية المستفيدين محجوزاً)
     "extraTaken": {".read": f"{IS_MEMBER} || {IS_ADMIN}", **w(can('sessions')),
-                   "$sid": {".write": f"{IS_MEMBER} && !data.exists() && newData.val() === true && {EXTRA_ON} && {R}bookings/x_' + $sid + '/menteeId').val() === {ME}",
+                   "$sid": {".write": (f"{IS_MEMBER} && !data.exists() && newData.val() === true && {EXTRA_ON} && ({R}bookings/x_' + $sid + '/menteeId').val() === {ME}"
+                                 f" || {SLOT_MENTOR} === {ME} || {REL_TO(SLOT_MENTOR)})"),
                             ".validate": "newData.val() === true"}},
     # علاقة مستفيد بمرشد (تسمح بتبادل الإشعارات بينهما بعد حجز جلسة إضافية)
     "extraPairs": {".read": can('sessions'), **w(can('sessions')),
