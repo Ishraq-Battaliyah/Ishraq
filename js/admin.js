@@ -613,13 +613,16 @@ const Admin = (() => {
       const start = L ? Bands.windowStart(L.ts, n) : null;
       const sts = L ? mentors.map(m => ({ m, st: Bands.status(m, n, now) })) : [];
       const cols = Bands.LEVELS.map(lv => {
-        const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k);
+        // يُصنَّف المرشد في عمود أسبوع إضافته لأول موعد؛ ومن لم يضف يظهر فقط بعد انقضاء الأسبوعين الأولين (من الأسبوع الثالث فما بعد) في عمود أسبوعه الحالي
+        const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k && (x.st.added || x.st.week >= 3));
         return `<div class="band ${lv.cls}"><header><i class="fa-solid ${lv.icon}"></i><b>${lv.name}</b><small>${lv.period}</small><em>${inBand.length}</em></header>
           <ul>${inBand.map(({ m, st }) => `<li class="${st.added ? 'added' : 'waiting'}" data-band-mentor="${esc(m.id)}" data-session="${esc(n)}" title="${st.added ? 'أضاف الموعد' : 'لم يُضف الموعد بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
       }).join('');
       const pending = sts.filter(x => x.st.notStarted).length;
+      const early = sts.filter(x => !x.st.added && !x.st.notStarted && x.st.week < 3);   // لم يضيفوا بعد وما زالوا في الأسبوعين الأولين
       return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4}${start ? ` · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}` : ''}</small>
-        ${start && now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}</h3>
+        ${start && now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}
+        ${early.length ? `<span class="chip" title="${esc(early.map(x => x.m.name).join('، '))}"><i class="fa-regular fa-hourglass-half"></i> ${early.length} لم يضيفوا بعد (ما زالوا ضمن الأسبوعين الأولين)</span>` : ''}</h3>
         <div class="bands">${cols}</div></div>`;
     }).join('');
     return `<div class="panel bands-panel">${head}${launchBox}
