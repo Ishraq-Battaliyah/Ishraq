@@ -14,7 +14,7 @@
 })();
 
 const Demo = (() => {
-  const IDS = { cohort: 'demo-c', mentor: 'demo-m', mentee: 'demo-b' };
+  const IDS = { cohort: 'demo-c', mentor: 'demo-m', mentee: 'demo-b', mentee2: 'demo-b2' };   // المرشد التجريبي مرتبط بمستفيدين اثنين
   const KEY = 'ishraq-demo-db-v1';
   const iso = n => { const d = new Date(Date.now() + n * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -24,10 +24,12 @@ const Demo = (() => {
     Store.set(`cohorts/${c}`, { id: c, num: 99, name: 'دفعة المعاينة', year: new Date().getFullYear() });
     Store.set(`members/${IDS.mentor}`, { id: IDS.mentor, role: 'mentor', code: 'M9901', cohort: c, seq: 1, name: 'مرشد تجريبي', tagline: 'حساب افتراضي للمعاينة' });
     Store.set(`members/${IDS.mentee}`, { id: IDS.mentee, role: 'mentee', code: 'B9901', cohort: c, seq: 1, name: 'مستفيد تجريبي', tagline: 'حساب افتراضي للمعاينة' });
+    Store.set(`members/${IDS.mentee2}`, { id: IDS.mentee2, role: 'mentee', code: 'B9902', cohort: c, seq: 2, name: 'مستفيد تجريبي ٢', tagline: 'حساب افتراضي للمعاينة' });
+    Store.set(`contacts/${IDS.mentee2}`, { whatsapp: '0500000003', email: 'mentee2@example.com' });
     Store.set(`contacts/${IDS.mentor}`, { whatsapp: '0500000001', email: 'mentor@example.com' });
     Store.set(`contacts/${IDS.mentee}`, { whatsapp: '0500000002', email: 'mentee@example.com' });
-    Store.set(`pairs/${IDS.mentor}`, IDS.mentee); Store.set(`pairs/${IDS.mentee}`, IDS.mentor);
-    Store.set(`network/${c}`, { [IDS.mentor]: IDS.mentee });
+    Store.set(`pairs/${IDS.mentor}`, { [IDS.mentee]: true, [IDS.mentee2]: true }); Store.set(`pairs/${IDS.mentee}`, IDS.mentor); Store.set(`pairs/${IDS.mentee2}`, IDS.mentor);
+    Store.set(`network/${c}`, { [IDS.mentor]: { [IDS.mentee]: true, [IDS.mentee2]: true } });
     Store.set(`launches/${c}`, { ts: now - 2 * 864e5 });
     Store.set('extraConfig', { enabled: true, ts: now, by: 'معاينة' });
     Store.set('notifyMail', { enabled: true, ts: now, by: 'معاينة' });

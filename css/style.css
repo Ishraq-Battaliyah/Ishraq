@@ -1267,3 +1267,9 @@ a.tk-item { color: #fff; }
 .enroll-in { text-align: center; display: grid; gap: 14px; justify-items: center; max-width: 760px; }
 .enroll-in h2 { margin: 0; }
 .enroll-in .lead { margin: 0; }
+
+/* مرشد بعدة مستفيدين */
+.others-stack { display: grid; gap: 14px; }
+.net-mentees { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.net-chip { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 2px; }
+.net-chip .icon-btn { width: 24px; height: 24px; }
