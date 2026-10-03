@@ -369,26 +369,37 @@ const Data = {
     if (Object.keys(pub).length) Store.update(`members/${id}`, pub);
     if (Object.keys(priv).length) Store.update(`contacts/${id}`, priv);
   },
-  // الشبكة يقرؤها المشرفون فقط؛ العضو يعرف طرفه من pairs/{id}
-  menteeOf(mentorId) {
+  // الشبكة يقرؤها المشرفون فقط؛ العضو يعرف طرفه من pairs/{id}.
+  // قيمة المرشد في الشبكة وفي pairs نص (مستفيد واحد، الصيغة القديمة) أو كائن {رقم المستفيد: true} (عدة مستفيدين)؛ والمستفيد له مرشد واحد دائماً.
+  netIds: v => (!v ? [] : typeof v === 'string' ? [v] : Object.keys(v).filter(k => v[k])),
+  menteesOf(mentorId) {
     const m = Data.member(mentorId);
-    if (!m) return null;
+    if (!m) return [];
     const net = Store.get(`network/${m.cohort}`);
-    return Data.member(net ? net[mentorId] : Store.get(`pairs/${mentorId}`));
+    return Data.netIds(net ? net[mentorId] : Store.get(`pairs/${mentorId}`)).map(id => Data.member(id)).filter(Boolean);
   },
+  menteeOf(mentorId) { return Data.menteesOf(mentorId)[0] || null; },   // أول مستفيد (للتوافق مع ما يفترض مستفيداً واحداً)
   mentorOf(menteeId) {
     const m = Data.member(menteeId);
     if (!m) return null;
     const net = Store.get(`network/${m.cohort}`);
-    return Data.member(net ? Object.keys(net).find(k => net[k] === menteeId) : Store.get(`pairs/${menteeId}`));
+    return Data.member(net ? Object.keys(net).find(k => Data.netIds(net[k]).includes(menteeId)) : Store.get(`pairs/${menteeId}`));
   },
-  // مزامنة pairs مع الشبكة لكل أعضاء الدفعة
+  // مزامنة pairs مع الشبكة لكل أعضاء الدفعة: المستفيد ← رقم مرشده، والمرشد ← كائن مستفيديه
   syncPairs(cohortId) {
     const net = Store.get(`network/${cohortId}`) || {};
-    const upd = {};
+    const upd = {}, mentorOfMentee = {};
+    Object.keys(net).forEach(k => Data.netIds(net[k]).forEach(id => { mentorOfMentee[id] = k; }));
     Data.members(null, cohortId).forEach(m => {
-      const partner = m.role === 'mentor' ? (net[m.id] || null) : (Object.keys(net).find(k => net[k] === m.id) || null);
-      if ((Store.get(`pairs/${m.id}`) || null) !== partner) upd[m.id] = partner;
+      const cur = Store.get(`pairs/${m.id}`) ?? null;
+      if (m.role === 'mentor') {
+        const ids = Data.netIds(net[m.id]).sort();
+        const same = ids.length ? (cur && typeof cur === 'object' && JSON.stringify(Data.netIds(cur).sort()) === JSON.stringify(ids)) : cur === null;
+        if (!same) upd[m.id] = ids.length ? Object.fromEntries(ids.map(i => [i, true])) : null;
+      } else {
+        const partner = mentorOfMentee[m.id] || null;
+        if (cur !== partner) upd[m.id] = partner;
+      }
     });
     if (Object.keys(upd).length) Store.update('pairs', upd);
   },
@@ -501,10 +512,17 @@ const Data = {
     const m = Data.member(id);
     if (!m) return;
     const net = Store.get(`network/${m.cohort}`) || {};
-    if (m.role === 'mentor') Store.remove(`network/${m.cohort}/${id}`);
-    else Object.keys(net).forEach(k => net[k] === id && Store.remove(`network/${m.cohort}/${k}`));
-    const partner = Store.get(`pairs/${id}`);
-    if (partner) Store.remove(`pairs/${partner}`);
+    if (m.role === 'mentor') {
+      Data.netIds(net[id]).forEach(mid => { if (Store.get(`pairs/${mid}`) != null) Store.remove(`pairs/${mid}`); });
+      Store.remove(`network/${m.cohort}/${id}`);
+    } else {
+      Object.keys(net).forEach(k => {
+        if (!Data.netIds(net[k]).includes(id)) return;
+        if (typeof net[k] === 'string') Store.remove(`network/${m.cohort}/${k}`); else Store.remove(`network/${m.cohort}/${k}/${id}`);
+        if (Store.get(`pairs/${k}/${id}`) != null) Store.remove(`pairs/${k}/${id}`);
+        else if (Store.get(`pairs/${k}`) === id) Store.remove(`pairs/${k}`);
+      });
+    }
     if (Store.get(`pairs/${id}`) != null) Store.remove(`pairs/${id}`);
     if (Store.get(`approvedReviews/${id}`) != null) Store.remove(`approvedReviews/${id}`);
     Security.deleteMemberAccount(m);

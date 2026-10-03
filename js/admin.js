@@ -502,24 +502,30 @@ const Admin = (() => {
     }
   }
 
+  // الشبكة: لكل مرشد مستفيد واحد أو أكثر، ولكل مستفيد مرشد واحد فقط
+  const netFromStore = c => Object.fromEntries(Object.entries(Store.get(`network/${c}`) || {}).map(([k, v]) => [k, Data.netIds(v)]).filter(([, v]) => v.length));
+  const netNorm = draft => JSON.stringify(Object.entries(draft).filter(([, v]) => v.length).map(([k, v]) => [k, [...v].sort()]).sort());
   function networkBlock(c) {
     const mentors = Data.members('mentor', c.id), mentees = Data.members('mentee', c.id);
-    if (ui.netCohort !== c.id) { ui.netCohort = c.id; ui.netDraft = { ...(Store.get(`network/${c.id}`) || {}) }; }
+    if (ui.netCohort !== c.id) { ui.netCohort = c.id; ui.netDraft = netFromStore(c.id); }
     const draft = ui.netDraft;
-    const used = new Set(Object.values(draft).filter(Boolean));
-    const saved = Store.get(`network/${c.id}`) || {};
-    const dirty = JSON.stringify(Object.entries(draft).filter(e => e[1]).sort()) !== JSON.stringify(Object.entries(saved).filter(e => e[1]).sort());
+    const used = new Set(Object.values(draft).flat());
+    const dirty = netNorm(draft) !== netNorm(netFromStore(c.id));
+    const nameOf = id => Data.member(id)?.name || 'محذوف';
     return `<div class="network-block">
       <div class="block-head"><h3>الشبكة: ربط المرشدين بالمستفيدين</h3>
       <div class="head-actions">${exportBar(`network:${c.id}`)}<button class="btn primary" data-save-net ${dirty ? '' : 'disabled'}><i class="fa-solid fa-floppy-disk"></i> حفظ الشبكة</button></div></div>
+      <p class="muted small">يمكن ربط المرشد الواحد بأكثر من مستفيد (أضف مستفيداً آخر من القائمة تحت أسماء مستفيديه)، أما المستفيد فله مرشد واحد فقط.</p>
       ${dirty ? '<p class="warn-note"><i class="fa-solid fa-triangle-exclamation"></i> توجد تعديلات غير محفوظة</p>' : ''}
-      ${!mentors.length ? emptyState('أضف المرشدين أولاً', 'fa-user-tie') : `<div class="net-head"><span>المرشد</span><span></span><span>المستفيد</span></div>
+      ${!mentors.length ? emptyState('أضف المرشدين أولاً', 'fa-user-tie') : `<div class="net-head"><span>المرشد</span><span></span><span>المستفيدون</span></div>
       <ul class="net-list">${mentors.map(m => {
-        const cur = draft[m.id] || '';
-        const opts = mentees.filter(x => !used.has(x.id) || x.id === cur);
+        const ids = draft[m.id] || [];
+        const opts = mentees.filter(x => !used.has(x.id));
         return `<li>${miniMember(m)}<i class="fa-solid fa-xmark net-x"></i>
-          <div class="net-pick"><select data-net="${esc(m.id)}"><option value="">— اختر المستفيد —</option>${opts.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)} (${x.code})</option>`).join('')}</select>
-          ${cur ? `<button class="icon-btn danger" data-unassign="${esc(m.id)}" title="إلغاء التعيين"><i class="fa-solid fa-link-slash"></i></button>` : ''}</div></li>`;
+          <div class="net-pick">
+            ${ids.length ? `<div class="net-mentees">${ids.map(id => `<span class="chip net-chip">${esc(nameOf(id))}<button class="icon-btn danger" data-unassign="${esc(m.id)}|${esc(id)}" title="إلغاء التعيين"><i class="fa-solid fa-link-slash"></i></button></span>`).join('')}</div>` : ''}
+            <select data-net="${esc(m.id)}"><option value="">${ids.length ? '＋ إضافة مستفيد آخر' : '— اختر المستفيد —'}</option>${opts.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (${x.code})</option>`).join('')}</select>
+          </div></li>`;
       }).join('')}</ul>
       <p class="muted small">المستفيدون غير المعيّنين: ${mentees.filter(x => !used.has(x.id)).map(x => esc(x.name)).join('، ') || 'لا يوجد'}</p>`}
     </div>`;
@@ -785,19 +791,20 @@ const Admin = (() => {
     </div>`;
   }
 
+  const menteesHtml = m => { const xs = Data.menteesOf(m.id); return xs.length ? xs.map(x => miniMember(x)).join(' ') : miniMember(null); };
   function mentorSessions(m) {
-    const mentee = Data.menteeOf(m.id);
+    const multi = Data.menteesOf(m.id).length > 1;
     const slots = Data.slots(m.id);
     const bks = Data.bookings({ mentorId: m.id });
     return `<div class="panel" id="mentor-sessions">
-      <div class="panel-head"><h2>${miniMember(m)} <i class="fa-solid fa-arrows-left-right muted"></i> ${miniMember(mentee)}</h2>${exportBar(`mentor-sessions:${m.id}`)}</div>
+      <div class="panel-head"><h2>${miniMember(m)} <i class="fa-solid fa-arrows-left-right muted"></i> ${menteesHtml(m)}</h2>${exportBar(`mentor-sessions:${m.id}`)}</div>
       <h3 class="sub"><i class="fa-regular fa-calendar"></i> المواعيد المعلنة من المرشد</h3>
       ${slots.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الجلسة</th><th>التاريخ</th><th>الوقت</th><th>النوع</th><th>المحتوى</th></tr></thead><tbody>
         ${slots.map(s => `<tr><td data-l="الجلسة">${sessionName(s.session)}</td><td data-l="التاريخ">${fmtDate(s.date)}</td><td data-l="الوقت">${tRange(s.start, s.end)}</td><td data-l="النوع">${MODES[s.mode] || ''}</td><td data-l="المحتوى">${esc(s.summary || '—')}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يعلن المرشد أي مواعيد بعد.</p>'}
       <h3 class="sub"><i class="fa-solid fa-list-check"></i> تحديثات الجلسات</h3>
       ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th></tr></thead><tbody>
-        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
+        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}${multi ? `<br><small class="muted">${esc(Data.member(b.menteeId)?.name || '')}</small>` : ''}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يتم حجز أي جلسة بعد.</p>'}
       ${statsBoxes(Data.stats(bks), true)}
     </div>`;
@@ -813,9 +820,9 @@ const Admin = (() => {
       <p class="muted small">تقييمات المرشد والمستفيد عن بعضهما تصل هنا أولاً، ولا تظهر للطرف الآخر إلا بعد اعتمادها.</p>
       ${cohortFilter('revCohort')}
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
-        const mentee = Data.menteeOf(m.id);
+        const mentees = Data.menteesOf(m.id);
         const pend = Data.reviews().filter(r => r.mentorId === m.id && r.status === 'pending' && r.type !== 'program').length;
-        return `<button class="person ${ui.revMentor === m.id ? 'active' : ''}" data-rev-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small><i class="fa-solid fa-user-graduate"></i> ${esc(mentee?.name || 'غير معيّن')}</small>${pend ? `<em class="badge">${pend}</em>` : ''}</button>`;
+        return `<button class="person ${ui.revMentor === m.id ? 'active' : ''}" data-rev-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small><i class="fa-solid fa-user-graduate"></i> ${esc(mentees.map(x => x.name).join('، ') || 'غير معيّن')}</small>${pend ? `<em class="badge">${pend}</em>` : ''}</button>`;
       }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
     </div>
     ${sel ? pairReviews(sel) : ''}
@@ -832,11 +839,11 @@ const Admin = (() => {
   };
 
   function pairReviews(m) {
-    const mentee = Data.menteeOf(m.id);
+    const mentees = Data.menteesOf(m.id);
     const all = Data.reviews().filter(r => r.mentorId === m.id && r.type !== 'program');
     const block = (from, title) => {
       const list = all.filter(r => r.from === from);
-      const authorName = from === 'mentee' ? (mentee?.name || '') : m.name;
+      const authorName = from === 'mentee' ? (mentees.map(x => x.name).join('، ')) : m.name;
       return `<div class="review-box"><h3>${title}</h3>${list.length ? `<ul class="review-list">${list.map(r => `<li class="review">
         <header><b>تقييم ${from === 'mentee' ? 'المستفيد' : 'المرشد'} «${esc(Data.member(r.authorId)?.name || authorName)}» ${r.type === 'final' ? 'الختامي' : 'حول ' + (r.extraSession ? 'جلسة إضافية' : sessionName(r.session))}</b>
         ${r.extraSession ? '<span class="chip extra-chip"><i class="fa-solid fa-hand-holding-heart"></i> جلسة إضافية</span>' : ''}<span class="pill ${r.status === 'approved' ? 'st-done' : r.status === 'rejected' ? 'st-absent-mentor' : 'st-upcoming'}">${r.status === 'approved' ? 'معتمد' : r.status === 'rejected' ? 'غير معتمد' : 'بانتظار الاعتماد'}</span></header>
@@ -845,7 +852,7 @@ const Admin = (() => {
           <button class="btn xs success" data-approve="${esc(r.id)}" ${r.status === 'approved' ? 'disabled' : ''}><i class="fa-solid fa-check"></i> اعتماد وعرض للطرف الآخر</button>
           <button class="btn xs ghost danger" data-reject="${esc(r.id)}" ${r.status === 'rejected' ? 'disabled' : ''}><i class="fa-solid fa-ban"></i> عدم العرض</button></span></footer></li>`).join('')}</ul>` : '<p class="muted small">لا توجد تقييمات بعد.</p>'}</div>`;
     };
-    return `<div class="panel"><div class="panel-head"><h2>${miniMember(m)} <i class="fa-solid fa-arrows-left-right muted"></i> ${miniMember(mentee)}</h2></div>
+    return `<div class="panel"><div class="panel-head"><h2>${miniMember(m)} <i class="fa-solid fa-arrows-left-right muted"></i> ${menteesHtml(m)}</h2></div>
       <div class="review-grid">${block('mentee', `تقييمات المستفيد للمرشد`)}${block('mentor', `تقييمات المرشد للمستفيد`)}</div></div>`;
   }
 
@@ -1163,7 +1170,7 @@ const Admin = (() => {
     switch (kind) {
       case 'content': return { title: 'أقسام الصفحة الرئيسية', headers: ['الترتيب', 'النوع', 'العنوان', 'الحالة', 'المحتوى'], rows: Store.list('content/sections').sort(byOrder).map((s, i) => [i + 1, SECTION_TYPES[s.type]?.label, s.title || s.brand || '', s.visible === false ? 'مخفي' : 'ظاهر', [s.body, ...(s.items || []).map(it => [it.title, it.text, it.value, it.label, it.people].filter(Boolean).join(' - '))].filter(Boolean).join(' | ')]) };
       case 'members': return { title: `${a && Data.cohort(a)?.name} — ${b === 'mentor' ? 'المرشدون' : 'المستفيدون'}`, headers: memberHead, rows: Data.members(b, a).map(memberRow) };
-      case 'network': return { title: `الشبكة — ${Data.cohort(a)?.name}`, headers: ['رقم المرشد', 'المرشد', 'رقم المستفيد', 'المستفيد'], rows: Data.members('mentor', a).map(m => { const x = Data.menteeOf(m.id); return [m.code, m.name, x?.code || '', x?.name || '']; }) };
+      case 'network': return { title: `الشبكة — ${Data.cohort(a)?.name}`, headers: ['رقم المرشد', 'المرشد', 'رقم المستفيد', 'المستفيد'], rows: Data.members('mentor', a).flatMap(m => { const xs = Data.menteesOf(m.id); return xs.length ? xs.map(x => [m.code, m.name, x.code, x.name]) : [[m.code, m.name, '', '']]; }) };
       case 'sessions': {
         const ids = new Set(Data.members('mentor').filter(m => inCohort('sessCohort', m)).map(m => m.id));
         return { title: 'الجلسات الإرشادية', headers: bookingHead, rows: Data.bookings().filter(x => ids.has(x.mentorId)).map(bookingRow) };
@@ -1275,15 +1282,16 @@ const Admin = (() => {
       const da = t.closest('[data-del-admin]');
       if (da) return confirmDialog('إزالة هذا المشرف؟ لن يستطيع الدخول إلى لوحة الإدارة بعد الآن.', { danger: true, ok: 'إزالة' }).then(ok => ok && Security.removeAdmin(da.dataset.delAdmin));
       const tpl = t.closest('[data-csv-template]'); if (tpl) return csvTemplate(tpl.dataset.csvTemplate);
-      const un = t.closest('[data-unassign]'); if (un) { delete ui.netDraft[un.dataset.unassign]; return render(root); }
+      const un = t.closest('[data-unassign]');
+      if (un) { const [mid, bid] = un.dataset.unassign.split('|'); ui.netDraft[mid] = (ui.netDraft[mid] || []).filter(x => x !== bid); return render(root); }
       if (t.closest('[data-save-net]')) {
-        const clean = {}; Object.entries(ui.netDraft).forEach(([k, v]) => { if (v) clean[k] = v; });
-        const before = Store.get(`network/${ui.cohort}`) || {};
+        const clean = {}; Object.entries(ui.netDraft).forEach(([k, v]) => { if (v.length) clean[k] = Object.fromEntries(v.map(i => [i, true])); });
+        const before = Object.fromEntries(Object.entries(Store.get(`network/${ui.cohort}`) || {}).map(([k, v]) => [k, Data.netIds(v)]));
         Store.set(`network/${ui.cohort}`, clean);
         Data.syncPairs(ui.cohort);
-        Object.entries(clean).forEach(([mid, bid]) => {
-          if (before[mid] !== bid) { Data.notify(mid, `تم تعيين المستفيد ${Data.member(bid)?.name} لك`, { icon: 'fa-handshake' }); Data.notify(bid, `تم تعيين المرشد ${Data.member(mid)?.name} لك`, { icon: 'fa-handshake' }); }
-        });
+        Object.entries(clean).forEach(([mid, map]) => Object.keys(map).forEach(bid => {
+          if (!(before[mid] || []).includes(bid)) { Data.notify(mid, `تم تعيين المستفيد ${Data.member(bid)?.name} لك`, { icon: 'fa-handshake' }); Data.notify(bid, `تم تعيين المرشد ${Data.member(mid)?.name} لك`, { icon: 'fa-handshake' }); }
+        }));
         return toast('تم حفظ الشبكة');
       }
       // الجلسات والتقييمات
@@ -1354,7 +1362,7 @@ const Admin = (() => {
 
     root.onchange = e => {
       const t = e.target;
-      if (t.matches('[data-net]')) { ui.netDraft[t.dataset.net] = t.value; return render(root); }
+      if (t.matches('[data-net]')) { if (t.value) ui.netDraft[t.dataset.net] = [...(ui.netDraft[t.dataset.net] || []), t.value]; return render(root); }
       if (t.matches('[data-feature]')) { Store.set(`reviews/${t.dataset.feature}/featured`, t.checked); return Security.setFeatured(Store.get(`reviews/${t.dataset.feature}`), t.checked); }
       if (t.matches('[data-restore]') && t.files[0]) { const f = t.files[0]; t.value = ''; return restoreBackup(f); }
       if (t.matches('.dropzone input[type=file]') && t.files[0]) importCSV(t.files[0], t.closest('[data-drop]').dataset.drop, ui.cohort);

@@ -23,7 +23,9 @@ R = f"root.child('{ROOT}/"
 UID = f"{R}uids/' + auth.uid)"
 ME = f"{UID}.val()"
 IS_MEMBER = f"(auth != null && {UID}.exists())"
-PARTNER = f"{R}pairs/' + {ME})"          # طرف العضو المرتبط به
+PARTNER = f"{R}pairs/' + {ME})"          # طرف العضو المرتبط به: المستفيد = نص رقم مرشده، والمرشد = نص (مستفيد واحد) أو كائن {رقم المستفيد: true} لعدة مستفيدين
+# x طرف مرتبط بالعضو الحالي: مرشد المستفيد، أو أحد مستفيدي المرشد
+IS_PARTNER = lambda x: f"({PARTNER}.val() === {x} || {R}pairs/' + {ME} + '/' + {x}).val() === true)"
 
 # الجلسات الإضافية: مفتوحة لكل المستفيدين حين تفعّلها الإدارة (extraConfig/enabled)
 EXTRA_ON = f"{R}extraConfig/enabled').val() === true"
@@ -207,7 +209,7 @@ EXTRA_REVIEW_OK = (f"{n('extraSession')} === true && {_BK}.child('extra').val() 
                    f" && (({_BK}.child('menteeId').val() === {ME} && {n('targetId')} === {_BK}.child('mentorId').val())"
                    f" || ({_BK}.child('mentorId').val() === {ME} && {n('targetId')} === {_BK}.child('menteeId').val()))")
 REVIEW_CREATE = (f"!data.exists() && {n('authorId')} === {ME}"
-                 f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || ({n('targetId')} === {PARTNER}.val() && !newData.child('extraSession').exists()) || ({EXTRA_REVIEW_OK}))"
+                 f" && ({n('targetId')} === 'admin' || {n('targetId')} === '' || ({IS_PARTNER(n('targetId'))} && !newData.child('extraSession').exists()) || ({EXTRA_REVIEW_OK}))"
                  f" && ({n('status')} === 'pending' || ({n('type')} === 'program' && {n('status')} === 'approved' && {n('featured')} === false))")
 
 SLOT_MENTOR = f"{R}slots/' + $sid + '/mentorId').val()"
@@ -235,7 +237,7 @@ rules = {
     "contacts": {
         ".read": can('cohorts', 'sessions', 'certificates'), **w(can('cohorts')),
         "$mid": {
-            ".read": f"{IS_MEMBER} && ({ME} === $mid || {PARTNER}.val() === $mid)",
+            ".read": f"{IS_MEMBER} && ({ME} === $mid || {IS_PARTNER('$mid')})",
             ".write": f"auth != null && {ME} === $mid",
             **CONTACT,
         },
@@ -247,7 +249,8 @@ rules = {
     # الشبكة للمشرفين فقط؛ العضو يعرف طرفه من pairs/{رقمه}
     "network": {".read": can('cohorts', 'sessions', 'reviews', 'messages'), **w(can('cohorts'))},
     "pairs": {".read": can('cohorts', 'sessions', 'reviews', 'messages'), **w(can('cohorts')),
-              "$mid": {".read": f"auth != null && {ME} === $mid", ".validate": "newData.isString() && newData.val().length <= 60"}},
+              "$mid": {".read": f"auth != null && {ME} === $mid", ".validate": "(newData.isString() && newData.val().length <= 60) || newData.hasChildren()",
+                       "$m": {".validate": "newData.val() === true"}}},
     "messages": {
         ".read": any_of(can('messages'), f"({IS_MEMBER} && {query('aud', repr('all'), ME, MY_ROLE)})"),
         **w(can('messages')), ".indexOn": ["aud"],
@@ -279,7 +282,7 @@ rules = {
     "notifyMail": {".read": True, **w(can('messages')), "enabled": BOOL, "ts": NUM, "by": s(120)},
     # طابور البريد: لا يقرؤه أحد من الأعضاء؛ يضيف إليه العضو لطرفه المرتبط فقط، ويقرؤه ويحذفه سكربت الإرسال بحساب مالك المشروع
     "mailQueue": {".read": IS_FULL, **w(IS_ADMIN),
-                  "$qid": {**w(f"{IS_MEMBER} && !data.exists() && ({PARTNER}.val() === {n('to')} || {REL_TO(n('to'))})"), **MAILQ}},
+                  "$qid": {**w(f"{IS_MEMBER} && !data.exists() && ({IS_PARTNER(n('to'))} || {REL_TO(n('to'))})"), **MAILQ}},
     "reviews": {
         ".read": any_of(can('reviews'), f"({IS_MEMBER} && {query('authorId', ME)})"),
         **w(can('reviews')), ".indexOn": ["authorId"],
@@ -294,7 +297,7 @@ rules = {
             ".read": f"auth != null && {ME} === $to",
             "$nid": {
                 # الإنشاء: الزائر للإدارة فقط، والعضو للإدارة أو لطرفه المرتبط؛ ويعدّل العضو إشعاراته هو
-                ".write": f"(!data.exists() && newData.child('text').isString() && newData.child('text').val().length <= 500 && ($to === 'admin' || ({IS_MEMBER} && ({PARTNER}.val() === $to || {REL_TO('$to')})))) || (auth != null && {ME} === $to)",
+                ".write": f"(!data.exists() && newData.child('text').isString() && newData.child('text').val().length <= 500 && ($to === 'admin' || ({IS_MEMBER} && ({IS_PARTNER('$to')} || {REL_TO('$to')})))) || (auth != null && {ME} === $to)",
                 **NOTIF,
             },
         },

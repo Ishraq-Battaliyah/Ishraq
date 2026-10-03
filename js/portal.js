@@ -7,9 +7,11 @@ const Portal = (() => {
   function render(root, kind, id) {
     const me = Data.member(id);
     if (!me || me.role !== kind) { Auth.logout(); return; }
-    const other = kind === 'mentor' ? Data.menteeOf(me.id) : Data.mentorOf(me.id);
+    // المرشد قد يكون له عدة مستفيدين، والمستفيد له مرشد واحد
+    const others = kind === 'mentor' ? Data.menteesOf(me.id) : [Data.mentorOf(me.id)].filter(Boolean);
+    const other = others[0] || null;
     // بيانات تواصل الطرف المرتبط تُقرأ من مسار خاص تسمح به القواعد لهذا العضو فقط
-    if (other && String(Store.scope || '').startsWith('member:')) Store.watch(`contacts/${other.id}`);
+    if (String(Store.scope || '').startsWith('member:')) others.forEach(o => Store.watch(`contacts/${o.id}`));
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const bookings = Data.bookings({ ...(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id }), cohort: me.cohort });
     const cstate = Bands.state(me.cohort);   // prelaunch | live | archived
@@ -23,7 +25,7 @@ const Portal = (() => {
           <div>${avatar(me, 'lg')}</div>
           <div><small>${kind === 'mentor' ? 'لوحة تحكم المرشد' : 'لوحة تحكم المستفيد'} · ${esc(Data.cohort(me.cohort)?.name || '')}</small>
           <h1>أهلاً، ${esc(me.name)}</h1><span class="code-chip">${esc(me.code)}</span></div>
-          <div class="hello-stats">${(me.prevCohorts || []).length ? '<button class="btn light sm" data-open-archive><i class="fa-solid fa-box-archive"></i> الدفعات السابقة</button>' : ''}${progressRing(bookings.filter(b => b.status === 'done').length)}</div>
+          <div class="hello-stats">${(me.prevCohorts || []).length ? '<button class="btn light sm" data-open-archive><i class="fa-solid fa-box-archive"></i> الدفعات السابقة</button>' : ''}${progressRing(bookings.filter(b => b.status === 'done').length, others.length)}</div>
         </section>
 
         ${notifyPrefPanel(me)}
@@ -44,7 +46,7 @@ const Portal = (() => {
           <div class="pair-cards">
             <div><h3 class="sub">بطاقتي</h3>${memberCard(me, { actions: '<button class="btn sm primary" data-edit-me><i class="fa-solid fa-pen"></i> تعديل بياناتي</button><button class="btn sm ghost" data-download-card title="حفظ البطاقة كصورة PNG لمشاركتها"><i class="fa-solid fa-download"></i> حفظ البطاقة</button>' })}</div>
             <div class="pair-link"><i class="fa-solid fa-handshake"></i></div>
-            <div><h3 class="sub">${otherLabel} المخصص لك</h3>${other ? memberCard(other, { showCode: false }) : emptyState(`لم يتم تعيين ${otherLabel} لك بعد من قبل الإدارة`, 'fa-user-clock')}</div>
+            <div><h3 class="sub">${others.length > 1 ? 'المستفيدون المخصصون لك' : `${otherLabel} المخصص لك`} ${others.length > 1 ? `<span class="count">${others.length}</span>` : ''}</h3>${others.length ? `<div class="others-stack">${others.map(o => memberCard(o, { showCode: false })).join('')}</div>` : emptyState(`لم يتم تعيين ${otherLabel} لك بعد من قبل الإدارة`, 'fa-user-clock')}</div>
           </div>
         </section>
 
@@ -112,11 +114,12 @@ const Portal = (() => {
     return out.length ? `<div class="band-alerts">${out.join('')}</div>` : '';
   }
 
-  function progressRing(done) {
-    const p = Math.min(3, done) / 3;
+  function progressRing(done, partners = 1) {
+    const total = 3 * Math.max(1, partners);   // لكل مستفيد ثلاث جلسات
+    const p = Math.min(total, done) / total;
     const c = 2 * Math.PI * 34;
     return `<div class="ring"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="ring-bg"/><circle cx="40" cy="40" r="34" class="ring-fg" stroke-dasharray="${esc(c)}" stroke-dashoffset="${c * (1 - p)}"/></svg>
-      <div><b>${Math.min(3, done)}/3</b><small>جلسات منجزة</small></div></div>`;
+      <div><b>${Math.min(total, done)}/${total}</b><small>جلسات منجزة</small></div></div>`;
   }
 
   /* ===== المرشد: المواعيد ===== */
@@ -173,8 +176,7 @@ const Portal = (() => {
             if (!Bands.launchedAt(me.cohort)) { toast('تُفتح إضافة المواعيد بعد إطلاق الدفعة', 'error'); return false; }
             if (session > 1 && !first(session - 1)) { toast(`أضف مواعيد ${sessionName(session - 1)} أولاً`, 'error'); return false; }
             Store.push('slots', { mentorId: me.id, session, date: v.date, start, end, mode: v.mode, summary: v.summary, ts: Date.now() });
-            const mentee = Data.menteeOf(me.id);
-            mentee && Data.notify(mentee.id, `أضاف مرشدك موعداً جديداً لـ${sessionName(session)}: ${fmtDate(v.date)} ${start}`, { icon: 'fa-calendar-plus' });
+            Data.menteesOf(me.id).forEach(mentee => Data.notify(mentee.id, `أضاف مرشدك موعداً جديداً لـ${sessionName(session)}: ${fmtDate(v.date)} ${start}`, { icon: 'fa-calendar-plus' }));
             toast('تمت إضافة الموعد');
           }
         },
@@ -303,8 +305,9 @@ const Portal = (() => {
 
   /* ===== الجلسات المجدولة ===== */
   function scheduledPanel(kind, me, other0, bookings, extra = false) {
+    const multi = kind === 'mentor' && Data.menteesOf(me.id).length > 1;   // أكثر من مستفيد: نذكر اسم المستفيد في كل صف
     const rows = bookings.map(b => {
-      const other = extra ? Data.member(kind === 'mentor' ? b.menteeId : b.mentorId) : other0;
+      const other = Data.member(kind === 'mentor' ? b.menteeId : b.mentorId) || other0;
       const due = isDue(b);
       let actions = '';
       const prop = b.proposal;
@@ -336,7 +339,7 @@ const Portal = (() => {
         actions = `<a class="btn xs wa" href="${esc(waTo(other, cancelText(kind, b)))}" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> إشعار ${kind === 'mentor' ? 'المستفيد' : 'المرشد'}</a>`;
       }
       return `<tr>
-        <td data-l="الجلسة"><b>${extra ? esc(other?.name || 'جلسة إضافية') : sessionName(b.session)}</b></td>
+        <td data-l="الجلسة"><b>${extra ? esc(other?.name || 'جلسة إضافية') : sessionName(b.session)}</b>${!extra && multi ? `<br><small class="muted"><i class="fa-solid fa-user-graduate"></i> ${esc(other?.name || '')}</small>` : ''}</td>
         <td data-l="الموعد">${fmtDate(b.date)}<br><small>${tRange(b.start, b.end)}</small>${b.changedBy ? `<br><small class="muted"><i class="fa-solid fa-rotate"></i> عُدّل الموعد</small>` : ''}
           ${prop ? `<span class="prop-note"><i class="fa-solid fa-calendar-day"></i> موعد مقترح من ${prop.by === 'mentor' ? 'المرشد' : 'المستفيد'}: ${fmtDate(prop.date)} · ${tRange(prop.start, prop.end)}</span>` : ''}
           ${b.status === 'cancelled' && b.cancelReason ? `<span class="prop-note">سبب الإلغاء: ${esc(b.cancelReason)}</span>` : ''}</td>
@@ -378,7 +381,7 @@ const Portal = (() => {
   async function bookingAction(kind, me, other, id, act) {
     const b = Store.get(`bookings/${id}`);
     if (!b) return;
-    if (b.extra) other = Data.member(kind === 'mentor' ? b.menteeId : b.mentorId);
+    other = Data.member(kind === 'mentor' ? b.menteeId : b.mentorId) || other;   // طرف هذه الجلسة بالذات
     if (b.status !== 'upcoming') return;
     if (act === 'resched') return openReschedule(kind, me, other, b);
     if (act === 'cancel') return openCancel(kind, me, other, b);
@@ -665,7 +668,10 @@ const Portal = (() => {
   }
 
   /* ===== التقييمات ===== */
-  const reviewLabel = b => `${Data.bookingName(b)} — ${fmtDate(b.date)}${b.extra ? ` ${b.start}` : ''}`;
+  const reviewLabel = b => {
+    const a = Auth.current(), who = Data.member(a?.kind === 'mentor' ? b.menteeId : b.mentorId)?.name;   // اسم الطرف الآخر يميّز جلسات المستفيدين المتعددين
+    return `${Data.bookingName(b)} — ${fmtDate(b.date)}${b.extra ? ` ${b.start}` : ''}${who ? ` — ${who}` : ''}`;
+  };
 
   function reviewsPanel(kind, me, other, bookings) {
     const done = bookings.filter(b => b.status === 'done');
@@ -676,7 +682,11 @@ const Portal = (() => {
     const reviewedBookings = new Set(mine.filter(r => r.type === 'session').map(r => r.bookingId));
     const pendingDone = done.concat(extraDone).filter(b => !reviewedBookings.has(b.id));
     const received = Data.reviews({ targetId: me.id }).filter(r => r.status === 'approved' && (r.ts || 0) >= since);
-    const finalDone = mine.some(r => r.type === 'final');
+    // التقييم الختامي لكل طرف أنجز معه ثلاث جلسات (المرشد قد يكون له عدة مستفيدين)
+    const partnerOf = b => (kind === 'mentor' ? b.menteeId : b.mentorId), doneBy = {};
+    done.forEach(b => { (doneBy[partnerOf(b)] = doneBy[partnerOf(b)] || []).push(b); });
+    const finished = Object.keys(doneBy).filter(id => doneBy[id].length >= 3);
+    const pendingFinal = finished.filter(id => !mine.some(r => r.type === 'final' && r.targetId === id));
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
     const revItem = (r, showStatus) => `<li class="review">
       <header><b>${r.type === 'final' ? 'التقييم الختامي' : r.type === 'program' ? 'تقييم البرنامج' : r.extraSession ? 'جلسة إضافية' : sessionName(r.session)}</b>${r.extraSession ? '<span class="chip extra-chip"><i class="fa-solid fa-hand-holding-heart"></i> جلسة إضافية</span>' : ''}
@@ -685,7 +695,7 @@ const Portal = (() => {
 
     return `<section class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-star"></i> التقييمات ${kind === 'mentor' ? 'والتوصيات' : 'والانطباعات'}</h2>
-      ${done.length >= 3 ? `<button class="btn ${finalDone ? 'ghost' : 'primary'}" data-final ${finalDone ? 'disabled' : ''}><i class="fa-solid fa-flag-checkered"></i> ${finalDone ? 'تم إرسال التقييم الختامي' : 'تقييم البرنامج والتقييم الختامي'}</button>` : ''}</div>
+      ${pendingFinal.map(id => `<button class="btn primary" data-final="${esc(id)}"><i class="fa-solid fa-flag-checkered"></i> ${finished.length > 1 ? `التقييم الختامي — ${esc(Data.member(id)?.name || '')}` : 'تقييم البرنامج والتقييم الختامي'}</button>`).join('')}${!pendingFinal.length && finished.length ? '<button class="btn ghost" disabled><i class="fa-solid fa-flag-checkered"></i> تم إرسال التقييم الختامي</button>' : ''}</div>
       <div class="review-grid">
         <div class="review-box">
           <h3>كتابة تقييم ${otherLabel}</h3>
@@ -714,7 +724,7 @@ const Portal = (() => {
     const b = list.find(x => reviewLabel(x) === v.booking);
     if (!b) return;
     Store.push('reviews', {
-      type: 'session', from: kind, authorId: me.id, targetId: b.extra ? (kind === 'mentor' ? b.menteeId : b.mentorId) : (other?.id || ''), mentorId: b.mentorId, menteeId: b.menteeId,
+      type: 'session', from: kind, authorId: me.id, targetId: kind === 'mentor' ? b.menteeId : b.mentorId, mentorId: b.mentorId, menteeId: b.menteeId,
       bookingId: b.id, ...(b.extra ? { extraSession: true } : { session: b.session }), text: v.text, extra: v.extra, status: 'pending', ts: Date.now()
     });
     Data.notify('admin', `تقييم جديد من ${kind === 'mentor' ? 'المرشد' : 'المستفيد'} ${me.name} عن ${Data.bookingName(b)} بانتظار الاعتماد`, { icon: 'fa-star' });
@@ -723,12 +733,14 @@ const Portal = (() => {
 
   function openFinal(kind, me, other) {
     const otherLabel = kind === 'mentor' ? 'المستفيد' : 'المرشد';
+    // تقييم البرنامج مرة واحدة لكل عضو في الدفعة (حتى لو أنهى عدة مستفيدين)
+    const hasProgram = Data.reviews({ authorId: me.id, type: 'program' }).some(r => (r.ts || 0) >= (me.cohortSince || 0));
     openModal({
       title: '<i class="fa-solid fa-flag-checkered"></i> ختام البرنامج', size: 'md',
       body: `<form class="form-grid one">
         <p class="muted">شكراً لإتمامك الجلسات الثلاث! شاركنا تقييمك الختامي.</p>
         ${fieldInput({ k: 'final', label: `التقييم العام لـ${otherLabel} (${esc(other?.name || '')})`, type: 'textarea', required: true, rows: 3 })}
-        ${fieldInput({ k: 'program', label: 'تقييمك العام لبرنامج إشراق', type: 'textarea', required: true, rows: 3 })}
+        ${hasProgram ? '' : fieldInput({ k: 'program', label: 'تقييمك العام لبرنامج إشراق', type: 'textarea', required: true, rows: 3 })}
         ${fieldInput({ k: 'message', label: 'رسالة للإدارة (اختياري)', type: 'textarea', rows: 3 })}
       </form>`,
       actions: [
@@ -739,7 +751,7 @@ const Portal = (() => {
             const v = readForm(f);
             const base = { from: kind, authorId: me.id, authorName: me.name, mentorId: kind === 'mentor' ? me.id : other?.id, menteeId: kind === 'mentee' ? me.id : other?.id, ts: Date.now() };
             Store.push('reviews', { ...base, type: 'final', targetId: other?.id || '', text: v.final, status: 'pending' });
-            Store.push('reviews', { ...base, type: 'program', targetId: 'admin', text: v.program, status: 'approved', featured: false });
+            if (!hasProgram) Store.push('reviews', { ...base, type: 'program', targetId: 'admin', text: v.program, status: 'approved', featured: false });
             if (v.message) Store.push('inbox', { fromId: me.id, fromName: me.name, role: kind, body: v.message, ts: Date.now() });
             Data.notify('admin', `أرسل ${kind === 'mentor' ? 'المرشد' : 'المستفيد'} ${me.name} التقييم الختامي وتقييم البرنامج`, { icon: 'fa-flag-checkered' });
             toast('شكراً لك! تم إرسال التقييم الختامي');
@@ -806,7 +818,7 @@ const Portal = (() => {
       const done = Data.bookings(own).concat(Data.bookings({ ...own, extra: true })).filter(b => b.status === 'done');
       submitReview(kind, me, other, rf, done);
     });
-    $('[data-final]', root)?.addEventListener('click', () => openFinal(kind, me, other));
+    $$('[data-final]', root).forEach(b => b.onclick = () => openFinal(kind, me, Data.member(b.dataset.final) || other));
     $$('[data-add-wish]', root).forEach(b => b.onclick = () => other && openAddWish(me, other, +b.dataset.addWish));
     $('[data-add-extra-wish]', root)?.addEventListener('click', () => openAddExtraWish(me));
     $$('[data-wish-withdraw]', root).forEach(b => b.onclick = async () => {
