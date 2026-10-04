@@ -366,7 +366,8 @@ const Admin = (() => {
     return `<div class="members-block">
       <div class="block-head"><h3>${label} — ${esc(c.name)} <span class="count">${list.length}</span></h3>
         <div class="head-actions">${exportBar(`members:${c.id}:${role}`)}
-        <button class="btn ghost sm" data-csv-template="${esc(role)}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button></div></div>
+        <button class="btn ghost sm" data-csv-template="${esc(role)}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button>
+        ${full ? `<button class="btn primary sm" data-mail-all="${esc(role)}" ${list.length ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول للكل</button>` : ''}</div></div>
       <label class="dropzone" data-drop="${esc(role)}">
         <input type="file" accept=".csv,text/csv" hidden>
         <i class="fa-solid fa-cloud-arrow-up"></i><span>اسحب ملف CSV وأفلته هنا لإضافة ${label} دفعة واحدة، أو اضغط لاختيار الملف</span>
@@ -447,6 +448,54 @@ const Admin = (() => {
     const url = window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '');
     const code = Store.get(`secrets/codes/${m.id}`) || m.code;
     return `تحية طيبة عزيزي ${role}، تم إضافتك إلى منصة إشراق، يمكنك الدخول إلى المنصة وتعديل البيانات وإدارة حجوزات الجلسات الإرشادية وكتابة التقييمات عبر الدخول إلى الرابط ( ${url} ) والضغط على (دخول ${role}) واستخدام رمز الدخول الخاص بك (${code})`;
+  }
+
+  /* إرسال معلومات الدخول بالبريد لكل مرشد/مستفيد في الدفعة: رسالة مستقلة لكل شخص على بريده المسجل */
+  const MAIL_ALL = {
+    subject: 'معلومات الدخول إلى منصة إشراق — {cohort}',
+    body: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nتمت إضافتك {role} في {cohort} ببرنامج إشراق، وهذه بيانات دخولك الخاصة بك (لا تشاركها مع أحد):\n\nرابط المنصة: {site}\nرقم العضوية: {code}\nرمز الدخول السري: {secret}\n\nطريقة الدخول:\n1) افتح رابط المنصة.\n2) اضغط زر «دخول {rolebtn}» في أعلى الصفحة.\n3) أدخل رمز الدخول السري أعلاه.\nبعد الدخول يمكنك تعديل بياناتك وإدارة حجوزات الجلسات وكتابة التقييمات.\n\nمع أطيب التمنيات،\nإدارة برنامج إشراق'
+  };
+  async function mailAllCredentials(c, role) {
+    const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
+    const list = Data.cohortMembers(role, c.id);
+    if (!list.length) return toast(`لا يوجد ${label} في هذه الدفعة`, 'error');
+    const mailer = Enroll.mailer();
+    if (!mailer) return toast('فعّل «الإرسال المباشر» أولاً من تبويب الشهادات (إعداد الإرسال المباشر) ليستطيع النظام إرسال البريد تلقائياً', 'error');
+    const withMail = list.filter(m => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(m.email || '').trim())), without = list.filter(m => !withMail.includes(m));
+    if (!withMail.length) return toast('لا يوجد بريد مسجل لأي منهم؛ أضف البريد من «تعديل»', 'error');
+    const fill = (t, m, code) => String(t).replace(/\{(name|role|rolebtn|cohort|code|secret|site)\}/g, (_, k) => ({ name: m.name, role: role === 'mentor' ? 'مرشداً' : 'مستفيداً', rolebtn: role === 'mentor' ? 'مرشد' : 'مستفيد', cohort: `${c.name} ${c.year || ''}`.trim(), code: m.code || '', secret: code || '', site: window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '') }[k]));
+    openModal({
+      title: `<i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول — ${label} ${esc(c.name)}`, size: 'lg',
+      body: `<div class="mail-rcpt">${withMail.map(m => `<span class="chip">${esc(m.name)} <small dir="ltr">${esc(m.email)}</small></span>`).join('')}</div>
+        ${without.length ? `<p class="warn-note small">بلا بريد مسجل ولن تصلهم الرسالة: ${without.map(m => esc(m.name)).join('، ')}</p>` : ''}
+        <form class="form-grid one">
+          <div class="field"><label>العنوان</label><input name="subject" value="${esc(MAIL_ALL.subject)}"></div>
+          <div class="field"><label>نص الرسالة (تُرسل لكل شخص على حدة برمزه الخاص)</label><textarea name="body" rows="13">${esc(MAIL_ALL.body)}</textarea>
+            <small class="hint">المتغيرات: <code>{name}</code> <code>{role}</code> <code>{rolebtn}</code> <code>{cohort}</code> <code>{code}</code> رقم العضوية، <code>{secret}</code> رمز الدخول، <code>{site}</code> رابط المنصة.</small></div>
+        </form><div class="mail-progress muted small"></div>`,
+      actions: [{
+        label: `<i class="fa-solid fa-paper-plane"></i> إرسال إلى ${withMail.length}`, cls: 'primary', onClick: async mm => {
+          const f = $('form', mm.body), subject = f.subject.value.trim(), body = f.body.value, prog = $('.mail-progress', mm.body);
+          if (!subject || !body.trim()) { toast('اكتب العنوان والنص', 'error'); return false; }
+          const btn = $('[data-act="0"]', mm.el); btn.disabled = true;
+          let ok = 0; const fail = [];
+          for (const [i, m0] of withMail.entries()) {
+            prog.textContent = `جارٍ الإرسال ${i + 1} من ${withMail.length}...`;
+            try {
+              let m = m0, code = Store.get(`secrets/codes/${m.id}`);
+              if (!code && Security.secure()) { await Security.createMemberAccount(m); m = Data.member(m.id); code = Store.get(`secrets/codes/${m.id}`); }
+              code = code || m.code;
+              if (!code) throw new Error('لا يوجد رمز دخول');
+              await Enroll.sendDirect(m.email.trim(), fill(subject, m, code), fill(body, m, code));
+              Store.update(`members/${m.id}`, { credSentAt: Date.now(), credMailedAt: Date.now() }); ok++;
+            } catch (e) { fail.push(`${m0.name}: ${e.message || e}`); }
+          }
+          Security.log('إرسال معلومات الدخول بالبريد', `${ok} ${label}`);
+          if (fail.length) { prog.innerHTML = `<span class="err-hint">أُرسلت ${ok}، وتعذّر ${fail.length}:<br>${fail.map(esc).join('<br>')}</span>`; toast(`أُرسلت ${ok} وتعذّر ${fail.length}`, 'error'); btn.disabled = false; return false; }
+          toast(`أُرسلت معلومات الدخول إلى ${ok} من ${label}`);
+        }
+      }, { label: 'إغلاق', cls: 'ghost' }]
+    });
   }
 
   async function sendCredentials(m) {
@@ -1246,6 +1295,7 @@ const Admin = (() => {
       }
       const sb = t.closest('[data-sub]'); if (sb) { ui.sub = ui.sub === sb.dataset.sub ? null : sb.dataset.sub; return render(root); }
       const am = t.closest('[data-add-member]'); if (am) return addMember(am.dataset.addMember, ui.cohort);
+      const ma = t.closest('[data-mail-all]'); if (ma && ma.dataset.mailAll) return mailAllCredentials(Data.cohort(ui.cohort), ma.dataset.mailAll);
       const sc = t.closest('[data-send-cred]'); if (sc) return sendCredentials(Data.member(sc.dataset.sendCred));
       const rg = t.closest('[data-regen]');
       if (rg) {
