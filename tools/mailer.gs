@@ -5,11 +5,13 @@
  */
 const SECRET = 'غيّر-هذه-الكلمة-إلى-سر-طويل';   // يجب أن يطابق السر المدخل في المنصة
 const SENDER_NAME = 'برنامج إشراق';
+const VERSION = 2;   // 2: يدعم الرسائل بلا مرفق (القبول والاعتذار ومعلومات الدخول)
 
 function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.secret !== SECRET) return out({ ok: false, error: 'auth' });
+    if (d.ping) return out({ ok: true, v: VERSION });   // المنصة تتحقق من أن النسخة المنشورة حديثة
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.to || '')) return out({ ok: false, error: 'bad address' });
     // المرفق اختياري: الشهادات بملف PDF، ورسائل القبول والاعتذار بلا مرفق
     const attachments = d.pdf ? [Utilities.newBlob(Utilities.base64Decode(d.pdf), 'application/pdf', d.filename || 'certificate.pdf')] : [];
