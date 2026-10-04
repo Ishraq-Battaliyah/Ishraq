@@ -300,15 +300,13 @@ const Enroll = (() => {
     if (p === 'outlook') return `https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}${bcc ? `&bcc=${enc(bcc)}` : ''}&subject=${enc(subject)}&body=${enc(body)}`;
     return `mailto:${to}?${bcc ? `bcc=${enc(bcc)}&` : ''}subject=${enc(subject)}&body=${enc(body)}`;
   }
-  const NET_HELP = 'تعذّر الاتصال برابط سكربت البريد. تأكد أن الرابط هو رابط «تطبيق الويب» وينتهي بـ /exec، وأن النشر «من يملك الوصول: أي شخص»، وأنك أعدت نشره كنسخة جديدة بعد أي تعديل، ثم جرّب زر الاختبار في إعداد الإرسال المباشر بتبويب الشهادات';
-  async function ping() {
-    const m = mailer();
+  const NET_HELP = 'تعذّر الاتصال برابط سكربت البريد. تأكد أن الرابط هو رابط «تطبيق الويب» وينتهي بـ /exec، وأن النشر «من يملك الوصول: أي شخص»، وأنك أعدت نشره كنسخة جديدة بعد أي تعديل، ثم جرّب زر «اختبار الاتصال» في نافذة الإعداد';
+  async function ping(m = mailer()) {
     let res; try { res = await fetch(m.url, { method: 'POST', body: JSON.stringify({ secret: m.secret, to: 'x', ping: 1 }) }); } catch { throw new Error(NET_HELP); }
     let j = null; try { j = await res.json(); } catch { throw new Error('ردّ الرابط ليس من سكربت البريد؛ تأكد من نشره كتطبيق ويب (أي شخص) وأن الرابط ينتهي بـ /exec'); }
     if (j?.error === 'auth') throw new Error('السر المحفوظ في المنصة لا يطابق SECRET داخل السكربت');
   }
-  async function sendDirect(to, subject, body) {
-    const m = mailer();
+  async function sendDirect(to, subject, body, m = mailer()) {
     let res;
     try { res = await fetch(m.url, { method: 'POST', body: JSON.stringify({ secret: m.secret, to, subject, body, senderName: m.name || '' }) }); }
     catch { throw new Error(NET_HELP); }

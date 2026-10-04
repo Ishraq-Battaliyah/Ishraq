@@ -209,6 +209,22 @@
       "secrets": {
         ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))"
       },
+      "loginMailer": {
+        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
+        "url": {
+          ".validate": "newData.isString() && newData.val().length <= 400"
+        },
+        "secret": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
       "counters": {
         ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
         ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))"

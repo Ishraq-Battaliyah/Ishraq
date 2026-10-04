@@ -244,6 +244,8 @@ rules = {
     },
     # رموز الدخول: تقرؤها الصلاحية الكاملة فقط (عبر قراءة الجذر)، ويكتبها من يضيف الأعضاء
     "secrets": w(can('cohorts')),
+    # سكربت بريد معلومات الدخول (مستقل عن سكربت الشهادات)
+    "loginMailer": {".read": can('cohorts'), **w(can('cohorts')), **fields({"url": s(400), "secret": s(120), "name": s(120)})},
     "counters": {".read": can('cohorts'), **w(can('cohorts'))},
     "uids": {".read": can('cohorts'), **w(can('cohorts')), "$uid": {".read": "auth != null && auth.uid === $uid"}},
     # الشبكة للمشرفين فقط؛ العضو يعرف طرفه من pairs/{رقمه}
