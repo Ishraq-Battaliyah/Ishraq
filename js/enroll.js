@@ -423,5 +423,5 @@ const Enroll = (() => {
     if (t.matches('[data-reg-all]')) { regList(t.dataset.regAll).forEach(x => (t.checked ? ui.sel.add(x.id) : ui.sel.delete(x.id))); return rerender(); }
   });
 
-  return { panel, openFormEditor, announced };
+  return { panel, openFormEditor, announced, mailer, sendDirect };
 })();
