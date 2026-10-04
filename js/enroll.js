@@ -306,6 +306,8 @@ const Enroll = (() => {
     let res; try { res = await fetch(m.url, { method: 'POST', body: JSON.stringify({ secret: m.secret, to: 'x', ping: 1 }) }); } catch { throw new Error(NET_HELP); }
     let j = null; try { j = await res.json(); } catch { throw new Error('ردّ الرابط ليس من سكربت البريد؛ تأكد من نشره كتطبيق ويب (أي شخص) وأن الرابط ينتهي بـ /exec'); }
     if (j?.error === 'auth') throw new Error('السر المحفوظ في المنصة لا يطابق SECRET داخل السكربت');
+    // النسخة القديمة من السكربت تتوقع مرفق PDF دائماً فتفشل الرسائل بلا مرفق بخطأ «الوسيطة خالية: data»
+    if (!(j?.v >= 2)) throw new Error('سكربت البريد المنشور قديم ولا يدعم الرسائل بلا مرفق. افتح السكربت في script.google.com، استبدل الكود بنسخة tools/mailer.gs الحالية (مع إبقاء SECRET كما هو)، ثم «نشر ← إدارة عمليات النشر ← تعديل ← إصدار جديد ← نشر»');
   }
   async function sendDirect(to, subject, body) {
     const m = mailer();
