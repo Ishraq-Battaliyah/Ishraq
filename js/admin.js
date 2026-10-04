@@ -453,7 +453,7 @@ const Admin = (() => {
   /* إرسال معلومات الدخول بالبريد لكل مرشد/مستفيد في الدفعة: رسالة مستقلة لكل شخص على بريده المسجل */
   const MAIL_ALL = {
     subject: 'معلومات الدخول إلى منصة إشراق — {cohort}',
-    body: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nتمت إضافتك {role} في {cohort} ببرنامج إشراق، وهذه بيانات دخولك الخاصة بك (لا تشاركها مع أحد):\n\nرابط المنصة: {site}\nرقم العضوية: {code}\nرمز الدخول السري: {secret}\n\nطريقة الدخول:\n1) افتح رابط المنصة.\n2) اضغط زر «دخول {rolebtn}» في أعلى الصفحة.\n3) أدخل رمز الدخول السري أعلاه.\nبعد الدخول يمكنك تعديل بياناتك وإدارة حجوزات الجلسات وكتابة التقييمات.\n\nمع أطيب التمنيات،\nإدارة برنامج إشراق'
+    body: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nتمت إضافتك {role} في {cohort} ببرنامج إشراق، وهذه بيانات دخولك الخاصة بك (لا تشاركها مع أحد):\n\nرابط المنصة: {site}\nرقم العضوية: {code}\nرمز الدخول السري: {secret}\n\nطريقة الدخول:\n1) افتح رابط المنصة.\n2) في الصفحة الرئيسية اضغط زر «دخول {rolebtn}».\n3) أدخل رمز الدخول السري أعلاه.\nبعد الدخول يمكنك تعديل بياناتك وإدارة حجوزات الجلسات وكتابة التقييمات.\n\nمع أطيب التمنيات،\nإدارة برنامج إشراق'
   };
   async function mailAllCredentials(c, role) {
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
@@ -463,7 +463,7 @@ const Admin = (() => {
     if (!mailer) return toast('فعّل «الإرسال المباشر» أولاً من تبويب الشهادات (إعداد الإرسال المباشر) ليستطيع النظام إرسال البريد تلقائياً', 'error');
     const withMail = list.filter(m => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(m.email || '').trim())), without = list.filter(m => !withMail.includes(m));
     if (!withMail.length) return toast('لا يوجد بريد مسجل لأي منهم؛ أضف البريد من «تعديل»', 'error');
-    const fill = (t, m, code) => String(t).replace(/\{(name|role|rolebtn|cohort|code|secret|site)\}/g, (_, k) => ({ name: m.name, role: role === 'mentor' ? 'مرشداً' : 'مستفيداً', rolebtn: role === 'mentor' ? 'مرشد' : 'مستفيد', cohort: `${c.name} ${c.year || ''}`.trim(), code: m.code || '', secret: code || '', site: window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '') }[k]));
+    const fill = (t, m, code) => String(t).replace(/\{(name|role|rolebtn|cohort|code|secret|site)\}/g, (_, k) => ({ name: m.name, role: role === 'mentor' ? 'مرشداً' : 'مستفيداً', rolebtn: role === 'mentor' ? 'المرشد' : 'المستفيد', cohort: `${c.name} ${c.year || ''}`.trim(), code: m.code || '', secret: code || '', site: window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '') }[k]));
     openModal({
       title: `<i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول — ${label} ${esc(c.name)}`, size: 'lg',
       body: `<div class="mail-rcpt">${withMail.map(m => `<span class="chip">${esc(m.name)} <small dir="ltr">${esc(m.email)}</small></span>`).join('')}</div>
