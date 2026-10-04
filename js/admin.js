@@ -479,6 +479,8 @@ const Admin = (() => {
           if (!subject || !body.trim()) { toast('اكتب العنوان والنص', 'error'); return false; }
           const btn = $('[data-act="0"]', mm.el); btn.disabled = true;
           let ok = 0; const fail = [];
+          prog.textContent = 'جارٍ اختبار الاتصال بسكربت البريد...';
+          try { await Enroll.ping(); } catch (e) { prog.innerHTML = `<span class="err-hint">${esc(e.message)}</span>`; btn.disabled = false; return false; }
           for (const [i, m0] of withMail.entries()) {
             prog.textContent = `جارٍ الإرسال ${i + 1} من ${withMail.length}...`;
             try {
