@@ -367,7 +367,8 @@ const Admin = (() => {
       <div class="block-head"><h3>${label} — ${esc(c.name)} <span class="count">${list.length}</span></h3>
         <div class="head-actions">${exportBar(`members:${c.id}:${role}`)}
         <button class="btn ghost sm" data-csv-template="${esc(role)}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button>
-        ${full ? `<button class="btn primary sm" data-mail-all="${esc(role)}" ${list.length ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول للكل</button>` : ''}</div></div>
+        ${full ? `<button class="btn primary sm" data-mail-all="${esc(role)}" ${list.length ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول للكل</button>
+        <button class="btn ghost sm" data-login-mailer title="سكربت مستقل عن سكربت الشهادات"><i class="fa-solid fa-gear"></i> إعداد سكربت معلومات الدخول${loginMailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>` : ''}</div></div>
       <label class="dropzone" data-drop="${esc(role)}">
         <input type="file" accept=".csv,text/csv" hidden>
         <i class="fa-solid fa-cloud-arrow-up"></i><span>اسحب ملف CSV وأفلته هنا لإضافة ${label} دفعة واحدة، أو اضغط لاختيار الملف</span>
@@ -451,6 +452,41 @@ const Admin = (() => {
   }
 
   /* إرسال معلومات الدخول بالبريد لكل مرشد/مستفيد في الدفعة: رسالة مستقلة لكل شخص على بريده المسجل */
+  const loginMailer = () => { const m = Store.get('loginMailer'); return m && /^https:\/\/script\.google(usercontent)?\.com\//.test(m.url || '') && m.secret ? m : null; };
+  async function loginMailerDialog(then) {
+    let code = '';
+    try { code = await (await fetch('tools/credentials-mailer.gs', { cache: 'no-store' })).text(); } catch { code = ''; }
+    const cur = Store.get('loginMailer') || {};
+    openModal({
+      title: '<i class="fa-solid fa-gear"></i> إعداد سكربت إرسال معلومات الدخول', size: 'lg',
+      body: `<p class="muted small">سكربت <b>مستقل</b> عن سكربت الشهادات: مشروع Apps Script آخر برابط وسر خاصين به، يُرسل منه بريد معلومات الدخول للمرشدين والمستفيدين فقط.</p>
+        <ol class="steps-list"><li>ادخل <b dir="ltr">script.google.com</b> بحساب Gmail الذي سيرسل الرسائل، واختر <b>مشروع جديد</b> (لا تستخدم مشروع الشهادات).</li>
+        <li>انسخ الكود أدناه والصقه مكان الكود الموجود، وغيّر <code>SECRET</code> إلى سر طويل من اختيارك (غير سر الشهادات).</li>
+        <li>اضغط <b>نشر ← عملية نشر جديدة ← تطبيق ويب</b>: «تنفيذ باسم: أنا»، «من يملك الوصول: أي شخص»، ووافق على الصلاحيات.</li>
+        <li>انسخ الرابط الذي ينتهي بـ <code>/exec</code> والصقه هنا مع السر نفسه ثم احفظ، واضغط «اختبار الاتصال».</li></ol>
+        <div class="field wide"><label>الكود <button type="button" class="btn xs ghost" data-copy-code><i class="fa-regular fa-copy"></i> نسخ</button></label><textarea readonly rows="7" dir="ltr">${esc(code || 'تعذّر تحميل tools/credentials-mailer.gs')}</textarea></div>
+        <form class="form-grid" data-lm-form>
+          <div class="field wide"><label>رابط تطبيق الويب</label><input name="url" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(cur.url || '')}"></div>
+          <div class="field"><label>السر (نفس SECRET في الكود)</label><input name="secret" dir="ltr" value="${esc(cur.secret || '')}"></div>
+          <div class="field"><label>اسم المرسِل الظاهر للمستلم</label><input name="name" value="${esc(cur.name || 'برنامج إشراق')}"></div></form>`,
+      onOpen: md => md.body.addEventListener('click', async e => { if (e.target.closest('[data-copy-code]')) { try { await navigator.clipboard.writeText(code); toast('تم نسخ الكود'); } catch { toast('انسخه يدوياً من الصندوق', 'error'); } } }),
+      actions: [{
+        label: 'حفظ', cls: 'primary', onClick: md => {
+          const f = $('[data-lm-form]', md.body), v = { url: f.url.value.trim(), secret: f.secret.value.trim(), name: f.name.value.trim() };
+          if (!v.url && !v.secret) { Store.remove('loginMailer'); toast('أُلغي الإعداد'); return; }
+          if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(v.url)) { toast('الرابط يجب أن يكون رابط تطبيق ويب من script.google.com', 'error'); return false; }
+          if (v.secret.length < 8) { toast('اختر سراً من 8 أحرف على الأقل', 'error'); return false; }
+          Store.set('loginMailer', v); Security.log('إعداد سكربت معلومات الدخول'); toast('تم الحفظ'); if (then) setTimeout(then, 250);
+        }
+      }, {
+        label: 'اختبار الاتصال', cls: 'ghost', onClick: async md => {
+          const f = $('[data-lm-form]', md.body);
+          try { await Enroll.ping({ url: f.url.value.trim(), secret: f.secret.value.trim() }); toast('السكربت يستجيب ✔'); } catch (e) { toast(e.message, 'error'); }
+          return false;
+        }
+      }, { label: 'إغلاق', cls: 'ghost' }]
+    });
+  }
   const MAIL_ALL = {
     subject: 'معلومات الدخول إلى منصة إشراق — {cohort}',
     body: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nتمت إضافتك {role} في {cohort} ببرنامج إشراق، وهذه بيانات دخولك الخاصة بك (لا تشاركها مع أحد):\n\nرابط المنصة: {site}\nرقم العضوية: {code}\nرمز الدخول السري: {secret}\n\nطريقة الدخول:\n1) افتح رابط المنصة.\n2) في الصفحة الرئيسية اضغط زر «دخول {rolebtn}».\n3) أدخل رمز الدخول السري أعلاه.\nبعد الدخول يمكنك تعديل بياناتك وإدارة حجوزات الجلسات وكتابة التقييمات.\n\nمع أطيب التمنيات،\nإدارة برنامج إشراق'
@@ -459,8 +495,8 @@ const Admin = (() => {
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
     const list = Data.cohortMembers(role, c.id);
     if (!list.length) return toast(`لا يوجد ${label} في هذه الدفعة`, 'error');
-    const mailer = Enroll.mailer();
-    if (!mailer) return toast('فعّل «الإرسال المباشر» أولاً من تبويب الشهادات (إعداد الإرسال المباشر) ليستطيع النظام إرسال البريد تلقائياً', 'error');
+    const mailer = loginMailer();
+    if (!mailer) return loginMailerDialog(() => mailAllCredentials(c, role));
     const withMail = list.filter(m => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(m.email || '').trim())), without = list.filter(m => !withMail.includes(m));
     if (!withMail.length) return toast('لا يوجد بريد مسجل لأي منهم؛ أضف البريد من «تعديل»', 'error');
     const fill = (t, m, code) => String(t).replace(/\{(name|role|rolebtn|cohort|code|secret|site)\}/g, (_, k) => ({ name: m.name, role: role === 'mentor' ? 'مرشداً' : 'مستفيداً', rolebtn: role === 'mentor' ? 'المرشد' : 'المستفيد', cohort: `${c.name} ${c.year || ''}`.trim(), code: m.code || '', secret: code || '', site: window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '') }[k]));
@@ -480,7 +516,7 @@ const Admin = (() => {
           const btn = $('[data-act="0"]', mm.el); btn.disabled = true;
           let ok = 0; const fail = [];
           prog.textContent = 'جارٍ اختبار الاتصال بسكربت البريد...';
-          try { await Enroll.ping(); } catch (e) { prog.innerHTML = `<span class="err-hint">${esc(e.message)}</span>`; btn.disabled = false; return false; }
+          try { await Enroll.ping(mailer); } catch (e) { prog.innerHTML = `<span class="err-hint">${esc(e.message)}</span>`; btn.disabled = false; return false; }
           for (const [i, m0] of withMail.entries()) {
             prog.textContent = `جارٍ الإرسال ${i + 1} من ${withMail.length}...`;
             try {
@@ -488,7 +524,7 @@ const Admin = (() => {
               if (!code && Security.secure()) { await Security.createMemberAccount(m); m = Data.member(m.id); code = Store.get(`secrets/codes/${m.id}`); }
               code = code || m.code;
               if (!code) throw new Error('لا يوجد رمز دخول');
-              await Enroll.sendDirect(m.email.trim(), fill(subject, m, code), fill(body, m, code));
+              await Enroll.sendDirect(m.email.trim(), fill(subject, m, code), fill(body, m, code), mailer);
               Store.update(`members/${m.id}`, { credSentAt: Date.now(), credMailedAt: Date.now() }); ok++;
             } catch (e) { fail.push(`${m0.name}: ${e.message || e}`); }
           }
@@ -1297,6 +1333,7 @@ const Admin = (() => {
       }
       const sb = t.closest('[data-sub]'); if (sb) { ui.sub = ui.sub === sb.dataset.sub ? null : sb.dataset.sub; return render(root); }
       const am = t.closest('[data-add-member]'); if (am) return addMember(am.dataset.addMember, ui.cohort);
+      if (t.closest('[data-login-mailer]')) return loginMailerDialog();
       const ma = t.closest('[data-mail-all]'); if (ma && ma.dataset.mailAll) return mailAllCredentials(Data.cohort(ui.cohort), ma.dataset.mailAll);
       const sc = t.closest('[data-send-cred]'); if (sc) return sendCredentials(Data.member(sc.dataset.sendCred));
       const rg = t.closest('[data-regen]');

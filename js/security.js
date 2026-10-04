@@ -22,7 +22,7 @@ function memberPaths(id, role, partner) {
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
   content: [], announce: ['registrations', 'regform', 'cohorts', 'launches'], interests: ['interests'],
-  cohorts: ['contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
+  cohorts: ['loginMailer', 'contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
   sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraTaken', 'extraPairs', 'wishes'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
   messages: ['messages', 'inbox', 'tickets', 'ticketStaff', 'network', 'pairs'],
@@ -43,7 +43,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 12;
+const RULES_VERSION = 13;
 
 const Auth = {
   KEY: 'ishraq-auth',
