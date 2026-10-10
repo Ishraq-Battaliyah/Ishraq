@@ -150,9 +150,10 @@ const Portal = (() => {
       title: `<i class="fa-solid fa-calendar-plus"></i> ${extra ? 'إضافة موعد لجلسة إضافية' : 'إضافة موعد جديد'}`, size: 'md',
       body: `<form class="form-grid">
         ${extra ? '' : fieldInput({ k: 'session', label: 'رقم الجلسة', type: 'select', required: true, options: ['الأولى', 'الثانية', 'الثالثة'] }, ['الأولى', 'الثانية', 'الثالثة'][sessionNum - 1] || 'الأولى')}
-        <div class="field"><label>التاريخ <em>*</em></label><input type="date" name="date" min="${todayISO()}" required></div>
+        <div class="field"><label>التاريخ <em>*</em></label><input type="date" name="date" ${extra ? `min="${todayISO()}"` : ''} required></div>
         <div class="field"><label>بداية الجلسة (24 ساعة)</label>${timeSelect('start', '18:00')}</div>
         <div class="field"><label>نهاية الجلسة (24 ساعة)</label>${timeSelect('end', '19:00')}</div>
+        ${extra ? '' : '<p class="retro-note warn-note wide" hidden><i class="fa-solid fa-clock-rotate-left"></i> موعد سابق: تُوثّق به جلسة عُقدت خارج المنصة. بعد أن يحجزه المستفيد تُصنَّف «بانتظار التحديث» فوراً ليؤكد الطرفان إتمامها بالطريقة المعتادة.</p>'}
         ${fieldInput({ k: 'mode', label: 'نوع الجلسة', type: 'radio', required: true, wide: true, options: [{ value: 'inperson', label: 'حضورية' }, { value: 'online', label: 'إلكترونية' }, { value: 'both', label: 'كلاهما (يختار المستفيد)' }] }, 'both')}
         ${fieldInput({ k: 'summary', label: 'موجز عن المحتوى المتوقع للجلسة', type: 'textarea', wide: true, rows: 3 })}
       </form>`,
@@ -176,12 +177,18 @@ const Portal = (() => {
             if (!Bands.launchedAt(me.cohort)) { toast('تُفتح إضافة المواعيد بعد إطلاق الدفعة', 'error'); return false; }
             if (session > 1 && !first(session - 1)) { toast(`أضف مواعيد ${sessionName(session - 1)} أولاً`, 'error'); return false; }
             Store.push('slots', { mentorId: me.id, session, date: v.date, start, end, mode: v.mode, summary: v.summary, ts: Date.now() });
-            Data.menteesOf(me.id).forEach(mentee => Data.notify(mentee.id, `أضاف مرشدك موعداً جديداً لـ${sessionName(session)}: ${fmtDate(v.date)} ${start}`, { icon: 'fa-calendar-plus' }));
-            toast('تمت إضافة الموعد');
+            const retro = dateTimeOf(v.date, start) < new Date();
+            Data.menteesOf(me.id).forEach(mentee => Data.notify(mentee.id, retro ? `وثّق مرشدك جلسة سابقة لـ${sessionName(session)} بتاريخ ${fmtDate(v.date)} ${start}؛ احجزها من «المواعيد المتاحة» ليؤكد الطرفان إتمامها` : `أضاف مرشدك موعداً جديداً لـ${sessionName(session)}: ${fmtDate(v.date)} ${start}`, { icon: retro ? 'fa-clock-rotate-left' : 'fa-calendar-plus' }));
+            toast(retro ? 'أُضيف الموعد السابق؛ بعد حجز المستفيد له يؤكد الطرفان إتمامه' : 'تمت إضافة الموعد');
           }
         },
         { label: 'إلغاء', cls: 'ghost' }
-      ]
+      ],
+      onOpen: m => {
+        const f = $('form', m.body), note = $('.retro-note', m.body);
+        const upd = () => { if (note) note.hidden = !(f.date.value && dateTimeOf(f.date.value, readTime(f, 'start')) < new Date()); };
+        f.addEventListener('change', upd);
+      }
     });
   }
 
@@ -193,14 +200,17 @@ const Portal = (() => {
     const group = n => {
       const active = Data.activeBooking(me.id, n);
       const prevDone = n === 1 || Data.bookings({ menteeId: me.id, cohort: me.cohort }).some(b => b.session === n - 1 && b.status === 'done');
+      const prevActive = n > 1 && !!Data.activeBooking(me.id, n - 1);
       let inner;
       if (active) inner = `<div class="slot-state">${bookingPill(active, 'mentee')} <span>${fmtSlot(active)}</span></div>`;
-      else if (!prevDone) inner = `<div class="slot-state locked"><i class="fa-solid fa-lock"></i> يُتاح الحجز بعد إنجاز ${sessionName(n - 1)}</div>`;
+      else if (!prevDone && !(prevActive && slots.some(s => s.session === n && !taken.has(s.id) && Data.isRetroSlot(s)))) inner = `<div class="slot-state locked"><i class="fa-solid fa-lock"></i> يُتاح الحجز بعد إنجاز ${sessionName(n - 1)}</div>`;
       else {
-        const list = slots.filter(s => s.session === n && !taken.has(s.id) && dateTimeOf(s.date, s.start) > new Date());
+        // المواعيد السابقة الموثّقة (جلسات عُقدت خارج المنصة) تُحجز حتى قبل إنجاز الجلسة السابقة
+        const list = slots.filter(s => s.session === n && !taken.has(s.id) && (dateTimeOf(s.date, s.start) > new Date() ? prevDone : Data.isRetroSlot(s)))
+          .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
         inner = list.length ? `<ul class="slot-list">${list.map(s => `<li>
           <div><b><i class="fa-regular fa-calendar"></i> ${fmtDate(s.date)}</b><span><i class="fa-regular fa-clock"></i> ${tRange(s.start, s.end)}</span>
-          <span class="chip">${MODES[s.mode] || ''}</span>${s.summary ? `<p>${esc(s.summary)}</p>` : ''}</div>
+          <span class="chip">${MODES[s.mode] || ''}</span>${Data.isRetroSlot(s) ? '<span class="chip warn"><i class="fa-solid fa-clock-rotate-left"></i> جلسة سابقة (توثيق)</span>' : ''}${s.summary ? `<p>${esc(s.summary)}</p>` : ''}</div>
           <button class="btn sm primary" data-book="${esc(s.id)}"><i class="fa-solid fa-check"></i> احجز</button></li>`).join('')}</ul>`
           : '<p class="muted small">لا توجد مواعيد متاحة حالياً لهذه الجلسة</p>';
       }
@@ -217,6 +227,7 @@ const Portal = (() => {
       title: slot.extra ? 'حجز جلسة إضافية' : `حجز ${sessionName(slot.session)}`, size: 'sm',
       body: `<form><p class="confirm-msg"><b>${fmtSlot(slot)}</b><br>مع المرشد: ${esc(mentor?.name || '')}</p>
         ${slot.summary ? `<p class="muted">${esc(slot.summary)}</p>` : ''}
+        ${Data.isRetroSlot(slot) ? '<p class="warn-note small"><i class="fa-solid fa-clock-rotate-left"></i> هذه جلسة سابقة عُقدت خارج المنصة: ستُسجَّل «بانتظار التحديث» ليؤكد كل من المرشد والمستفيد إتمامها.</p>' : ''}
         ${slot.mode === 'both' ? fieldInput({ k: 'mode', label: 'اختر نوع الجلسة', type: 'radio', required: true, options: [{ value: 'inperson', label: 'حضورية' }, { value: 'online', label: 'إلكترونية (افتراضية)' }] }, '') : `<p><span class="chip">${MODES[slot.mode]}</span></p>`}
       </form>`,
       actions: [
