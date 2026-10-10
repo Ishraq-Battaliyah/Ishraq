@@ -43,7 +43,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 13;
+const RULES_VERSION = 14;
 
 const Auth = {
   KEY: 'ishraq-auth',

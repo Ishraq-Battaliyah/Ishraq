@@ -438,8 +438,6 @@ const Data = {
     const minutes = done.reduce((t, b) => t + minutesBetween(b.start, b.end), 0);
     return { done: done.length, minutes, hours: Math.round(minutes / 6) / 10, list: done };
   },
-  // موعد سابق وُثّق بعد وقوعه (جلسة عُقدت خارج المنصة): موعده أقدم من لحظة إضافته
-  isRetroSlot: s => !s.extra && !!s.ts && dateTimeOf(s.date, s.start) < new Date(s.ts),
   // اسم الجلسة كما يظهر في النصوص: أساسية (الأولى...) أو إضافية
   bookingName: b => (b.extra ? 'جلسة إضافية' : sessionName(b.session)),
   reviews: filter => Object.values(Object.assign({}, ...Object.values(Store.get('approvedReviews') || {}), Store.get('reviews') || {})).filter(Boolean).filter(r => !filter || Object.entries(filter).every(([k, v]) => r[k] === v))

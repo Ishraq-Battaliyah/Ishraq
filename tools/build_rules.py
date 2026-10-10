@@ -98,7 +98,7 @@ BOOKING = fields({
     "date": DATE, "start": TIME, "end": TIME, "mode": one_of('inperson', 'online', 'both'), "summary": s(1000),
     "status": one_of('upcoming', 'done', 'absent_mentor', 'absent_mentee', 'cancelled'), "ts": NUM,
     "doneByMentor": NUM_OR_BOOL, "doneByMentee": NUM_OR_BOOL, "statusTs": NUM, "statusBy": one_of('mentor', 'mentee', 'both', 'admin'),
-    "changedBy": one_of('mentor', 'mentee', 'admin'), "extra": BOOL,
+    "changedBy": one_of('mentor', 'mentee', 'admin'), "extra": BOOL, "retro": BOOL,
     # إلغاء الموعد بعد الحجز، وموعد بديل مقترح بانتظار موافقة الطرف الآخر، والجلسة الناتجة عن موعد مقترح من المستفيد
     "cancelledBy": one_of('mentor', 'mentee'), "cancelTs": NUM, "cancelReason": s(300), "wishId": ID,
     "proposal": fields({"date": DATE, "start": TIME, "end": TIME, "slotId": ID, "by": one_of('mentor', 'mentee'), "ts": NUM},
@@ -177,6 +177,10 @@ BOOKING_CREATE = (f"!data.exists() && {n('menteeId')} === {ME} && {n('status')} 
                   " && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists()"
                   f" && (({n('mentorId')} === {PARTNER}.val() && newData.child('session').exists() && !newData.child('extra').exists())"
                   f" || ({n('extra')} === true && {EXTRA_LINK_NEW}))")
+# جلسة سابقة عُقدت خارج المنصة: يوثّقها المرشد فتُحجز تلقائياً لمستفيده بانتظار تأكيد الطرفين
+BOOKING_RETRO = (f"!data.exists() && {n('mentorId')} === {ME} && {IS_PARTNER(n('menteeId'))} && {n('status')} === 'upcoming' && {n('retro')} === true"
+                 " && newData.child('session').exists() && !newData.child('extra').exists() && !newData.child('doneByMentor').exists() && !newData.child('doneByMentee').exists()"
+                 f" && {R}slots/' + {n('slotId')} + '/mentorId').val() === {ME}")
 # موعد بديل: يقترحه أي طرف (دون تغيير الموعد الحالي)، ولا يتغير الموعد إلا بموافقة الطرف الآخر على الاقتراح نفسه
 WISH_REF = f"{R}wishes/' + {n('wishId')})"
 BOOKING_FROM_WISH = (f"!data.exists() && {n('mentorId')} === {ME} && {n('status')} === 'upcoming' && newData.child('wishId').exists()"
@@ -268,7 +272,7 @@ rules = {
     "bookings": {
         ".read": any_of(can('sessions', 'cohorts', 'reviews'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
         **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
-        "$bid": {**w(f"{IS_MEMBER} && {LIVE} && (({BOOKING_CREATE}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
+        "$bid": {**w(f"{IS_MEMBER} && {LIVE} && (({BOOKING_CREATE}) || ({BOOKING_RETRO}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
     },
     "wishes": {
         ".read": any_of(can('sessions'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
