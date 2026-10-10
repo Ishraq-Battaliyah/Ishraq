@@ -30,8 +30,11 @@ const Bands = (() => {
 
   // أول لحظة أضاف فيها المرشد موعداً لهذه الجلسة
   function addedAt(mentorId, n) {
-    const times = Data.slots(mentorId).filter(s => s.session === n).map(s => s.ts || 0)
-      .concat(Data.bookings({ mentorId }).filter(b => b.session === n).map(b => b.ts || 0));
+    // جلسة عُقدت قبل الإطلاق ووُثّقت بعده تُحتسب في الأسبوع الأول
+    const L = launchedAt(Store.get(`members/${mentorId}/cohort`));
+    const at = x => (L && x.date && dateTimeOf(x.date, x.start) < new Date(L)) ? Math.min(x.ts || L, L) : (x.ts || 0);
+    const times = Data.slots(mentorId).filter(s => s.session === n).map(at)
+      .concat(Data.bookings({ mentorId }).filter(b => b.session === n).map(at));
     return times.length ? Math.min(...times) : null;
   }
 
