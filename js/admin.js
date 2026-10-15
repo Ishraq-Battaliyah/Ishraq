@@ -683,7 +683,7 @@ const Admin = (() => {
     const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
       ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span>${Bands.archivedAt(cid) ? '<span class="pill st-absent-mentee"><i class="fa-solid fa-box-archive"></i> مؤرشفة</span>' : ''}</div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
-    const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، ومن لم يُضف ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
+    const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب موعد انعقاد الجلسة فعلياً (بعد مصادقة الطرفين على إتمامها) وليس موعد إضافة المواعيد، ومن لم تنعقد جلسته ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
       : `<div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
       <p>يبدأ حساب المدد بعد الضغط على «إطلاق الدفعة» من صفحة الدفعات (زر أخضر في شريط الدفعة): فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12.</p></div>
       <button class="btn primary" data-goto-cohorts="${esc(cid)}"><i class="fa-solid fa-people-group"></i> الانتقال لصفحة الدفعات</button></div>`;
@@ -704,18 +704,18 @@ const Admin = (() => {
 
     const rows = Bands.SESSIONS.map(n => {
       const start = L ? Bands.windowStart(L.ts, n) : null;
-      const sts = L ? mentors.map(m => ({ m, st: Bands.status(m, n, now) })) : [];
+      const sts = L ? mentors.map(m => ({ m, st: Bands.matrix(m, n, now) })) : [];
       const cols = Bands.LEVELS.map(lv => {
         // يُصنَّف المرشد في عمود أسبوع إضافته لأول موعد؛ ومن لم يضف يظهر فقط بعد انقضاء الأسبوعين الأولين (من الأسبوع الثالث فما بعد) في عمود أسبوعه الحالي
-        const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k && (x.st.added || x.st.week >= 3));
+        const inBand = sts.filter(x => x.st.level && x.st.level.k === lv.k && (x.st.held || x.st.week >= 3));
         return `<div class="band ${lv.cls}"><header><i class="fa-solid ${lv.icon}"></i><b>${lv.name}</b><small>${lv.period}</small><em>${inBand.length}</em></header>
-          <ul>${inBand.map(({ m, st }) => `<li class="${st.added ? 'added' : 'waiting'}" data-band-mentor="${esc(m.id)}" data-session="${esc(n)}" title="${st.added ? 'أضاف الموعد' : 'لم يُضف الموعد بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
+          <ul>${inBand.map(({ m, st }) => `<li class="${st.held ? 'added' : 'waiting'}" data-band-mentor="${esc(m.id)}" data-session="${esc(n)}" title="${st.held ? 'انعقدت الجلسة' : 'لم تنعقد الجلسة بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
       }).join('');
       const pending = sts.filter(x => x.st.notStarted).length;
-      const early = sts.filter(x => !x.st.added && !x.st.notStarted && x.st.week < 3);   // لم يضيفوا بعد وما زالوا في الأسبوعين الأولين
+      const early = sts.filter(x => !x.st.held && !x.st.notStarted && x.st.week < 3);   // لم يضيفوا بعد وما زالوا في الأسبوعين الأولين
       return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4}${start ? ` · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}` : ''}</small>
         ${start && now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}
-        ${early.length ? `<span class="chip" title="${esc(early.map(x => x.m.name).join('، '))}"><i class="fa-regular fa-hourglass-half"></i> ${early.length} لم يضيفوا بعد (ما زالوا ضمن الأسبوعين الأولين)</span>` : ''}</h3>
+        ${early.length ? `<span class="chip" title="${esc(early.map(x => x.m.name).join('، '))}"><i class="fa-regular fa-hourglass-half"></i> ${early.length} لم تنعقد جلساتهم بعد (ما زالوا ضمن الأسبوعين الأولين)</span>` : ''}</h3>
         <div class="bands">${cols}</div></div>`;
     }).join('');
     return `<div class="panel bands-panel">${head}${launchBox}
@@ -763,18 +763,18 @@ const Admin = (() => {
   // تفاصيل المرشد داخل النطاق: الحالة وآخر تذكير وزر التذكير
   function bandMentorDialog(mid, n) {
     const m = Data.member(mid);
-    const st = m && Bands.status(m, n);
+    const st = m && Bands.matrix(m, n);
     if (!st || !st.level) return;
     const last = lastReminder(mid, n);
     openModal({
       title: `${sessionName(n)} — ${esc(m.name)}`, size: 'sm',
       body: `<div class="bp big">${avatar(m, 'lg')}<b>${esc(m.name)}</b></div>
         <div class="band-tag ${st.level.cls}"><i class="fa-solid ${st.level.icon}"></i> ${st.level.name}</div>
-        <p>${st.added ? `<i class="fa-solid fa-check"></i> أضاف أول موعد في ${fmtTs(st.at)} (الأسبوع ${st.week} من فترة الجلسة)` : `<i class="fa-solid fa-hourglass-half"></i> لم يُضف موعداً بعد — الأسبوع ${st.week} من فترة الجلسة`}</p>
+        <p>${st.held ? `<i class="fa-solid fa-check"></i> انعقدت الجلسة في ${fmtTs(st.at)} (الأسبوع ${st.week} من فترة الجلسة)` : `<i class="fa-solid fa-hourglass-half"></i> لم تنعقد الجلسة بعد — الأسبوع ${st.week} من فترة الجلسة`}</p>
         ${last ? `<p class="muted small"><i class="fa-regular fa-bell"></i> آخر تذكير: ${fmtTs(last.ts)}</p>` : ''}
         <p class="muted small">${st.level.action}</p>`,
       actions: [
-        ...(st.added ? [] : [{ label: '<i class="fa-solid fa-paper-plane"></i> إرسال تذكير', cls: 'primary', onClick: () => { setTimeout(() => remindDialog(mid, n), 220); } }]),
+        ...(st.held ? [] : [{ label: '<i class="fa-solid fa-paper-plane"></i> إرسال تذكير', cls: 'primary', onClick: () => { setTimeout(() => remindDialog(mid, n), 220); } }]),
         { label: '<i class="fa-solid fa-calendar-days"></i> جلسات المرشد', cls: 'ghost', onClick: () => { ui.sessMentor = mid; lastRoot && render(lastRoot); setTimeout(() => $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }), 300); } },
         { label: 'إغلاق', cls: 'ghost' }
       ]
@@ -785,7 +785,7 @@ const Admin = (() => {
 
   function remindDialog(mid, n) {
     const m = Data.member(mid);
-    const st = Bands.status(m, n);
+    const st = Bands.matrix(m, n);
     if (!m || !st || !st.level) return;
     const phone = m.whatsapp, email = m.email;
     openModal({
