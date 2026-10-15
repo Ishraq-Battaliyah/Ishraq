@@ -1,6 +1,6 @@
 /* إطلاق الدفعة ونطاقات متابعة تعثر الجلسات
    يبدأ الحساب من لحظة «إطلاق الدفعة»: فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12.
-   يُصنَّف المرشد حسب أسبوع إضافته لأول موعد للجلسة، أو حسب الأسبوع الحالي إن لم يُضفه بعد. */
+   تصنيف المصفوفة يعتمد على موعد انعقاد الجلسة فعلياً (بعد مصادقة الطرفين)، لا على موعد إضافة المواعيد. */
 const Bands = (() => {
   const WEEK = 7 * 864e5;
   const SESSIONS = [1, 2, 3];
@@ -36,6 +36,25 @@ const Bands = (() => {
     const times = Data.slots(mentorId).filter(s => s.session === n).map(at)
       .concat(Data.bookings({ mentorId }).filter(b => b.session === n).map(at));
     return times.length ? Math.min(...times) : null;
+  }
+
+  // موعد الانعقاد الفعلي لأول جلسة منجزة (صادق عليها الطرفان) للمرشد في هذه الجلسة، لا موعد إضافة المواعيد
+  function heldAt(mentorId, n) {
+    const times = Data.bookings({ mentorId }).filter(b => b.session === n && b.status === 'done' && b.date)
+      .map(b => dateTimeOf(b.date, b.start).getTime()).filter(t => !isNaN(t));
+    return times.length ? Math.min(...times) : null;
+  }
+
+  // تصنيف المصفوفة: حسب أسبوع الانعقاد الفعلي إن أُنجزت الجلسة (ما قبل الإطلاق يُعد أسبوعاً أول)، وإلا حسب الأسبوع الحالي
+  function matrix(mentor, n, now = Date.now()) {
+    const L = launchedAt(mentor.cohort);
+    if (!L) return null;
+    const start = windowStart(L, n);
+    const at = heldAt(mentor.id, n);
+    if (at != null) { const week = weekOf(at, start); return { n, held: true, at, week, level: levelOf(week), start }; }
+    if (now < start) return { n, notStarted: true, start };
+    const week = weekOf(now, start);
+    return { n, held: false, week, level: levelOf(week), start };
   }
 
   // حالة المرشد في جلسة: null قبل الإطلاق، أو {added, week, level, notStarted}
@@ -101,5 +120,5 @@ const Bands = (() => {
     Security.log('إلغاء إطلاق الدفعة', Data.cohort(cohortId)?.name || cohortId);
   }
 
-  return { WEEK, SESSIONS, LEVELS, launch, launchedAt, windowStart, weekOf, levelOf, addedAt, status, reminderText, mentorAlertText, passedText, doLaunch, undoLaunch, archivedAt, state, doArchive, undoArchive };
+  return { WEEK, SESSIONS, LEVELS, launch, launchedAt, windowStart, weekOf, levelOf, addedAt, heldAt, matrix, status, reminderText, mentorAlertText, passedText, doLaunch, undoLaunch, archivedAt, state, doArchive, undoArchive };
 })();
