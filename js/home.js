@@ -22,7 +22,10 @@ const Home = (() => {
       <span class="pill st-done"><i class="fa-solid fa-door-open"></i> التسجيل مفتوح</span>
       <h2>${esc(a.title || `سجّل الآن في ${c.name} ${c.year}`)}</h2>
       <p class="lead">${nl2br(a.body || `يسرّنا فتح باب التسجيل في ${c.name} من برنامج إشراق، مرشداً كنت أو مستفيداً.`)}</p>
-      <button class="btn primary lg" data-open-registration><i class="fa-solid fa-pen-to-square"></i> ${esc(a.button || 'سجّل في الدفعة')}</button>
+      <div class="enroll-btns">
+        <button class="btn primary lg" data-open-registration><i class="fa-solid fa-pen-to-square"></i> ${esc(a.button || 'سجّل في الدفعة')}</button>
+        <button class="btn light lg" data-open-track-registration><i class="fa-solid fa-briefcase"></i> تسجيل مسار مهني متخصص</button>
+      </div>
     </div></section>`;
   }
   // النموذج الافتراضي: نموذج التسجيل أثناء فتح التسجيل، وإلا نموذج تسجيل الاهتمام
@@ -343,6 +346,49 @@ const Home = (() => {
     });
   }
 
+  /* نموذج التسجيل في مسار مهني متخصص: منفصل بحقوله (trackform/fields) ونتائجه (trackregs)، وتقبله الإدارة وترحّله للمسار المناسب */
+  function openTrackRegistrationForm(opts = {}) {
+    let fields = Store.list('trackform/fields').sort(byOrder);
+    if (!fields.length && !Store.get('trackform/seeded')) fields = DEFAULT_FORM_FIELDS;   // قبل أن تعدّل الإدارة النموذج
+    const cohort = regCohort();
+    if (!cohort && !opts.preview) return toast('التسجيل مغلق حالياً', 'error');
+    const body = `<form class="form-grid interest-form" novalidate>
+      <p class="form-intro">سجّل في مسار إرشادي مخصص لمنسوبي قطاع مهني محدد ${cohort ? `ضمن <b>${esc(cohort.name)} ${esc(cohort.year)}</b>` : ''} من إشراق، وسيتواصل معك فريق البرنامج لترحيلك للمسار المناسب.</p>
+      ${fieldInput({ k: '__role', label: 'أرغب بالانضمام بصفتي', type: 'radio', required: true, options: [{ value: 'mentor', label: 'مرشد' }, { value: 'mentee', label: 'مستفيد' }], wide: true }, '')}
+      ${fieldInput({ k: '__sector', label: 'القطاع المهني الذي أنتمي له', required: true, placeholder: 'مثال: الصحة، التعليم، الهندسة', wide: true }, '')}
+      ${fieldInput({ k: '__prev', label: 'هل سبق لك التسجيل في إشراق كمرشد أو مستفيد؟', type: 'radio', required: true, options: [{ value: 'yes', label: 'نعم' }, { value: 'no', label: 'لا' }], wide: true }, 'no')}
+      <div class="field wide" data-prev-code hidden><label>رقم العضوية السابق <em>*</em></label><input name="__prevCode" dir="ltr" placeholder="مثال: M211" autocomplete="off"></div>
+      ${fields.map(f => (f.type === 'info' ? `<p class="form-note wide">${nl2br(f.label)}</p>`
+        : fieldInput({ ...f, k: f.id, options: String(f.options || '').split('\n').map(o => o.trim()).filter(Boolean), wide: f.type === 'textarea' }))).join('')}
+    </form>`;
+    openModal({
+      title: '<i class="fa-solid fa-briefcase"></i> التسجيل في مسار مهني متخصص', size: 'md', body,
+      onOpen: m => {
+        const sync = () => { const yes = $('input[name=__prev]:checked', m.body)?.value === 'yes'; $('[data-prev-code]', m.body).hidden = !yes; };
+        $$('input[name=__prev]', m.body).forEach(r => r.addEventListener('change', sync)); sync();
+      },
+      actions: [
+        {
+          label: '<i class="fa-solid fa-paper-plane"></i> إرسال', cls: 'primary', onClick: m => {
+            const form = $('form', m.body);
+            if (!validateForm(form)) return false;
+            if (opts.preview) { toast('هذه معاينة فقط ولا يُرسل منها'); return false; }
+            const v = readForm(form);
+            const prev = v.__prev === 'yes', prevCode = toEnDigits(String(v.__prevCode || '')).trim().toUpperCase().replace(/\s+/g, '');
+            if (prev && !/^[MB]\d{2,}$/.test(prevCode)) { toast('اكتب رقم العضوية السابق بصيغته الصحيحة، مثل M211', 'error'); return false; }
+            const answers = {};
+            fields.filter(f => f.type !== 'info').forEach(f => { answers[f.id] = v[f.id] ?? ''; });
+            const name = answers.f_name || Object.values(answers)[0] || '';
+            Store.push('trackregs', { kind: 'track', role: v.__role, sector: String(v.__sector).trim().slice(0, 200), answers, ts: Date.now(), ...(cohort ? { cohort: cohort.id } : {}), ...(prev ? { prev: true, prevCode } : {}) });
+            Data.notify('admin', `تسجيل جديد في مسار مهني متخصص (${v.__role === 'mentor' ? 'مرشد' : 'مستفيد'} — ${v.__sector}): ${name}`, { icon: 'fa-briefcase' });
+            openModal({ title: 'شكراً لك!', size: 'sm', body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p>تم استلام تسجيلك في المسار المهني المتخصص، وسيتواصل معك فريق إشراق قريباً.</p></div>`, actions: [{ label: 'إغلاق', cls: 'primary' }] });
+          }
+        },
+        { label: 'إلغاء', cls: 'ghost' }
+      ]
+    });
+  }
+
   /* نموذج تسجيل الاهتمام */
   function openInterestForm() {
     const fields = Store.list('form/fields').sort(byOrder);
@@ -482,10 +528,11 @@ const Home = (() => {
 
   document.addEventListener('click', e => {
     if (e.target.closest('[data-open-registration]')) { e.preventDefault(); openRegistrationForm(); }
+    if (e.target.closest('[data-open-track-registration]')) { e.preventDefault(); openTrackRegistrationForm(); }
     else if (e.target.closest('[data-open-form]')) { e.preventDefault(); openDefaultForm(); }
     const l = e.target.closest('[data-login]');
     if (l) openLogin(l.dataset.login);
   });
 
-  return { render, renderMembers, maybeAnnouncement, openInterestForm, openRegistrationForm };
+  return { render, renderMembers, maybeAnnouncement, openInterestForm, openRegistrationForm, openTrackRegistrationForm };
 })();

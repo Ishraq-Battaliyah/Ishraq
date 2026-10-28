@@ -14,7 +14,9 @@ const Admin = (() => {
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
-  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null };
+  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null, track: '' };
+  // المسار المفتوح حالياً داخل الدفعة المفتوحة (فارغ = الدفعة العامة)
+  const curTrack = () => (Data.track(ui.track)?.cohort === ui.cohort ? ui.track : '');
 
   // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
   const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
@@ -26,7 +28,7 @@ const Admin = (() => {
     const tabs = TABS.filter(t => tabAllowed(t.id));
     if (ui.tab && !tabAllowed(ui.tab)) ui.tab = tabs[0]?.id || null;
     const pendingReviews = Data.reviews().filter(r => r.status === 'pending' && r.type !== 'program').length;
-    const badges = { reviews: pendingReviews, announce: Store.list('registrations').filter(x => !x.seen).length, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
+    const badges = { reviews: pendingReviews, announce: Store.list('registrations').filter(x => !x.seen).length + Store.list('trackregs').filter(x => !x.seen).length, interests: Store.list('interests').filter(x => !x.seen).length, support: Support.unreadAdmin(), events: Events.unseen() };
     root.innerHTML = `<div class="dash admin">
       ${Portal.topbar('admin')}
       <main class="container dash-main">
@@ -329,7 +331,7 @@ const Admin = (() => {
       <button class="btn primary" data-add-cohort><i class="fa-solid fa-plus"></i> إضافة دفعة جديدة</button></div>
       <div class="cohort-list">${cohorts.map(c => `<div class="cohort ${ui.cohort === c.id ? 'open' : ''}">
         <div class="cohort-row"><button class="cohort-btn" data-cohort="${esc(c.id)}"><i class="fa-solid fa-users"></i> ${esc(c.name)} <span class="year">${esc(c.year)}</span>
-          <small>${Data.cohortMembers('mentor', c.id).length} مرشد · ${Data.cohortMembers('mentee', c.id).length} مستفيد</small><i class="fa-solid fa-chevron-down caret"></i></button>
+          <small>${Data.cohortMembers('mentor', c.id).length} مرشد · ${Data.cohortMembers('mentee', c.id).length} مستفيد${Data.tracks(c.id).length ? ` · ${Data.tracks(c.id).length} مسار تخصصي` : ''}</small><i class="fa-solid fa-chevron-down caret"></i></button>
           ${launchControls(c)}
           <button class="icon-btn" data-edit-cohort="${esc(c.id)}" title="تعديل"><i class="fa-solid fa-pen"></i></button>
           <button class="icon-btn danger" data-del-cohort="${esc(c.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></div>
@@ -351,21 +353,88 @@ const Admin = (() => {
   }
 
   function cohortBody(c) {
+    const tracks = Data.tracks(c.id);
+    const cur = tracks.find(t => t.id === ui.track) || null;
+    const bar = `<div class="track-tabs" role="tablist" aria-label="مسارات الدفعة">
+      <button class="${cur ? '' : 'active'}" data-track=""><i class="fa-solid fa-people-group"></i> الدفعة العامة</button>
+      ${tracks.map(t => `<button class="${cur?.id === t.id ? 'active' : ''}" data-track="${esc(t.id)}"><i class="fa-solid fa-briefcase"></i> ${esc(t.name)}</button>`).join('')}
+      ${Security.can('cohorts') ? '<button class="add-track" data-add-track><i class="fa-solid fa-plus"></i> مسار تخصصي</button>' : ''}</div>`;
+    if (cur) return `<div class="cohort-body">${bar}${trackBody(c, cur)}</div>`;
     const subs = [['mentor', 'معلومات المرشدين', 'fa-user-tie'], ['mentee', 'معلومات المستفيدين', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project']];
-    return `<div class="cohort-body">
-      <div class="sub-tabs">${subs.map(([k, l, i]) => `<button class="${ui.sub === k ? 'active' : ''}" data-sub="${esc(k)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
-      ${ui.sub === 'mentor' || ui.sub === 'mentee' ? membersBlock(c, ui.sub) : ''}
-      ${ui.sub === 'network' ? networkBlock(c) : ''}
+    const sub = subs.some(x => x[0] === ui.sub) ? ui.sub : null;
+    return `<div class="cohort-body">${bar}
+      ${tracks.length ? cohortSummary(c, tracks) : ''}
+      <div class="sub-tabs">${subs.map(([k, l, i]) => `<button class="${sub === k ? 'active' : ''}" data-sub="${esc(k)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
+      ${sub === 'mentor' || sub === 'mentee' ? membersBlock(c, sub) : ''}
+      ${sub === 'network' ? networkBlock(c) : ''}
     </div>`;
   }
 
-  function membersBlock(c, role) {
-    const list = Data.cohortMembers(role, c.id);
+  // إحصاءات مجموعة أعضاء: العدد والجلسات المنجزة والساعات
+  function groupStats(mentors, mentees) {
+    const ids = new Set(mentors.map(m => m.id));
+    const s = Data.stats(Data.bookings().filter(b => ids.has(b.mentorId)));
+    return { mentors: mentors.length, mentees: mentees.length, done: s.done, hours: s.hours, all: s };
+  }
+
+  // ملخص الدفعة: العامة + كل مسار تخصصي = إحصائية السنة الكاملة
+  function cohortSummary(c, tracks) {
+    const rows = [{ name: 'الدفعة العامة', ...groupStats(Data.scopeMembers('mentor', c.id), Data.scopeMembers('mentee', c.id)) },
+      ...tracks.map(t => ({ name: t.name, track: true, ...groupStats(Data.scopeMembers('mentor', c.id, t.id), Data.scopeMembers('mentee', c.id, t.id)) }))];
+    const tot = groupStats(Data.cohortMembers('mentor', c.id), Data.cohortMembers('mentee', c.id));
+    const tr = (r, cls = '') => `<tr class="${cls}"><td data-l="المجموعة">${r.track ? '<i class="fa-solid fa-briefcase"></i> ' : ''}<b>${esc(r.name)}</b></td><td data-l="المرشدون" class="num">${r.mentors}</td><td data-l="المستفيدون" class="num">${r.mentees}</td><td data-l="الجلسات المنجزة" class="num">${r.done}</td><td data-l="الساعات" class="num">${r.hours}</td></tr>`;
+    return `<div class="track-summary"><h3 class="sub"><i class="fa-solid fa-chart-column"></i> إحصائية ${esc(c.name)} الكاملة (تشمل المسارات التخصصية)</h3>
+      <div class="table-wrap"><table class="table rtable"><thead><tr><th>المجموعة</th><th>المرشدون</th><th>المستفيدون</th><th>الجلسات المنجزة</th><th>الساعات</th></tr></thead>
+      <tbody>${rows.map(r => tr(r)).join('')}${tr({ name: 'إجمالي السنة', ...tot }, 'total')}</tbody></table></div></div>`;
+  }
+
+  // لوحة إدارة المسار التخصصي: إحصاءاته وقوائمه وشبكته والمسجلون فيه
+  function trackBody(c, t) {
+    const subs = [['mentor', 'المرشدون', 'fa-user-tie'], ['mentee', 'المستفيدون', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project'], ['tregs', 'المسجلون', 'fa-user-plus']];
+    const sub = subs.some(x => x[0] === ui.sub) ? ui.sub : 'mentor';
+    const mentors = Data.scopeMembers('mentor', c.id, t.id), mentees = Data.scopeMembers('mentee', c.id, t.id);
+    const g = groupStats(mentors, mentees);
+    const k = (v, l, i) => `<div class="kpi"><i class="fa-solid ${i}"></i><b>${v}</b><span>${l}</span></div>`;
+    return `<div class="track-head"><div><h3><i class="fa-solid fa-briefcase"></i> ${esc(t.name)}</h3>
+        <small class="muted">${t.sector ? `القطاع المهني: ${esc(t.sector)} · ` : ''}مسار تخصصي ضمن ${esc(c.name)} ${esc(c.year)}، وأعداده تدخل في إحصائية الدفعة العامة</small></div>
+      ${Security.can('cohorts') ? `<div class="head-actions"><button class="btn ghost sm" data-edit-track="${esc(t.id)}"><i class="fa-solid fa-pen"></i> تعديل</button>
+        <button class="btn ghost sm danger" data-del-track="${esc(t.id)}"><i class="fa-solid fa-trash"></i> حذف المسار</button></div>` : ''}</div>
+      <div class="kpis track-kpis">${k(g.mentors, 'مرشد', 'fa-user-tie')}${k(g.mentees, 'مستفيد', 'fa-user-graduate')}${k(g.done, 'جلسة منجزة', 'fa-circle-check')}${k(g.hours, 'ساعة إرشادية', 'fa-clock')}</div>
+      ${statsBoxes(g.all, true)}
+      <div class="sub-tabs">${subs.map(([key, l, i]) => `<button class="${sub === key ? 'active' : ''}" data-sub="${esc(key)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
+      ${sub === 'mentor' || sub === 'mentee' ? membersBlock(c, sub, t) : ''}
+      ${sub === 'network' ? networkBlock(c, t) : ''}
+      ${sub === 'tregs' ? Enroll.trackRegs({ exportBar, sendCredentials, announcementForm }, { cohort: c.id, track: t.id }) : ''}`;
+  }
+
+  function editTrack(c, t) {
+    openModal({
+      title: t ? 'تعديل المسار التخصصي' : `مسار تخصصي جديد في ${esc(c.name)}`, size: 'sm',
+      body: `<form class="form-grid one">
+        ${fieldInput({ k: 'name', label: 'اسم المسار', required: true, placeholder: 'مثال: مسار منسوبي قطاع الصحة' }, t?.name || '')}
+        ${fieldInput({ k: 'sector', label: 'القطاع المهني (اختياري)', placeholder: 'مثال: الصحة، التعليم، الهندسة' }, t?.sector || '')}
+        <p class="muted small">أعضاء المسار يبقون ضمن ${esc(c.name)} فتدخل أعدادهم في إحصائية السنة العامة، ولهم لوحة إدارة مستقلة بتبويب أعلى الدفعة.</p>
+      </form>`,
+      actions: [{
+        label: 'حفظ', cls: 'primary', onClick: m => {
+          const f = $('form', m.body);
+          if (!validateForm(f)) return false;
+          const v = readForm(f), data = { name: v.name.trim(), sector: String(v.sector || '').trim() };
+          if (t) Store.update(`tracks/${t.id}`, data);
+          else { const id = Store.newId(); Store.set(`tracks/${id}`, { id, cohort: c.id, ...data, createdAt: Date.now() }); ui.track = id; ui.sub = 'mentor'; }
+          Security.log(t ? 'تعديل مسار تخصصي' : 'إضافة مسار تخصصي', data.name, c.name);
+        }
+      }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
+
+  function membersBlock(c, role, track) {
+    const list = Data.scopeMembers(role, c.id, track?.id);
     const full = Security.isFull();
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
     return `<div class="members-block">
-      <div class="block-head"><h3>${label} — ${esc(c.name)} <span class="count">${list.length}</span></h3>
-        <div class="head-actions">${exportBar(`members:${c.id}:${role}`)}
+      <div class="block-head"><h3>${label} — ${esc(track ? track.name : c.name)} <span class="count">${list.length}</span></h3>
+        <div class="head-actions">${exportBar(`members:${c.id}:${role}:${track?.id || ''}`)}
         <button class="btn ghost sm" data-csv-template="${esc(role)}"><i class="fa-solid fa-file-arrow-down"></i> تحميل قالب CSV</button>
         ${full ? `<button class="btn primary sm" data-mail-all="${esc(role)}" ${list.length ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال معلومات الدخول للكل</button>
         <button class="btn ghost sm" data-login-mailer title="سكربت مستقل عن سكربت الشهادات"><i class="fa-solid fa-gear"></i> إعداد سكربت معلومات الدخول${loginMailer() ? ' <i class="fa-solid fa-circle-check ok"></i>' : ''}</button>` : ''}</div></div>
@@ -393,7 +462,7 @@ const Admin = (() => {
     download(`ishraq-${role === 'mentor' ? 'mentors' : 'mentees'}-template.csv`, toCSV(CSV_COLS.map(c => c[1]), [sample]));
   }
 
-  async function importCSV(file, role, cohortId) {
+  async function importCSV(file, role, cohortId, trackId) {
     const text = await readTextFile(file);
     const rows = parseCSV(text);
     if (rows.length < 2) return toast('الملف فارغ أو غير صالح', 'error');
@@ -416,7 +485,7 @@ const Admin = (() => {
     const failed = [];
     for (let i = 0; i < items.length; i++) {
       $('[data-prog]', prog.el).textContent = `${i + 1} / ${items.length} — ${items[i].name}`;
-      const r = await Data.addMember(role, cohortId, items[i]);
+      const r = await Data.addMember(role, cohortId, items[i], trackId);
       if (r.error) failed.push(`${items[i].name}: ${r.error}`);
     }
     prog.close();
@@ -424,7 +493,7 @@ const Admin = (() => {
     else toast(`تمت إضافة ${items.length} بطاقة بنجاح مع رموز الدخول`);
   }
 
-  function addMember(role, cohortId) {
+  function addMember(role, cohortId, trackId) {
     const preview = Data.nextCode(role, cohortId).code;
     const fields = PROFILE_FIELDS.map(f => ({ ...f, label: typeof f.label === 'object' ? f.label[role] : f.label, wide: f.type === 'textarea' || f.k === 'photo' }));
     openModal({
@@ -435,7 +504,7 @@ const Admin = (() => {
           const f = $('form', m.body);
           if (!validateForm(f)) return false;
           const btn = $('[data-act="0"]', m.el); btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جارٍ الحفظ...';
-          const mem = await Data.addMember(role, cohortId, readForm(f));
+          const mem = await Data.addMember(role, cohortId, readForm(f), trackId);
           if (mem.error) toast(`أُضيفت البطاقة ${mem.code} لكن تعذّر إنشاء رمز الدخول: ${mem.error}`, 'error');
           else toast(`تمت الإضافة — رمز الدخول ${mem.secret}`);
         }
@@ -491,9 +560,9 @@ const Admin = (() => {
     subject: 'معلومات الدخول إلى منصة إشراق — {cohort}',
     body: 'السلام عليكم ورحمة الله وبركاته،\n\nعزيزنا {name}،\nتمت إضافتك {role} في {cohort} ببرنامج إشراق، وهذه بيانات دخولك الخاصة بك (لا تشاركها مع أحد):\n\nرابط المنصة: {site}\nرقم العضوية: {code}\nرمز الدخول السري: {secret}\n\nطريقة الدخول:\n1) افتح رابط المنصة.\n2) في الصفحة الرئيسية اضغط زر «دخول {rolebtn}».\n3) أدخل رمز الدخول السري أعلاه.\nبعد الدخول يمكنك تعديل بياناتك وإدارة حجوزات الجلسات وكتابة التقييمات.\n\nمع أطيب التمنيات،\nإدارة برنامج إشراق'
   };
-  async function mailAllCredentials(c, role) {
+  async function mailAllCredentials(c, role, trackId) {
     const label = role === 'mentor' ? 'المرشدين' : 'المستفيدين';
-    const list = Data.cohortMembers(role, c.id);
+    const list = Data.scopeMembers(role, c.id, trackId);
     if (!list.length) return toast(`لا يوجد ${label} في هذه الدفعة`, 'error');
     const mailer = loginMailer();
     if (!mailer) return loginMailerDialog(() => mailAllCredentials(c, role));
@@ -590,17 +659,22 @@ const Admin = (() => {
   }
 
   // الشبكة: لكل مرشد مستفيد واحد أو أكثر، ولكل مستفيد مرشد واحد فقط
-  const netFromStore = c => Object.fromEntries(Object.entries(Store.get(`network/${c}`) || {}).map(([k, v]) => [k, Data.netIds(v)]).filter(([, v]) => v.length));
+  // الشبكة محفوظة لكل دفعة؛ كل مسار تخصصي (أو الدفعة العامة) يرى ويحفظ مرشديه فقط
+  const netScopeIds = (c, trackId) => new Set(Data.scopeMembers('mentor', c, trackId).map(m => m.id));
+  const netFromStore = (c, trackId) => { const ids = netScopeIds(c, trackId); return Object.fromEntries(Object.entries(Store.get(`network/${c}`) || {}).filter(([k]) => ids.has(k)).map(([k, v]) => [k, Data.netIds(v)]).filter(([, v]) => v.length)); };
   const netNorm = draft => JSON.stringify(Object.entries(draft).filter(([, v]) => v.length).map(([k, v]) => [k, [...v].sort()]).sort());
-  function networkBlock(c) {
-    const mentors = Data.members('mentor', c.id), mentees = Data.members('mentee', c.id);
-    if (ui.netCohort !== c.id) { ui.netCohort = c.id; ui.netDraft = netFromStore(c.id); }
+  function networkBlock(c, track) {
+    const tid = track?.id || '';
+    const inScope = m => (Data.track(m.track)?.cohort === c.id ? m.track : '') === tid;
+    const mentors = Data.members('mentor', c.id).filter(inScope), mentees = Data.members('mentee', c.id).filter(inScope);
+    const netKey = `${c.id}|${tid}`;
+    if (ui.netCohort !== netKey) { ui.netCohort = netKey; ui.netDraft = netFromStore(c.id, tid); }
     const draft = ui.netDraft;
     const used = new Set(Object.values(draft).flat());
-    const dirty = netNorm(draft) !== netNorm(netFromStore(c.id));
+    const dirty = netNorm(draft) !== netNorm(netFromStore(c.id, tid));
     const nameOf = id => Data.member(id)?.name || 'محذوف';
     return `<div class="network-block">
-      <div class="block-head"><h3>الشبكة: ربط المرشدين بالمستفيدين</h3>
+      <div class="block-head"><h3>الشبكة: ربط المرشدين بالمستفيدين${track ? ` — ${esc(track.name)}` : ''}</h3>
       <div class="head-actions">${exportBar(`network:${c.id}`)}<button class="btn primary" data-save-net ${dirty ? '' : 'disabled'}><i class="fa-solid fa-floppy-disk"></i> حفظ الشبكة</button></div></div>
       <p class="muted small">يمكن ربط المرشد الواحد بأكثر من مستفيد (أضف مستفيداً آخر من القائمة تحت أسماء مستفيديه)، أما المستفيد فله مرشد واحد فقط.</p>
       ${dirty ? '<p class="warn-note"><i class="fa-solid fa-triangle-exclamation"></i> توجد تعديلات غير محفوظة</p>' : ''}
@@ -1256,7 +1330,11 @@ const Admin = (() => {
       r.type === 'program' ? (r.featured ? 'معروض' : '') : ({ pending: 'بانتظار الاعتماد', approved: 'معتمد', rejected: 'غير معتمد' }[r.status]), fmtTs(r.ts)];
     switch (kind) {
       case 'content': return { title: 'أقسام الصفحة الرئيسية', headers: ['الترتيب', 'النوع', 'العنوان', 'الحالة', 'المحتوى'], rows: Store.list('content/sections').sort(byOrder).map((s, i) => [i + 1, SECTION_TYPES[s.type]?.label, s.title || s.brand || '', s.visible === false ? 'مخفي' : 'ظاهر', [s.body, ...(s.items || []).map(it => [it.title, it.text, it.value, it.label, it.people].filter(Boolean).join(' - '))].filter(Boolean).join(' | ')]) };
-      case 'members': return { title: `${a && Data.cohort(a)?.name} — ${b === 'mentor' ? 'المرشدون' : 'المستفيدون'}`, headers: memberHead, rows: Data.members(b, a).map(memberRow) };
+      case 'members': {
+        const tid = key.split(':')[3];   // غير معرّف = كل الدفعة، فارغ = الدفعة العامة، غير ذلك = مسار
+        const inScope = m => tid === undefined || (Data.track(m.track)?.cohort === a ? m.track : '') === tid;
+        return { title: `${(tid && Data.track(tid)?.name) || (a && Data.cohort(a)?.name)} — ${b === 'mentor' ? 'المرشدون' : 'المستفيدون'}`, headers: memberHead, rows: Data.members(b, a).filter(inScope).map(memberRow) };
+      }
       case 'network': return { title: `الشبكة — ${Data.cohort(a)?.name}`, headers: ['رقم المرشد', 'المرشد', 'رقم المستفيد', 'المستفيد'], rows: Data.members('mentor', a).flatMap(m => { const xs = Data.menteesOf(m.id); return xs.length ? xs.map(x => [m.code, m.name, x.code, x.name]) : [[m.code, m.name, '', '']]; }) };
       case 'sessions': {
         const ids = new Set(Data.members('mentor').filter(m => inCohort('sessCohort', m)).map(m => m.id));
@@ -1269,6 +1347,7 @@ const Admin = (() => {
       case 'event': case 'events': return Events.exportData(key);
       case 'adminLog': return { title: 'سجل إجراءات المشرفين', headers: ['الوقت', 'المشرف', 'البريد', 'الإجراء', 'على', 'التفاصيل'], rows: Store.list('adminLog').sort((a, b) => b.ts - a.ts).map(l => [fmtTs(l.ts), l.by?.name || '', l.by?.email || '', l.action, l.target || '', l.details || '']) };
       case 'interests': { const r = interestRows(); return { title: 'المهتمون بالتسجيل', headers: r.headers, rows: r.rows }; }
+      case 'trackregs': { const r = Enroll.trackRegRows(); return { title: 'المسجلون في مسار مهني متخصص', headers: r.headers, rows: r.rows }; }
       case 'registrations': { const r = registrationRows(); return { title: 'المسجلون في الدفعة المعلنة', headers: r.headers, rows: r.rows }; }
     }
     return null;
@@ -1322,19 +1401,29 @@ const Admin = (() => {
       if (t.closest('[data-preview-form]')) return Home.openInterestForm();
       // الدفعات
       const cb = t.closest('[data-cohort]');
-      if (cb) { ui.cohort = ui.cohort === cb.dataset.cohort ? null : cb.dataset.cohort; ui.sub = ui.cohort ? (ui.sub || 'mentor') : null; return render(root); }
+      if (cb) { ui.cohort = ui.cohort === cb.dataset.cohort ? null : cb.dataset.cohort; ui.track = ''; ui.sub = ui.cohort ? (ui.sub || 'mentor') : null; return render(root); }
+      const tb = t.closest('[data-track]'); if (tb) { ui.track = tb.dataset.track; ui.sub = 'mentor'; return render(root); }
+      if (t.closest('[data-add-track]')) return editTrack(Data.cohort(ui.cohort));
+      const et = t.closest('[data-edit-track]'); if (et) return editTrack(Data.cohort(ui.cohort), Data.track(et.dataset.editTrack));
+      const dt = t.closest('[data-del-track]');
+      if (dt) {
+        const tr = Data.track(dt.dataset.delTrack);
+        if (Store.list('members').some(m => m.track === tr.id)) return toast('لا يمكن حذف مسار يحتوي على أعضاء', 'error');
+        return confirmDialog(`حذف مسار «${esc(tr.name)}»؟`, { danger: true, ok: 'حذف' }).then(ok => { if (ok) { ui.track = ''; Store.remove(`tracks/${tr.id}`); Security.log('حذف مسار تخصصي', tr.name); } });
+      }
       if (t.closest('[data-add-cohort]')) return editCohort();
       const ec = t.closest('[data-edit-cohort]'); if (ec) return editCohort(Data.cohort(ec.dataset.editCohort));
       const dc = t.closest('[data-del-cohort]');
       if (dc) {
         const c = Data.cohort(dc.dataset.delCohort);
         if (Store.list('members').some(m => m.cohort === c.id)) return toast('لا يمكن حذف دفعة تحتوي على أعضاء', 'error');
+        if (Data.tracks(c.id).length) return toast('احذف المسارات التخصصية في الدفعة أولاً', 'error');
         return confirmDialog(`حذف «${esc(c.name)}»؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`cohorts/${c.id}`));
       }
       const sb = t.closest('[data-sub]'); if (sb) { ui.sub = ui.sub === sb.dataset.sub ? null : sb.dataset.sub; return render(root); }
-      const am = t.closest('[data-add-member]'); if (am) return addMember(am.dataset.addMember, ui.cohort);
+      const am = t.closest('[data-add-member]'); if (am) return addMember(am.dataset.addMember, ui.cohort, curTrack());
       if (t.closest('[data-login-mailer]')) return loginMailerDialog();
-      const ma = t.closest('[data-mail-all]'); if (ma && ma.dataset.mailAll) return mailAllCredentials(Data.cohort(ui.cohort), ma.dataset.mailAll);
+      const ma = t.closest('[data-mail-all]'); if (ma && ma.dataset.mailAll) return mailAllCredentials(Data.cohort(ui.cohort), ma.dataset.mailAll, curTrack());
       const sc = t.closest('[data-send-cred]'); if (sc) return sendCredentials(Data.member(sc.dataset.sendCred));
       const rg = t.closest('[data-regen]');
       if (rg) {
@@ -1375,8 +1464,12 @@ const Admin = (() => {
       if (un) { const [mid, bid] = un.dataset.unassign.split('|'); ui.netDraft[mid] = (ui.netDraft[mid] || []).filter(x => x !== bid); return render(root); }
       if (t.closest('[data-save-net]')) {
         const clean = {}; Object.entries(ui.netDraft).forEach(([k, v]) => { if (v.length) clean[k] = Object.fromEntries(v.map(i => [i, true])); });
-        const before = Object.fromEntries(Object.entries(Store.get(`network/${ui.cohort}`) || {}).map(([k, v]) => [k, Data.netIds(v)]));
-        Store.set(`network/${ui.cohort}`, clean);
+        const existing = Store.get(`network/${ui.cohort}`) || {};
+        const before = Object.fromEntries(Object.entries(existing).map(([k, v]) => [k, Data.netIds(v)]));
+        // نستبدل مرشدي النطاق المفتوح (العامة أو المسار) فقط ونُبقي بقية الدفعة كما هي
+        const scope = netScopeIds(ui.cohort, curTrack());
+        const merged = Object.fromEntries(Object.entries(existing).filter(([k]) => !scope.has(k)));
+        Store.set(`network/${ui.cohort}`, { ...merged, ...clean });
         Data.syncPairs(ui.cohort);
         Object.entries(clean).forEach(([mid, map]) => Object.keys(map).forEach(bid => {
           if (!(before[mid] || []).includes(bid)) { Data.notify(mid, `تم تعيين المستفيد ${Data.member(bid)?.name} لك`, { icon: 'fa-handshake' }); Data.notify(bid, `تم تعيين المرشد ${Data.member(mid)?.name} لك`, { icon: 'fa-handshake' }); }
@@ -1391,7 +1484,7 @@ const Admin = (() => {
       const ir = t.closest('[data-int-role]'); if (ir) { ui.intRole = ir.dataset.intRole; return render(root); }
       const dint = t.closest('[data-del-interest]'); if (dint) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`interests/${dint.dataset.delInterest}`));
       if (t.closest('[data-goto-form]')) { ui.tab = 'content'; render(root); return $('[data-sortable-fields]')?.scrollIntoView({ behavior: 'smooth' }); }
-      const gc = t.closest('[data-goto-cohorts]'); if (gc) { ui.tab = 'cohorts'; ui.cohort = gc.dataset.gotoCohorts; ui.sub = ui.sub || 'mentor'; return render(root); }
+      const gc = t.closest('[data-goto-cohorts]'); if (gc) { ui.tab = 'cohorts'; ui.cohort = gc.dataset.gotoCohorts; ui.track = gc.dataset.gotoTrack || ''; ui.sub = ui.sub || 'mentor'; return render(root); }
       const ar = t.closest('[data-archive]');
       if (ar) {
         const c = Data.cohort(ar.dataset.archive);
@@ -1454,7 +1547,7 @@ const Admin = (() => {
       if (t.matches('[data-net]')) { if (t.value) ui.netDraft[t.dataset.net] = [...(ui.netDraft[t.dataset.net] || []), t.value]; return render(root); }
       if (t.matches('[data-feature]')) { Store.set(`reviews/${t.dataset.feature}/featured`, t.checked); return Security.setFeatured(Store.get(`reviews/${t.dataset.feature}`), t.checked); }
       if (t.matches('[data-restore]') && t.files[0]) { const f = t.files[0]; t.value = ''; return restoreBackup(f); }
-      if (t.matches('.dropzone input[type=file]') && t.files[0]) importCSV(t.files[0], t.closest('[data-drop]').dataset.drop, ui.cohort);
+      if (t.matches('.dropzone input[type=file]') && t.files[0]) importCSV(t.files[0], t.closest('[data-drop]').dataset.drop, ui.cohort, curTrack());
     };
 
     root.onsubmit = e => {
@@ -1484,7 +1577,7 @@ const Admin = (() => {
     $$('[data-drop]', root).forEach(z => {
       ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
       ['dragleave', 'drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));
-      z.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; f && importCSV(f, z.dataset.drop, ui.cohort); });
+      z.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; f && importCSV(f, z.dataset.drop, ui.cohort, curTrack()); });
     });
   }
 

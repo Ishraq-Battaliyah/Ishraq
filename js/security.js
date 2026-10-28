@@ -5,7 +5,7 @@
  * - الوضع السابق (بدون apiKey أو محلياً): الدخول بالرموز داخل الصفحة كما كان.
  */
 
-const PUBLIC_PATHS = ['content', 'form', 'regform', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail'];
+const PUBLIC_PATHS = ['content', 'form', 'regform', 'cohorts', 'announcement', 'meta', 'events', 'members', 'featured', 'launches', 'news', 'extraConfig', 'notifyMail', 'tracks', 'trackform'];
 // العضو يقرأ سجلاته فقط: استعلامات تفرضها القواعد على مستوى كل سجل
 const q = (path, child, equalTo) => ({ path, child, equalTo });
 function memberPaths(id, role, partner) {
@@ -21,8 +21,8 @@ function memberPaths(id, role, partner) {
 }
 // المشرف الجزئي يقرأ ما تحتاجه صلاحياته فقط
 const PERM_PATHS = {
-  content: [], announce: ['registrations', 'regform', 'cohorts', 'launches'], interests: ['interests'],
-  cohorts: ['loginMailer', 'contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
+  content: [], announce: ['registrations', 'regform', 'trackregs', 'trackform', 'cohorts', 'launches'], interests: ['interests'],
+  cohorts: ['loginMailer', 'trackregs', 'contacts', 'uids', 'counters', 'network', 'pairs', 'bookings', 'slots', 'myRegs'],
   sessions: ['contacts', 'network', 'pairs', 'bookings', 'slots', 'extraTaken', 'extraPairs', 'wishes'],
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
   messages: ['messages', 'inbox', 'tickets', 'ticketStaff', 'network', 'pairs'],
@@ -43,7 +43,7 @@ const PERMISSIONS = [
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 13;
+const RULES_VERSION = 14;
 
 const Auth = {
   KEY: 'ishraq-auth',

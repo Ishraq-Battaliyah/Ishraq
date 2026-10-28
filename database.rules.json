@@ -171,7 +171,7 @@
         ".read": true,
         ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
         "$mid": {
-          ".write": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid && newData.exists() && newData.child('code').val() === data.child('code').val() && newData.child('role').val() === data.child('role').val() && newData.child('cohort').val() === data.child('cohort').val() && newData.child('seq').val() === data.child('seq').val() && newData.child('uid').val() === data.child('uid').val()"
+          ".write": "auth != null && root.child('ishraq/uids/' + auth.uid).val() === $mid && newData.exists() && newData.child('code').val() === data.child('code').val() && newData.child('role').val() === data.child('role').val() && newData.child('cohort').val() === data.child('cohort').val() && newData.child('seq').val() === data.child('seq').val() && newData.child('uid').val() === data.child('uid').val() && newData.child('track').val() === data.child('track').val()"
         }
       },
       "contacts": {
@@ -944,6 +944,127 @@
           },
           "prevCode": {
             ".validate": "newData.isString() && newData.val().length <= 30"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'accepted' || newData.val() === 'declined')"
+          },
+          "memberId": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "decidedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "mailedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".validate": "newData.hasChildren(['role'])"
+        }
+      },
+      "tracks": {
+        ".read": true,
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
+        "$id": {
+          "id": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "cohort": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "sector": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".validate": "newData.hasChildren(['cohort', 'name'])"
+        }
+      },
+      "trackform": {
+        ".read": true,
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/announce').val() === true))",
+        "fields": {
+          "$fid": {
+            "id": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "label": {
+              ".validate": "newData.isString() && newData.val().length <= 1000"
+            },
+            "type": {
+              ".validate": "newData.isString() && (newData.val() === 'text' || newData.val() === 'textarea' || newData.val() === 'tel' || newData.val() === 'email' || newData.val() === 'url' || newData.val() === 'select' || newData.val() === 'number' || newData.val() === 'date' || newData.val() === 'info')"
+            },
+            "options": {
+              ".validate": "newData.isString() && newData.val().length <= 2000"
+            },
+            "placeholder": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "required": {
+              ".validate": "newData.isBoolean()"
+            },
+            "order": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "seeded": {
+          ".validate": "newData.isBoolean()"
+        }
+      },
+      "trackregs": {
+        ".read": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/announce').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
+        ".write": "(((auth != null && auth.token.email_verified === true && (auth.token.email === 'g.hussainalhajji@gmail.com' || auth.token.email === 'ishraq.battaliyah@gmail.com' || auth.token.email === 'hzzahmed4@gmail.com')) || (auth != null && root.child('ishraq/admins/' + auth.uid).exists() && (root.child('ishraq/admins/' + auth.uid).child('role').val() === 'full' || !root.child('ishraq/admins/' + auth.uid).child('role').exists()))) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/announce').val() === true) || (auth != null && root.child('ishraq/admins/' + auth.uid).child('perms/cohorts').val() === true))",
+        ".indexOn": [
+          "cohort"
+        ],
+        "$id": {
+          ".write": "!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists() && !newData.child('track').exists()",
+          "id": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "kind": {
+            ".validate": "newData.isString() && (newData.val() === 'track')"
+          },
+          "role": {
+            ".validate": "newData.isString() && (newData.val() === 'mentor' || newData.val() === 'mentee')"
+          },
+          "sector": {
+            ".validate": "newData.isString() && newData.val().length <= 200"
+          },
+          "answers": {
+            "$f": {
+              ".validate": "newData.isString() && newData.val().length <= 3000"
+            }
+          },
+          "ts": {
+            ".validate": "newData.isNumber()"
+          },
+          "seen": {
+            ".validate": "newData.isBoolean()"
+          },
+          "cohort": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "prev": {
+            ".validate": "newData.isBoolean()"
+          },
+          "prevCode": {
+            ".validate": "newData.isString() && newData.val().length <= 30"
+          },
+          "track": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
           },
           "status": {
             ".validate": "newData.isString() && (newData.val() === 'accepted' || newData.val() === 'declined')"

@@ -1273,3 +1273,18 @@ a.tk-item { color: #fff; }
 .net-mentees { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .net-chip { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 2px; }
 .net-chip .icon-btn { width: 24px; height: 24px; }
+
+/* ===== المسارات التخصصية داخل الدفعة ===== */
+.track-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--line); }
+.track-tabs button { padding: .65em 1.3em; border-radius: 999px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-weight: 800; font-family: var(--f-ui); color: var(--ink-2); }
+.track-tabs button.active { background: var(--p-dd); color: #fff; border-color: var(--p-dd); }
+.track-tabs .add-track { border-style: dashed; color: var(--p-dd); background: transparent; }
+.track-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.track-head h3 { margin: 0 0 4px; }
+.track-kpis { margin-bottom: 14px; }
+.track-kpis .kpi { background: #fff; border: 1px solid var(--line); color: var(--ink-2); }
+.track-kpis .kpi b { color: var(--p-dd); }
+.track-summary { margin-bottom: 18px; }
+.track-summary tr.total td { font-weight: 800; background: rgba(0,0,0,.04); }
+.enroll-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.track-regs { margin-top: 18px; }

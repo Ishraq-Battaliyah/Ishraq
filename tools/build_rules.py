@@ -138,6 +138,12 @@ REGISTRATION = fields({"id": ID, "role": one_of('mentor', 'mentee'), "answers": 
 REG_FIELD = fields({"id": ID, "label": s(1000), "type": one_of('text', 'textarea', 'tel', 'email', 'url', 'select', 'number', 'date', 'info'),
                     "options": s(2000), "placeholder": s(200), "required": BOOL, "order": NUM})
 
+# المسار التخصصي داخل الدفعة، وتسجيلات المسارات المهنية المتخصصة (نموذج منفصل ونتائج منفصلة، وتقرر الإدارة وترحّل للمسار)
+TRACK = fields({"id": ID, "cohort": ID, "name": s(120), "sector": s(120), "createdAt": NUM}, required=('cohort', 'name'))
+TRACK_REG = fields({"id": ID, "kind": one_of('track'), "role": one_of('mentor', 'mentee'), "sector": s(200), "answers": {"$f": s(3000)}, "ts": NUM, "seen": BOOL,
+                    "cohort": ID, "prev": BOOL, "prevCode": s(30), "track": ID,
+                    "status": one_of('accepted', 'declined'), "memberId": ID, "decidedAt": NUM, "mailedAt": NUM}, required=('role',))
+
 EVENT_REG = fields({"id": ID, "eventId": ID, "memberId": ID, "role": one_of('mentor', 'mentee'), "code": s(20),
                     "name": s(120), "phone": s(30), "email": s(120),
                     "interest": {".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'mentor' || newData.val() === 'mentee')"},
@@ -232,7 +238,7 @@ rules = {
     "meta": {".read": True, **w(IS_FULL), "lastBackup": w(IS_ADMIN)},
     "members": {
         ".read": True, **w(can('cohorts')),
-        "$mid": w(f"auth != null && {ME} === $mid && newData.exists() && {n('code')} === {d('code')} && {n('role')} === {d('role')} && {n('cohort')} === {d('cohort')} && {n('seq')} === {d('seq')} && {n('uid')} === {d('uid')}"),
+        "$mid": w(f"auth != null && {ME} === $mid && newData.exists() && {n('code')} === {d('code')} && {n('role')} === {d('role')} && {n('cohort')} === {d('cohort')} && {n('seq')} === {d('seq')} && {n('uid')} === {d('uid')} && {n('track')} === {d('track')}"),
     },
     "contacts": {
         ".read": can('cohorts', 'sessions', 'certificates'), **w(can('cohorts')),
@@ -337,6 +343,11 @@ rules = {
     "regform": {".read": True, **w(can('announce')), "fields": {"$fid": REG_FIELD}, "seeded": BOOL},
     "registrations": {".read": can('announce'), **w(can('announce')), ".indexOn": ["cohort"],
                       "$id": {**w("!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists()"), **REGISTRATION}},
+    # المسارات المهنية المتخصصة: الأسماء للقراءة العامة، والتسجيل بنموذج منفصل تكتبه الإدارة ويرسله الزائر
+    "tracks": {".read": True, **w(can('cohorts')), "$id": TRACK},
+    "trackform": {".read": True, **w(can('announce')), "fields": {"$fid": REG_FIELD}, "seeded": BOOL},
+    "trackregs": {".read": can('announce', 'cohorts'), **w(can('announce', 'cohorts')), ".indexOn": ["cohort"],
+                  "$id": {**w("!data.exists() && !newData.child('status').exists() && !newData.child('memberId').exists() && !newData.child('track').exists()"), **TRACK_REG}},
     "eventRegs": {".read": can('events', 'certificates'), **w(can('events')),
                   "$rid": {**w(f"(!data.exists() && newData.child('eventId').isString() && (!newData.child('memberId').exists() || (auth != null && {ME} === {n('memberId')}))) || (data.exists() && !newData.exists() && auth != null && {ME} === {d('memberId')})"),
                            **EVENT_REG}},
