@@ -27,7 +27,8 @@ const PERM_PATHS = {
   reviews: ['reviews', 'approvedReviews', 'network', 'pairs', 'bookings'],
   messages: ['messages', 'inbox', 'tickets', 'ticketStaff', 'network', 'pairs'],
   events: ['eventRegs', 'myRegs'],
-  certificates: ['contacts', 'eventRegs', 'certs']
+  certificates: ['contacts', 'eventRegs', 'certs'],
+  proxy: ['network', 'pairs', 'bookings']
 };
 const CONTACT_KEYS = ['whatsapp', 'email', 'linkedin', 'website', 'twitter', 'instagram'];
 
@@ -41,9 +42,10 @@ const PERMISSIONS = [
   { k: 'announce', label: 'الإعلان المنبثق', desc: 'نافذة الإعلان في الصفحة الرئيسية', icon: 'fa-bullhorn' },
   { k: 'events', label: 'الفعاليات', desc: 'إعلانات الفعاليات والمسجلون فيها', icon: 'fa-person-chalkboard' },
   { k: 'certificates', label: 'الشهادات', desc: 'إصدار الشهادات وإرسالها وتعديل قوالبها', icon: 'fa-award' },
+  { k: 'proxy', label: 'إضافة جلسات منجزة نيابةً عن المرشدين', desc: 'توثيق جلسة منجزة للمرشد والمستفيد عند تأخر المرشد، وتُحتسب لهما بلا مصادقة', icon: 'fa-user-pen' },
   { k: 'interests', label: 'المهتمون', desc: 'تسجيلات الاهتمام بالانضمام', icon: 'fa-user-plus' }
 ];
-const RULES_VERSION = 13;
+const RULES_VERSION = 14;
 
 const Auth = {
   KEY: 'ishraq-auth',

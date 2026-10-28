@@ -98,7 +98,7 @@ BOOKING = fields({
     "date": DATE, "start": TIME, "end": TIME, "mode": one_of('inperson', 'online', 'both'), "summary": s(1000),
     "status": one_of('upcoming', 'done', 'absent_mentor', 'absent_mentee', 'cancelled'), "ts": NUM,
     "doneByMentor": NUM_OR_BOOL, "doneByMentee": NUM_OR_BOOL, "statusTs": NUM, "statusBy": one_of('mentor', 'mentee', 'both', 'admin'),
-    "changedBy": one_of('mentor', 'mentee', 'admin'), "extra": BOOL,
+    "changedBy": one_of('mentor', 'mentee', 'admin'), "extra": BOOL, "proxyBy": s(120),
     # إلغاء الموعد بعد الحجز، وموعد بديل مقترح بانتظار موافقة الطرف الآخر، والجلسة الناتجة عن موعد مقترح من المستفيد
     "cancelledBy": one_of('mentor', 'mentee'), "cancelTs": NUM, "cancelReason": s(300), "wishId": ID,
     "proposal": fields({"date": DATE, "start": TIME, "end": TIME, "slotId": ID, "by": one_of('mentor', 'mentee'), "ts": NUM},
@@ -249,8 +249,8 @@ rules = {
     "counters": {".read": can('cohorts'), **w(can('cohorts'))},
     "uids": {".read": can('cohorts'), **w(can('cohorts')), "$uid": {".read": "auth != null && auth.uid === $uid"}},
     # الشبكة للمشرفين فقط؛ العضو يعرف طرفه من pairs/{رقمه}
-    "network": {".read": can('cohorts', 'sessions', 'reviews', 'messages'), **w(can('cohorts'))},
-    "pairs": {".read": can('cohorts', 'sessions', 'reviews', 'messages'), **w(can('cohorts')),
+    "network": {".read": can('cohorts', 'sessions', 'reviews', 'messages', 'proxy'), **w(can('cohorts'))},
+    "pairs": {".read": can('cohorts', 'sessions', 'reviews', 'messages', 'proxy'), **w(can('cohorts')),
               "$mid": {".read": f"auth != null && {ME} === $mid", ".validate": "(newData.isString() && newData.val().length <= 60) || newData.hasChildren()",
                        "$m": {".validate": "newData.val() === true"}}},
     "messages": {
@@ -266,8 +266,8 @@ rules = {
                      f" && (({n('extra')} === true && {EXTRA_ON} && {R}members/' + {ME} + '/role').val() === 'mentor') || newData.child('session').exists())))"), **SLOT},
     },
     "bookings": {
-        ".read": any_of(can('sessions', 'cohorts', 'reviews'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
-        **w(can('sessions')), ".indexOn": ["mentorId", "menteeId"],
+        ".read": any_of(can('sessions', 'cohorts', 'reviews', 'proxy'), f"({IS_MEMBER} && ({query('mentorId', ME)} || {query('menteeId', ME)}))"),
+        **w(can('sessions', 'proxy')), ".indexOn": ["mentorId", "menteeId"],
         "$bid": {**w(f"{IS_MEMBER} && {LIVE} && (({BOOKING_CREATE}) || ({BOOKING_FROM_WISH}) || ({BOOKING_UPDATE}))"), **BOOKING},
     },
     "wishes": {
