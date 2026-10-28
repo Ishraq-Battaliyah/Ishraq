@@ -5,6 +5,12 @@ const Enroll = (() => {
   const ui = { regCohort: '', sel: new Set() };
   const fieldsList = () => Store.list('regform/fields').sort(byOrder);
   const answerFields = () => fieldsList().filter(f => f.type !== 'info');
+  // نموذج التسجيل في مسار مهني متخصص: حقوله trackform/fields ونتائجه trackregs (kind: 'track')
+  const trackFieldsList = () => Store.list('trackform/fields').sort(byOrder);
+  const isTrackReg = x => x && x.kind === 'track';
+  const answerFieldsFor = x => (isTrackReg(x) ? trackFieldsList() : fieldsList()).filter(f => f.type !== 'info');
+  const regColl = id => (Store.get(`trackregs/${id}`) ? 'trackregs' : 'registrations');
+  const getReg = id => Store.get(`registrations/${id}`) || Store.get(`trackregs/${id}`);
   const announced = () => Data.cohort(Store.get('announcement/cohort'));
   const siteUrl = () => window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '');
   const roleLabel = r => (r === 'mentor' ? 'مرشد' : 'مستفيد');
@@ -74,7 +80,7 @@ const Enroll = (() => {
   }
 
   /* ===== نافذة تعديل نموذج التسجيل (عائمة) ===== */
-  function editField(f, done) {
+  function editField(f, done, base = 'regform') {
     f = f || {};
     openModal({
       title: f.id ? 'تعديل عنصر في النموذج' : 'إضافة عنصر إلى النموذج', size: 'sm',
@@ -91,25 +97,27 @@ const Enroll = (() => {
           if (!validateForm(form)) return false;
           const v = readForm(form);
           if (v.type === 'info') v.required = false;
-          if (f.id) Store.update(`regform/fields/${f.id}`, v);
-          else { const max = Math.max(0, ...Store.list('regform/fields').map(x => x.order || 0)); Store.push('regform/fields', { ...v, order: max + 1 }); }
+          if (f.id) Store.update(`${base}/fields/${f.id}`, v);
+          else { const max = Math.max(0, ...Store.list(`${base}/fields`).map(x => x.order || 0)); Store.push(`${base}/fields`, { ...v, order: max + 1 }); }
           done && done();
         }
       }, { label: 'إلغاء', cls: 'ghost' }]
     });
   }
 
-  function formEditorHtml() {
-    const fields = fieldsList(), types = Object.fromEntries(FIELD_TYPES);
+  function formEditorHtml(base = 'regform') {
+    const track = base === 'trackform';
+    const fields = track ? trackFieldsList() : fieldsList(), types = Object.fromEntries(FIELD_TYPES);
     const row = (f, i) => `<li data-id="${esc(f.id)}"><span class="drag"><i class="fa-solid ${f.type === 'info' ? 'fa-align-right' : 'fa-grip-lines'}"></i></span>
       <div class="sec-info"><b>${f.type === 'info' ? esc(String(f.label).slice(0, 90)) : `${esc(f.label)} ${f.required ? '<em class="req">*</em>' : ''}`}</b><small>${types[f.type] || f.type}</small></div>
       <div class="sec-actions"><button class="icon-btn" data-ff-move="-1" ${i === 0 ? 'disabled' : ''} title="أعلى"><i class="fa-solid fa-arrow-up"></i></button>
       <button class="icon-btn" data-ff-move="1" ${i === fields.length - 1 ? 'disabled' : ''} title="أسفل"><i class="fa-solid fa-arrow-down"></i></button>
       <button class="icon-btn" data-ff-edit title="تعديل"><i class="fa-solid fa-pen"></i></button>
       <button class="icon-btn danger" data-ff-del title="حذف"><i class="fa-solid fa-trash"></i></button></div></li>`;
-    return `<p class="muted small">يظهر هذا النموذج لكل من يضغط «تسجيل» في الإعلان (إلا إن حدّدت رابطاً آخر للزر). أضف أو احذف الأسئلة والفقرات، ورتّبها بالأسهم.</p>
+    return `<p class="muted small">${track ? 'يظهر هذا النموذج عند الضغط على «تسجيل مسار مهني متخصص» في مربع تسجيل الدفعة. أضف أو احذف الأسئلة والفقرات، ورتّبها بالأسهم.' : 'يظهر هذا النموذج لكل من يضغط «تسجيل» في الإعلان (إلا إن حدّدت رابطاً آخر للزر). أضف أو احذف الأسئلة والفقرات، ورتّبها بالأسهم.'}</p>
       <ul class="sortable fields enroll-fields">
         <li class="locked"><span class="drag"><i class="fa-solid fa-lock"></i></span><div class="sec-info"><b>مرشد أو مستفيد</b><small>اختيار إلزامي دائماً</small></div></li>
+        ${track ? '<li class="locked"><span class="drag"><i class="fa-solid fa-lock"></i></span><div class="sec-info"><b>القطاع المهني</b><small>حقل إلزامي دائماً، وعلى أساسه تُرحَّل الإدارة المسجل للمسار المناسب</small></div></li>' : ''}
         <li class="locked"><span class="drag"><i class="fa-solid fa-lock"></i></span><div class="sec-info"><b>هل سبق لك التسجيل في إشراق؟ (نعم / لا)</b><small>إن اختار «نعم» يُطلب منه رقم عضويته السابق</small></div></li>
         ${fields.map(row).join('')}
       </ul>
@@ -117,38 +125,38 @@ const Enroll = (() => {
       <button class="btn ghost" data-ff-preview><i class="fa-solid fa-eye"></i> معاينة النموذج</button></div>`;
   }
 
-  function openFormEditor() {
+  function openFormEditor(base = 'regform') {
     const m = openModal({
-      title: '<i class="fa-solid fa-clipboard-list"></i> نموذج التسجيل', size: 'lg', cls: 'enroll-form-modal',
-      body: `<div data-ff-body>${formEditorHtml()}</div>`,
+      title: `<i class="fa-solid fa-clipboard-list"></i> ${base === 'trackform' ? 'نموذج التسجيل في مسار مهني متخصص' : 'نموذج التسجيل'}`, size: 'lg', cls: 'enroll-form-modal',
+      body: `<div data-ff-body>${formEditorHtml(base)}</div>`,
       actions: [{ label: 'تم', cls: 'primary' }],
       onClose: () => unsub()
     });
-    const redraw = () => { const b = $('[data-ff-body]', m.el); if (b) b.innerHTML = formEditorHtml(); };
+    const redraw = () => { const b = $('[data-ff-body]', m.el); if (b) b.innerHTML = formEditorHtml(base); };
     const unsub = Store.subscribe(redraw);
     m.el.addEventListener('click', e => {
       const t = e.target;
-      if (t.closest('[data-ff-add]')) return editField(null);
-      if (t.closest('[data-ff-preview]')) return Home.openRegistrationForm({ preview: true });
+      if (t.closest('[data-ff-add]')) return editField(null, null, base);
+      if (t.closest('[data-ff-preview]')) return base === 'trackform' ? Home.openTrackRegistrationForm({ preview: true }) : Home.openRegistrationForm({ preview: true });
       const li = t.closest('li[data-id]'); if (!li) return;
-      const f = Store.get(`regform/fields/${li.dataset.id}`); if (!f) return;
-      if (t.closest('[data-ff-edit]')) return editField(f);
-      if (t.closest('[data-ff-del]')) return confirmDialog(`حذف «${esc(String(f.label).slice(0, 60))}» من النموذج؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`regform/fields/${f.id}`));
+      const f = Store.get(`${base}/fields/${li.dataset.id}`); if (!f) return;
+      if (t.closest('[data-ff-edit]')) return editField(f, null, base);
+      if (t.closest('[data-ff-del]')) return confirmDialog(`حذف «${esc(String(f.label).slice(0, 60))}» من النموذج؟`, { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`${base}/fields/${f.id}`));
       const mv = t.closest('[data-ff-move]');
       if (mv) {
-        const list = fieldsList(), i = list.findIndex(x => x.id === f.id), j = i + Number(mv.dataset.ffMove);
+        const list = base === 'trackform' ? trackFieldsList() : fieldsList(), i = list.findIndex(x => x.id === f.id), j = i + Number(mv.dataset.ffMove);
         if (j < 0 || j >= list.length) return;
         const a = list[i], b = list[j], upd = {};
         const oa = a.order ?? i + 1, ob = b.order ?? j + 1;
         upd[`${a.id}/order`] = oa === ob ? ob + (j > i ? 1 : -1) : ob; upd[`${b.id}/order`] = oa === ob ? oa : oa;
-        Store.update('regform/fields', upd);
+        Store.update(`${base}/fields`, upd);
       }
     });
   }
 
   /* ===== المسجلون ===== */
   const nameOf = x => String(x.answers?.f_name || Object.values(x.answers || {}).find(Boolean) || 'مسجّل').trim();
-  const emailOf = x => { const f = answerFields().find(f => f.id === 'f_email' || f.type === 'email'); return String(x.answers?.[f?.id] || '').trim(); };
+  const emailOf = x => { const f = answerFieldsFor(x).find(f => f.id === 'f_email' || f.type === 'email'); return String(x.answers?.[f?.id] || '').trim(); };
   const answerHtml = (f, v) => {
     v = String(v ?? '');
     if (!v) return '<span class="muted">—</span>';
@@ -171,10 +179,10 @@ const Enroll = (() => {
     return `<article class="reg-card ${x.status || ''} ${x.seen ? '' : 'new'}" data-reg="${esc(x.id)}">
       <header><label class="check"><input type="checkbox" data-reg-pick="${esc(x.id)}" ${ui.sel.has(x.id) ? 'checked' : ''}><span class="sr-only">تحديد</span></label>
         <div><b>${esc(nameOf(x))}</b><small class="muted">${fmtTs(x.ts)}${c ? ` · ${esc(c.name)}` : ''}${emailOf(x) ? ` · <span dir="ltr">${esc(emailOf(x))}</span>` : ''}</small></div>
-        <span class="reg-badges">${x.prev ? `<span class="chip" title="مسجّل سابقاً"><i class="fa-solid fa-clock-rotate-left"></i> سبق التسجيل ${x.prevCode ? `<span dir="ltr">${esc(x.prevCode)}</span>` : ''}</span>` : ''}${st}</span></header>
-      <dl class="reg-answers">${answerFields().map(f => `<div><dt>${esc(f.label)}</dt><dd>${answerHtml(f, x.answers?.[f.id])}</dd></div>`).join('')}</dl>
-      <footer>${m ? `<span class="muted small"><i class="fa-solid fa-id-card"></i> ${esc(m.name)} — رقم العضوية <b class="num">${esc(m.code)}</b></span>` : ''}
-        ${x.status === 'accepted' ? '' : `<button class="btn xs success" data-reg-accept="${esc(x.id)}" ${Security.can('cohorts') ? '' : 'disabled title="يتطلب صلاحية الدفعات"'}><i class="fa-solid fa-check"></i> قبول</button>`}
+        <span class="reg-badges">${isTrackReg(x) ? '<span class="chip"><i class="fa-solid fa-briefcase"></i> مسار مهني متخصص</span>' : ''}${x.prev ? `<span class="chip" title="مسجّل سابقاً"><i class="fa-solid fa-clock-rotate-left"></i> سبق التسجيل ${x.prevCode ? `<span dir="ltr">${esc(x.prevCode)}</span>` : ''}</span>` : ''}${st}</span></header>
+      <dl class="reg-answers">${isTrackReg(x) ? `<div><dt>القطاع المهني</dt><dd>${esc(x.sector || '—')}</dd></div>` : ''}${answerFieldsFor(x).map(f => `<div><dt>${esc(f.label)}</dt><dd>${answerHtml(f, x.answers?.[f.id])}</dd></div>`).join('')}</dl>
+      <footer>${m ? `<span class="muted small"><i class="fa-solid fa-id-card"></i> ${esc(m.name)} — رقم العضوية <b class="num">${esc(m.code)}</b>${x.track && Data.track(x.track) ? ` · <i class="fa-solid fa-briefcase"></i> ${esc(Data.track(x.track).name)}` : ''}</span>` : ''}
+        ${x.status === 'accepted' ? '' : `<button class="btn xs success" data-reg-accept="${esc(x.id)}" ${Security.can('cohorts') ? '' : 'disabled title="يتطلب صلاحية الدفعات"'}><i class="fa-solid fa-check"></i> ${isTrackReg(x) ? 'قبول وترحيل للمسار' : 'قبول'}</button>`}
         ${x.status === 'declined' ? '' : `<button class="btn xs warn" data-reg-decline="${esc(x.id)}"><i class="fa-solid fa-xmark"></i> اعتذار</button>`}
         <button class="icon-btn danger" data-reg-del="${esc(x.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></footer>
     </article>`;
@@ -194,7 +202,7 @@ const Enroll = (() => {
         ${list.length ? `<label class="check"><input type="checkbox" data-reg-all="${role}" ${list.every(x => ui.sel.has(x.id)) ? 'checked' : ''}><span>تحديد الكل</span></label>` : ''}</div>
         ${list.length ? `<div class="reg-grid">${list.map(x => regCard(x, h)).join('')}</div>` : emptyState(`لا يوجد ${role === 'mentor' ? 'مرشدون' : 'مستفيدون'} مسجلون`, 'fa-user-plus')}</section>`;
     };
-    const nSel = [...ui.sel].filter(id => Store.get(`registrations/${id}`)).length;
+    const nSel = [...ui.sel].filter(getReg).length;
     return `<div class="panel" id="enroll-regs">
       <div class="panel-head"><h2><i class="fa-solid fa-user-plus"></i> المسجلون في النموذج <span class="count">${all.length}</span></h2>
         <div class="head-actions">${h.exportBar('registrations')}</div></div>
@@ -206,10 +214,63 @@ const Enroll = (() => {
     </div>`;
   }
 
+  /* ===== المسجلون في مسار مهني متخصص ===== */
+  const trackRegAll = () => Store.list('trackregs').filter(x => x && x.role);
+  function trackRegList(role, scope) {
+    const cur = announced();
+    const cf = scope ? scope.cohort : (ui.regCohort || (cur ? cur.id : 'all'));
+    return trackRegAll().filter(x => x.role === role && (cf === 'all' || (x.cohort || '') === cf)
+      && (!scope || x.status !== 'accepted' || x.track === scope.track)).sort((a, b) => b.ts - a.ts);
+  }
+  // scope = { cohort, track } داخل تبويب المسار (الطلبات المعلّقة + المقبولون في هذا المسار)، وبلا scope في صفحة «إعلان دفعة جديدة» (كل الدفعات بمرشح)
+  // أول استخدام: نبدأ نموذج المسار بالحقول الأساسية ثم يعدّلها المشرف
+  function seedTrackForm() {
+    if (Security.can('announce') && !Store.list('trackform/fields').length && !Store.get('trackform/seeded')) {
+      DEFAULT_FORM_FIELDS.forEach(f => Store.set(`trackform/fields/${f.id}`, { ...f }));
+      Store.set('trackform/seeded', true);
+    }
+  }
+  function trackRegs(h, scope) {
+    H = { ...H, ...h };
+    seedTrackForm();
+    if (!Security.can('announce') && !Security.can('cohorts')) return '';
+    const cur = announced();
+    const cf = scope ? scope.cohort : (ui.regCohort || (cur ? cur.id : 'all'));
+    const used = new Set(trackRegAll().map(x => x.cohort || '').filter(Boolean));
+    const chips = scope ? '' : `<div class="chip-filter">${[...(cur ? [{ id: cur.id, name: `${cur.name} (المعلنة)` }] : []), { id: 'all', name: 'كل الدفعات' },
+      ...Data.cohorts().filter(c => used.has(c.id) && c.id !== cur?.id)].map(c => `<button class="${cf === c.id ? 'active' : ''}" data-reg-cohort="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>`;
+    setTimeout(() => trackRegAll().filter(x => !x.seen && (cf === 'all' || x.cohort === cf)).forEach(x => Store.set(`trackregs/${x.id}/seen`, true)), 1500);
+    const section = role => {
+      const list = trackRegList(role, scope), key = `track:${role}`;
+      return `<section class="reg-section"><div class="block-head"><h3><i class="fa-solid ${role === 'mentor' ? 'fa-user-tie' : 'fa-user-graduate'}"></i> ${role === 'mentor' ? 'المرشدون' : 'المستفيدون'} <span class="count">${list.length}</span></h3>
+        ${list.length ? `<label class="check"><input type="checkbox" data-reg-all="${key}" ${list.every(x => ui.sel.has(x.id)) ? 'checked' : ''}><span>تحديد الكل</span></label>` : ''}</div>
+        ${list.length ? `<div class="reg-grid">${list.map(x => regCard(x, h)).join('')}</div>` : emptyState(`لا يوجد ${role === 'mentor' ? 'مرشدون' : 'مستفيدون'} مسجلون في مسار متخصص`, 'fa-user-plus')}</section>`;
+    };
+    const nSel = [...ui.sel].filter(getReg).length, total = trackRegAll().filter(x => cf === 'all' || x.cohort === cf).length;
+    return `<div class="panel track-regs" id="track-regs">
+      <div class="panel-head"><h2><i class="fa-solid fa-briefcase"></i> المسجلون في مسار مهني متخصص <span class="count">${total}</span></h2>
+        <div class="head-actions">${h.exportBar('trackregs')}${Security.can('announce') ? '<button class="btn ghost" data-track-form><i class="fa-solid fa-clipboard-list"></i> نموذج التسجيل في المسار</button>' : ''}</div></div>
+      <p class="muted small">يصل هؤلاء من زر «تسجيل مسار مهني متخصص» في مربع تسجيل الدفعة. عند «قبول وترحيل للمسار» يُضافون إلى المسار المناسب في الدفعة ويُتابَعون في لوحته.</p>
+      ${chips}
+      <div class="reg-bar"><span class="muted small">${nSel ? `محدد: <b>${nSel}</b>` : 'حدّد مسجلين لإرسال رسالة لهم دفعة واحدة'}</span>
+        <button class="btn sm primary" data-reg-mail="accept" ${nSel ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال إشعار القبول عبر الإيميل</button>
+        <button class="btn sm ghost" data-reg-mail="decline" ${nSel ? '' : 'disabled'}><i class="fa-regular fa-envelope"></i> إرسال إشعار الاعتذار عبر الإيميل</button></div>
+      ${section('mentor')}${section('mentee')}
+    </div>`;
+  }
+
+  // صفوف التصدير
+  function trackRegRows() {
+    const fields = trackFieldsList().filter(f => f.type !== 'info');
+    const list = trackRegAll().sort((a, b) => b.ts - a.ts);
+    return { headers: ['التاريخ', 'الصفة', 'الدفعة', 'القطاع المهني', 'المسار', 'مسجّل سابقاً', 'الحالة', ...fields.map(f => f.label)],
+      rows: list.map(x => [fmtTs(x.ts), roleLabel(x.role), Data.cohort(x.cohort)?.name || '', x.sector || '', Data.track(x.track)?.name || '', x.prev ? (x.prevCode || 'نعم') : 'لا', x.status === 'accepted' ? 'مقبول' : x.status === 'declined' ? 'معتذَر' : 'جديد', ...fields.map(f => x.answers?.[f.id] ?? '')]) };
+  }
+
   /* ===== بيانات البطاقة من إجابات التسجيل ===== */
   function profileFrom(x) {
     const out = {}, setIf = (k, v) => { v = String(v ?? '').trim(); if (v && !out[k]) out[k] = v; };
-    answerFields().forEach(f => {
+    answerFieldsFor(x).forEach(f => {
       const v = x.answers?.[f.id], L = String(f.label || '');
       if (!v) return;
       if (f.id === 'f_name' || /^(الاسم|اسم)/.test(L)) setIf('name', v);
@@ -236,51 +297,74 @@ const Enroll = (() => {
   function acceptDialog(x, h) {
     const cohorts = Data.cohorts(), cur = announced();
     const pre = x.cohort && Data.cohort(x.cohort) ? x.cohort : (cur?.id || cohorts[cohorts.length - 1]?.id || '');
+    const tracked = isTrackReg(x), allTracks = Data.tracks().filter(t => Data.cohort(t.cohort));
+    if (tracked && !allTracks.length) return toast('أنشئ مساراً تخصصياً أولاً من صفحة الدفعات (داخل الدفعة ← + مسار تخصصي)', 'error');
+    // المسار المقترح للمسجّل في مسار متخصص: مسار دفعته الذي يطابق قطاعه المهني
+    const sec = String(x.sector || '').trim();
+    const guess = tracked ? (allTracks.filter(t => t.cohort === pre).find(t => sec && (t.name.includes(sec) || (t.sector && (t.sector.includes(sec) || sec.includes(t.sector))))) || allTracks.find(t => t.cohort === pre) || allTracks[0]) : null;
+    const trackOpts = sel => allTracks.map(t => `<option value="${esc(t.id)}" data-cohort="${esc(t.cohort)}" ${sel === t.id ? 'selected' : ''}>${esc(Data.cohort(t.cohort).name)} — ${esc(t.name)}</option>`).join('');
     const prev = x.prev ? findPrev(x) : null;
     const data = profileFrom(x);
     const fields = PROFILE_FIELDS.map(f => ({ ...f, label: typeof f.label === 'object' ? f.label[x.role] : f.label, wide: f.type === 'textarea' || f.k === 'photo' }));
     openModal({
       title: `<i class="fa-solid fa-user-check"></i> قبول ${roleLabel(x.role)}: ${esc(data.name)}`, size: 'lg',
       body: `<form class="form-grid">
-        <div class="field wide"><label>الدفعة</label><select name="__cohort">${cohorts.map(c => `<option value="${esc(c.id)}" ${c.id === pre ? 'selected' : ''}>${esc(c.name)} ${esc(c.year)}</option>`).join('')}</select></div>
+        ${tracked ? `<div class="field wide"><label>ترحيل إلى المسار المهني المتخصص <em>*</em></label><select name="__track">${trackOpts(guess?.id)}</select>
+            <small class="hint">القطاع المهني الذي ذكره المسجّل: <b>${esc(sec || '—')}</b>. يُضاف إلى دفعة المسار ويُربط به ويُتابَع في لوحته.</small></div>`
+        : `<div class="field wide"><label>الدفعة</label><select name="__cohort">${cohorts.map(c => `<option value="${esc(c.id)}" ${c.id === pre ? 'selected' : ''}>${esc(c.name)} ${esc(c.year)}</option>`).join('')}</select></div>
+          ${allTracks.length ? `<div class="field wide"><label>المسار التخصصي (اختياري)</label><select name="__track"><option value="">— الدفعة العامة بلا مسار —</option>${trackOpts('')}</select></div>` : ''}`}
         <p class="wide ${x.prev ? (prev ? 'ok-note' : 'warn-note') : 'muted'} small">${x.prev
           ? (prev ? `<i class="fa-solid fa-clock-rotate-left"></i> مسجّل سابقاً برقم العضوية <b dir="ltr">${esc(prev.code)}</b> (${esc(prev.name)}): يُعتمد رقم عضويته نفسه برمز دخول جديد، وتُؤرشف دفعته الماضية في صفحته.`
             : `<i class="fa-solid fa-triangle-exclamation"></i> ذكر أنه مسجّل سابقاً برقم «${esc(x.prevCode || '')}» لكن لم يوجد عضو بهذا الرقم وصفته؛ سيُنشأ له رقم عضوية جديد.`)
           : 'سيُنشأ رقم عضوية جديد ورمز دخول في الخطوة نفسها.'}</p>
         ${fields.map(f => fieldInput(f, data[f.k] || '')).join('')}</form>`,
+      onOpen: m => {
+        // اختيار مسار يضبط الدفعة على دفعته؛ وتغيير الدفعة يفرغ المسار إن لم يكن من دفعتها
+        const cs = $('[name=__cohort]', m.body), ts = $('[name=__track]', m.body);
+        if (!cs || !ts) return;
+        ts.addEventListener('change', () => { const o = ts.selectedOptions[0]; if (o?.dataset.cohort) cs.value = o.dataset.cohort; });
+        cs.addEventListener('change', () => { if (ts.selectedOptions[0]?.dataset.cohort && ts.selectedOptions[0].dataset.cohort !== cs.value) ts.value = ''; });
+      },
       actions: [{
         label: '<i class="fa-solid fa-check"></i> قبول وإضافة للدفعة', cls: 'primary', onClick: async m => {
           const f = $('form', m.body);
           if (!validateForm(f)) return false;
-          const v = readForm(f), cohortId = v.__cohort; delete v.__cohort;
-          if (!cohortId) { toast('اختر الدفعة', 'error'); return false; }
+          const v = readForm(f), trackId = v.__track || ''; delete v.__track;
+          const cohortId = tracked ? Data.track(trackId)?.cohort : v.__cohort; delete v.__cohort;
+          if (!cohortId) { toast(tracked ? 'اختر المسار' : 'اختر الدفعة', 'error'); return false; }
           const btn = $('[data-act="0"]', m.el); btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جارٍ القبول...';
-          try { await accept(x, cohortId, v, prev, h); } catch (e) { console.error(e); toast('تعذّر القبول: ' + (e.message || e), 'error'); btn.disabled = false; btn.innerHTML = 'قبول وإضافة للدفعة'; return false; }
+          try { await accept(x, cohortId, v, prev, h, trackId); } catch (e) { console.error(e); toast('تعذّر القبول: ' + (e.message || e), 'error'); btn.disabled = false; btn.innerHTML = 'قبول وإضافة للدفعة'; return false; }
         }
       }, { label: 'إلغاء', cls: 'ghost' }]
     });
   }
 
-  async function accept(x, cohortId, data, prev, h) {
+  async function accept(x, cohortId, data, prev, h, trackId = '') {
     let member, secret, error = null, returning = false;
-    if (prev) {
+    if (prev && prev.cohort === cohortId && trackId && prev.track !== trackId) {
+      // عضو في الدفعة نفسها يُرحَّل إلى مسار تخصصي فيها: يبقى رقمه ورمزه ولا يتغير شيء سوى المسار
+      Store.update(`members/${prev.id}`, { track: trackId });
+      Data.saveMember(prev.id, Object.fromEntries(Object.entries(data).filter(([, val]) => String(val ?? '').trim())));
+      member = Data.member(prev.id);
+    } else if (prev) {
       if (prev.cohort === cohortId) throw new Error('هذا العضو مسجّل في الدفعة نفسها أصلاً');
       returning = true;
       const prevCohorts = [...new Set([...(prev.prevCohorts || []), prev.cohort].filter(Boolean))];
-      Store.update(`members/${prev.id}`, { cohort: cohortId, prevCohorts, cohortSince: Date.now(), credSentAt: null });
+      Store.update(`members/${prev.id}`, { cohort: cohortId, prevCohorts, cohortSince: Date.now(), credSentAt: null, track: trackId || null });
       if (Store.get(`pairs/${prev.id}`) != null) Store.remove(`pairs/${prev.id}`);   // ارتباطه بشريكه في الدفعة الماضية انتهى
       Data.saveMember(prev.id, Object.fromEntries(Object.entries(data).filter(([, val]) => String(val ?? '').trim())));
       try { secret = await Security.regenerateCode(Data.member(prev.id)); } catch (e) { console.error(e); error = Security.authMsg(e); }
       member = Data.member(prev.id);
     } else {
-      const r = await Data.addMember(x.role, cohortId, data);
+      const r = await Data.addMember(x.role, cohortId, data, trackId);
       member = r; secret = r.secret; error = r.error;
     }
-    Store.update(`registrations/${x.id}`, { status: 'accepted', memberId: member.id, cohort: cohortId, decidedAt: Date.now() });
-    Security.log(returning ? 'قبول مسجّل سابق برمز جديد' : 'قبول مسجّل', member.name, `${roleLabel(x.role)} ${member.code} — ${Data.cohort(cohortId)?.name || cohortId}`);
+    Store.update(`${regColl(x.id)}/${x.id}`, { status: 'accepted', memberId: member.id, cohort: cohortId, decidedAt: Date.now(), ...(trackId ? { track: trackId } : {}) });
+    const trackName = trackId ? Data.track(trackId)?.name : '';
+    Security.log(returning ? 'قبول مسجّل سابق برمز جديد' : trackId ? 'قبول وترحيل لمسار تخصصي' : 'قبول مسجّل', member.name, `${roleLabel(x.role)} ${member.code} — ${Data.cohort(cohortId)?.name || cohortId}${trackName ? ` — ${trackName}` : ''}`);
     openModal({
       title: '<i class="fa-solid fa-circle-check"></i> تم القبول', size: 'sm',
-      body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p><b>${esc(member.name)}</b> أُضيف إلى ${esc(Data.cohort(cohortId)?.name || '')}.<br>رقم العضوية: <b class="num">${esc(member.code)}</b>${secret ? `<br>رمز الدخول: <b class="num" dir="ltr">${esc(secret)}</b>` : ''}</p>
+      body: `<div class="success-msg"><i class="fa-solid fa-circle-check"></i><p><b>${esc(member.name)}</b> أُضيف إلى ${esc(Data.cohort(cohortId)?.name || '')}${trackName ? ` ورُحِّل إلى مسار «${esc(trackName)}»` : ''}.<br>رقم العضوية: <b class="num">${esc(member.code)}</b>${secret ? `<br>رمز الدخول: <b class="num" dir="ltr">${esc(secret)}</b>` : ''}</p>
         ${returning ? '<p class="muted small">اعتُمد رقم عضويته السابق برمز دخول جديد، وتظهر دفعته الماضية مؤرشفة في صفحته.</p>' : ''}
         ${error ? `<p class="warn-note small">تعذّر إنشاء رمز الدخول: ${esc(error)}. استخدم «رمز جديد» على بطاقته في صفحة الدفعات.</p>` : ''}</div>`,
       actions: [{ label: '<i class="fa-solid fa-share-nodes"></i> مشاركة البطاقة ومعلومات الدخول', cls: 'primary', onClick: () => { setTimeout(() => h.sendCredentials(Data.member(member.id)), 220); } }, { label: 'إغلاق', cls: 'ghost' }]
@@ -332,7 +416,7 @@ const Enroll = (() => {
   };
 
   function mailDialog(kind) {
-    const list = [...ui.sel].map(id => Store.get(`registrations/${id}`)).filter(Boolean);
+    const list = [...ui.sel].map(getReg).filter(Boolean);
     if (!list.length) return toast('حدّد مسجلاً واحداً على الأقل', 'error');
     const withMail = list.filter(emailOf), without = list.length - withMail.length;
     if (!withMail.length) return toast('لا يوجد بريد مسجل لأي من المحددين', 'error');
@@ -354,7 +438,7 @@ const Enroll = (() => {
           if (!subject || !body.trim()) { toast('اكتب العنوان والنص', 'error'); return false; }
           try { localStorage.setItem(MAIL_KEY, provider); } catch { /* ignore */ }
           const btn = $('[data-act="0"]', mm.el); btn.disabled = true;
-          const stamp = xs => xs.forEach(x => Store.update(`registrations/${x.id}`, { mailedAt: Date.now() }));
+          const stamp = xs => xs.forEach(x => Store.update(`${regColl(x.id)}/${x.id}`, { mailedAt: Date.now() }));
           if (provider === 'direct') {
             let ok = 0, fail = [];
             for (const x of withMail) {
@@ -405,30 +489,32 @@ const Enroll = (() => {
       DEFAULT_FORM_FIELDS.forEach(f => Store.set(`regform/fields/${f.id}`, { ...f }));
       Store.set('regform/seeded', true);
     }
-    return `<div id="enroll-root">${cohortPanel()}${h.announcementForm()}${regsPanel(h)}</div>`;
+    seedTrackForm();
+    return `<div id="enroll-root">${cohortPanel()}${h.announcementForm()}${regsPanel(h)}${trackRegs(h)}</div>`;
   }
 
   document.addEventListener('click', e => {
-    const root = $('#enroll-root'); if (!root) return;
+    const root = $('#enroll-root') || $('#track-regs'); if (!root) return;
     const t = e.target, h = H;
+    if (t.closest('[data-track-form]')) return openFormEditor('trackform');
     if (t.closest('[data-enroll-form]')) return openFormEditor();
     if (t.closest('[data-enroll-launch]')) return launchRegistration(root);
     if (t.closest('[data-enroll-close]')) return confirmDialog('إيقاف التسجيل؟ يختفي الإعلان المنبثق وقسم التسجيل من الصفحة الرئيسية، ويرجع زر التسجيل في الأعلى إلى «سجّل اهتمامك».', { danger: true, ok: 'إيقاف التسجيل' }).then(ok => { if (ok) { Store.update('announcement', { cohort: null, enabled: false }); Security.log('إيقاف التسجيل'); toast('أُوقف التسجيل'); syncAnnForm(); } });
     const cc = t.closest('[data-reg-cohort]'); if (cc) { ui.regCohort = cc.dataset.regCohort; ui.sel.clear(); return rerender(); }
-    const acc = t.closest('[data-reg-accept]'); if (acc) return acceptDialog(Store.get(`registrations/${acc.dataset.regAccept}`), h);
+    const acc = t.closest('[data-reg-accept]'); if (acc) return acceptDialog(getReg(acc.dataset.regAccept), h);
     const dec = t.closest('[data-reg-decline]');
-    if (dec) return confirmDialog('تسجيل الاعتذار لهذا المسجّل؟ (لا تُرسل له رسالة إلا بزر الإيميل)', { ok: 'اعتذار' }).then(ok => ok && Store.update(`registrations/${dec.dataset.regDecline}`, { status: 'declined', decidedAt: Date.now() }));
+    if (dec) return confirmDialog('تسجيل الاعتذار لهذا المسجّل؟ (لا تُرسل له رسالة إلا بزر الإيميل)', { ok: 'اعتذار' }).then(ok => ok && Store.update(`${regColl(dec.dataset.regDecline)}/${dec.dataset.regDecline}`, { status: 'declined', decidedAt: Date.now() }));
     const del = t.closest('[data-reg-del]');
-    if (del) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { ui.sel.delete(del.dataset.regDel); Store.remove(`registrations/${del.dataset.regDel}`); } });
+    if (del) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => { if (ok) { ui.sel.delete(del.dataset.regDel); Store.remove(`${regColl(del.dataset.regDel)}/${del.dataset.regDel}`); } });
     const ml = t.closest('[data-reg-mail]'); if (ml && !ml.disabled) return mailDialog(ml.dataset.regMail);
   });
   document.addEventListener('change', e => {
-    const root = $('#enroll-root'); if (!root) return;
+    const root = $('#enroll-root') || $('#track-regs'); if (!root) return;
     const t = e.target;
     if (t.matches('[data-enroll-pick]')) return $$('[data-enroll-custom]', root).forEach(el => { el.hidden = t.value !== '__custom'; });
     if (t.matches('[data-reg-pick]')) { t.checked ? ui.sel.add(t.dataset.regPick) : ui.sel.delete(t.dataset.regPick); return rerender(); }
-    if (t.matches('[data-reg-all]')) { regList(t.dataset.regAll).forEach(x => (t.checked ? ui.sel.add(x.id) : ui.sel.delete(x.id))); return rerender(); }
+    if (t.matches('[data-reg-all]')) { const [k, r] = t.dataset.regAll.split(':'); (k === 'track' ? trackRegList(r) : regList(k)).forEach(x => (t.checked ? ui.sel.add(x.id) : ui.sel.delete(x.id))); return rerender(); }
   });
 
-  return { panel, openFormEditor, announced, mailer, sendDirect, ping };
+  return { panel, trackRegs, trackRegRows, openFormEditor, announced, mailer, sendDirect, ping };
 })();

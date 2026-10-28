@@ -350,6 +350,11 @@ const sessionName = n => `الجلسة ${ORDINALS[n - 1] || esc(n)}`;
 const Data = {
   cohorts: () => Store.list('cohorts').sort((a, b) => a.num - b.num),
   cohort: id => Store.get(`cohorts/${id}`),
+  // المسارات التخصصية داخل الدفعة: أعضاؤها يبقون في الدفعة (cohort) ويحملون track، فتدخل أعدادهم في إحصاءات الدفعة العامة
+  tracks: cohortId => Store.list('tracks').filter(t => t && t.name && (!cohortId || t.cohort === cohortId)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+  track: id => (id ? Store.get(`tracks/${id}`) : null),
+  // أعضاء الدفعة العامة (بلا مسار) أو مسار بعينه، مع بقية أعضاء الدفعة في الحالتين
+  scopeMembers: (role, cohortId, trackId) => Data.cohortMembers(role, cohortId).filter(m => (Data.track(m.track)?.cohort === cohortId ? m.track : '') === (trackId || '')),
   // بيانات التواصل محفوظة في مسار خاص (contacts) وتُدمج مع البطاقة عند توفرها لهذا المستخدم
   withContacts: m => (m ? { ...m, ...(Store.get(`contacts/${m.id}`) || {}) } : null),
   members: (role, cohortId) => Store.list('members')
@@ -365,7 +370,7 @@ const Data = {
   saveMember(id, values) {
     const pub = {}, priv = {};
     Object.entries(values).forEach(([k, v]) => { (CONTACT_KEYS.includes(k) ? priv : pub)[k] = v; });
-    ['code', 'role', 'cohort', 'seq', 'uid', 'id'].forEach(k => delete pub[k]);
+    ['code', 'role', 'cohort', 'seq', 'uid', 'id', 'track'].forEach(k => delete pub[k]);
     if (Object.keys(pub).length) Store.update(`members/${id}`, pub);
     if (Object.keys(priv).length) Store.update(`contacts/${id}`, priv);
   },
@@ -500,10 +505,10 @@ const Data = {
     return { seq, code: `${role === 'mentor' ? 'M' : 'B'}${c.num}${seq}`, key };
   },
   // يضيف العضو ويُنشئ له حساب دخول برمز سري (مثل M211-7K4Q9P)
-  async addMember(role, cohortId, data) {
+  async addMember(role, cohortId, data, trackId) {
     const { seq, code } = await Data.reserveCode(role, cohortId);
     const id = Store.newId();
-    Store.set(`members/${id}`, { id, role, cohort: cohortId, seq, code, createdAt: Date.now() });
+    Store.set(`members/${id}`, { id, role, cohort: cohortId, seq, code, createdAt: Date.now(), ...(trackId ? { track: trackId } : {}) });
     Data.saveMember(id, data);
     let secret = null, error = null;
     try { secret = await Security.createMemberAccount(Store.get(`members/${id}`)); }
