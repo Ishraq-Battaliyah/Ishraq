@@ -1281,10 +1281,5 @@ a.tk-item { color: #fff; }
 .track-tabs .add-track { border-style: dashed; color: var(--p-dd); background: transparent; }
 .track-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .track-head h3 { margin: 0 0 4px; }
-.track-kpis { margin-bottom: 14px; }
-.track-kpis .kpi { background: #fff; border: 1px solid var(--line); color: var(--ink-2); }
-.track-kpis .kpi b { color: var(--p-dd); }
-.track-summary { margin-bottom: 18px; }
-.track-summary tr.total td { font-weight: 800; background: rgba(0,0,0,.04); }
 .enroll-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .track-regs { margin-top: 18px; }

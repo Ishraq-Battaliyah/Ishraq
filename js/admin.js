@@ -14,7 +14,7 @@ const Admin = (() => {
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
-  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', intRole: 'all', netDraft: {}, netCohort: null, track: '' };
+  const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', sessTrack: '', revTrack: '*', intRole: 'all', netDraft: {}, netCohort: null, track: '' };
   // المسار المفتوح حالياً داخل الدفعة المفتوحة (فارغ = الدفعة العامة)
   const curTrack = () => (Data.track(ui.track)?.cohort === ui.cohort ? ui.track : '');
 
@@ -364,44 +364,22 @@ const Admin = (() => {
     const subs = [['mentor', 'معلومات المرشدين', 'fa-user-tie'], ['mentee', 'معلومات المستفيدين', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project']];
     const sub = subs.some(x => x[0] === ui.sub) ? ui.sub : null;
     return `<div class="cohort-body">${bar}
-      ${tracks.length ? cohortSummary(c, tracks) : ''}
       <div class="sub-tabs">${subs.map(([k, l, i]) => `<button class="${sub === k ? 'active' : ''}" data-sub="${esc(k)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
       ${sub === 'mentor' || sub === 'mentee' ? membersBlock(c, sub) : ''}
       ${sub === 'network' ? networkBlock(c) : ''}
     </div>`;
   }
 
-  // إحصاءات مجموعة أعضاء: العدد والجلسات المنجزة والساعات
-  function groupStats(mentors, mentees) {
-    const ids = new Set(mentors.map(m => m.id));
-    const s = Data.stats(Data.bookings().filter(b => ids.has(b.mentorId)));
-    return { mentors: mentors.length, mentees: mentees.length, done: s.done, hours: s.hours, all: s };
-  }
-
-  // ملخص الدفعة: العامة + كل مسار تخصصي = إحصائية السنة الكاملة
-  function cohortSummary(c, tracks) {
-    const rows = [{ name: 'الدفعة العامة', ...groupStats(Data.scopeMembers('mentor', c.id), Data.scopeMembers('mentee', c.id)) },
-      ...tracks.map(t => ({ name: t.name, track: true, ...groupStats(Data.scopeMembers('mentor', c.id, t.id), Data.scopeMembers('mentee', c.id, t.id)) }))];
-    const tot = groupStats(Data.cohortMembers('mentor', c.id), Data.cohortMembers('mentee', c.id));
-    const tr = (r, cls = '') => `<tr class="${cls}"><td data-l="المجموعة">${r.track ? '<i class="fa-solid fa-briefcase"></i> ' : ''}<b>${esc(r.name)}</b></td><td data-l="المرشدون" class="num">${r.mentors}</td><td data-l="المستفيدون" class="num">${r.mentees}</td><td data-l="الجلسات المنجزة" class="num">${r.done}</td><td data-l="الساعات" class="num">${r.hours}</td></tr>`;
-    return `<div class="track-summary"><h3 class="sub"><i class="fa-solid fa-chart-column"></i> إحصائية ${esc(c.name)} الكاملة (تشمل المسارات التخصصية)</h3>
-      <div class="table-wrap"><table class="table rtable"><thead><tr><th>المجموعة</th><th>المرشدون</th><th>المستفيدون</th><th>الجلسات المنجزة</th><th>الساعات</th></tr></thead>
-      <tbody>${rows.map(r => tr(r)).join('')}${tr({ name: 'إجمالي السنة', ...tot }, 'total')}</tbody></table></div></div>`;
-  }
-
   // لوحة إدارة المسار التخصصي: إحصاءاته وقوائمه وشبكته والمسجلون فيه
   function trackBody(c, t) {
     const subs = [['mentor', 'المرشدون', 'fa-user-tie'], ['mentee', 'المستفيدون', 'fa-user-graduate'], ['network', 'الشبكة', 'fa-diagram-project'], ['tregs', 'المسجلون', 'fa-user-plus']];
     const sub = subs.some(x => x[0] === ui.sub) ? ui.sub : 'mentor';
-    const mentors = Data.scopeMembers('mentor', c.id, t.id), mentees = Data.scopeMembers('mentee', c.id, t.id);
-    const g = groupStats(mentors, mentees);
-    const k = (v, l, i) => `<div class="kpi"><i class="fa-solid ${i}"></i><b>${v}</b><span>${l}</span></div>`;
+    const nM = Data.scopeMembers('mentor', c.id, t.id).length, nB = Data.scopeMembers('mentee', c.id, t.id).length;
     return `<div class="track-head"><div><h3><i class="fa-solid fa-briefcase"></i> ${esc(t.name)}</h3>
-        <small class="muted">${t.sector ? `القطاع المهني: ${esc(t.sector)} · ` : ''}مسار تخصصي ضمن ${esc(c.name)} ${esc(c.year)}، وأعداده تدخل في إحصائية الدفعة العامة</small></div>
+        <small class="muted">${t.sector ? `القطاع المهني: ${esc(t.sector)} · ` : ''}مسار تخصصي ضمن ${esc(c.name)} ${esc(c.year)} · ${nM} مرشد · ${nB} مستفيد، وأعداده تدخل في إحصائية السنة العامة</small></div>
+      <div class="head-actions"><button class="btn ghost sm" data-goto-sess-track="${esc(t.id)}"><i class="fa-solid fa-calendar-days"></i> إحصائيات المسار وجلساته</button></div>
       ${Security.can('cohorts') ? `<div class="head-actions"><button class="btn ghost sm" data-edit-track="${esc(t.id)}"><i class="fa-solid fa-pen"></i> تعديل</button>
         <button class="btn ghost sm danger" data-del-track="${esc(t.id)}"><i class="fa-solid fa-trash"></i> حذف المسار</button></div>` : ''}</div>
-      <div class="kpis track-kpis">${k(g.mentors, 'مرشد', 'fa-user-tie')}${k(g.mentees, 'مستفيد', 'fa-user-graduate')}${k(g.done, 'جلسة منجزة', 'fa-circle-check')}${k(g.hours, 'ساعة إرشادية', 'fa-clock')}</div>
-      ${statsBoxes(g.all, true)}
       <div class="sub-tabs">${subs.map(([key, l, i]) => `<button class="${sub === key ? 'active' : ''}" data-sub="${esc(key)}"><i class="fa-solid ${i}"></i> ${l}</button>`).join('')}</div>
       ${sub === 'mentor' || sub === 'mentee' ? membersBlock(c, sub, t) : ''}
       ${sub === 'network' ? networkBlock(c, t) : ''}
@@ -721,26 +699,52 @@ const Admin = (() => {
     return `<div class="chip-filter">${[{ id: 'all', name: 'كل الدفعات' }, ...Data.cohorts()].map(c => `<button class="${ui[key] === c.id ? 'active' : ''}" data-filter="${esc(key)}" data-val="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>`;
   }
   const inCohort = (key, m) => ui[key] === 'all' || m.cohort === ui[key];
+  // نطاق المسار داخل الدفعة المختارة: null = كل الدفعة (أو كل الدفعات)، '' = الدفعة العامة، غير ذلك = رقم مسار
+  const inTrack = (m, cid, tid) => (Data.track(m.track)?.cohort === cid ? m.track : '') === tid;
+  const sessTrack = () => (ui.sessCohort !== 'all' && Data.tracks(ui.sessCohort).length ? (Data.track(ui.sessTrack)?.cohort === ui.sessCohort ? ui.sessTrack : '') : null);
+  const revTrack = () => (ui.revCohort !== 'all' && Data.tracks(ui.revCohort).length && ui.revTrack !== '*' && (ui.revTrack === '' || Data.track(ui.revTrack)?.cohort === ui.revCohort) ? ui.revTrack : null);
+  const inSess = m => inCohort('sessCohort', m) && (sessTrack() === null || inTrack(m, ui.sessCohort, sessTrack()));
+  const inRev = m => inCohort('revCohort', m) && (revTrack() === null || inTrack(m, ui.revCohort, revTrack()));
+  // أزرار فرز المسار: الدفعة العامة وكل مسار تخصصي (withAll يضيف «كل الدفعة»)
+  function trackFilter(key, cid, withAll) {
+    const items = [...(withAll ? [{ id: '*', name: 'كل الدفعة', icon: 'fa-layer-group' }] : []), { id: '', name: 'الدفعة العامة', icon: 'fa-people-group' }, ...Data.tracks(cid).map(t => ({ id: t.id, name: t.name, icon: 'fa-briefcase' }))];
+    const cur = key === 'sessTrack' ? sessTrack() : (revTrack() ?? '*');
+    return `<div class="track-tabs sess-tracks">${items.map(x => `<button class="${cur === x.id ? 'active' : ''}" data-filter="${esc(key)}" data-val="${esc(x.id)}"><i class="fa-solid ${x.icon}"></i> ${esc(x.name)}</button>`).join('')}</div>`;
+  }
 
   P.sessions = () => {
     if (!Security.can('sessions')) return proxyPanel();   // مشرف يملك صلاحية الإضافة النيابية فقط
-    const mentors = ui.sessCohort === 'all' ? Data.members('mentor') : Data.cohortMembers('mentor', ui.sessCohort);
-    const ids = new Set(mentors.map(m => m.id));
-    const all = Data.bookings().filter(b => ids.has(b.mentorId) && (ui.sessCohort === 'all' || !b.cohort || b.cohort === ui.sessCohort));
+    const cid = ui.sessCohort, tid = sessTrack();
+    const sessMentors = t => (cid === 'all' ? Data.members('mentor') : Data.cohortMembers('mentor', cid).filter(m => t === null || inTrack(m, cid, t)));
+    const bookingsOf = ms => { const ids = new Set(ms.map(m => m.id)); return Data.bookings().filter(b => ids.has(b.mentorId) && (cid === 'all' || !b.cohort || b.cohort === cid)); };
+    const whole = sessMentors(null), mentors = sessMentors(tid);
+    const ids = new Set(mentors.map(m => m.id)), all = bookingsOf(mentors);
     const sel = mentors.find(m => m.id === ui.sessMentor);
-    return `${proxyPanel()}<div class="panel">
-      <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
-      ${cohortFilter('sessCohort')}
-      ${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
-      <div class="extra-stat-wrap">${extraStatTile(ids)}</div>
-      ${ui.extraStat ? extraStatTable(ids) : ''}
-      ${ui.sessStat ? statList(all, ui.sessStat) : '<p class="muted small"><i class="fa-solid fa-hand-pointer"></i> اضغط على أي مربع لعرض الجلسات المندرجة تحته.</p>'}
-      <h3 class="sub">المرشدون</h3>
+    const tr = tid === null ? null : Data.track(tid);
+    const scopeName = tr ? tr.name : 'الدفعة العامة';
+    // المرشدون وإحصاءاتهم للنطاق المفتوح (الدفعة العامة أو مسار)
+    const people = () => `<h3 class="sub">المرشدون</h3>
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
         const st = Data.stats(Data.bookings({ mentorId: m.id }));
         return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/3 منجزة</small></button>`;
-      }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}
-    </div>
+      }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}`;
+    const detail = `${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
+      <div class="extra-stat-wrap">${extraStatTile(ids)}</div>
+      ${ui.extraStat ? extraStatTable(ids) : ''}
+      ${ui.sessStat ? statList(all, ui.sessStat) : '<p class="muted small"><i class="fa-solid fa-hand-pointer"></i> اضغط على أي مربع لعرض الجلسات المندرجة تحته.</p>'}
+      ${people()}`;
+    // دفعة فيها مسارات: إحصائية شاملة للسنة أولاً، ثم تبويبات الدفعة العامة والمسارات لكل منها إحصاءاته ونطاقاته وجلساته
+    const body = tid === null ? `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
+      ${cohortFilter('sessCohort')}${detail}</div>`
+      : `<div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية السنة الشاملة — ${esc(Data.cohort(cid)?.name || '')} <small class="muted">(تشمل المسارات التخصصية)</small></h2></div>
+      ${cohortFilter('sessCohort')}
+      ${statsBoxes(Data.stats(bookingsOf(whole)), true)}</div>
+      <div class="panel">
+      <div class="panel-head"><h2><i class="fa-solid ${tr ? 'fa-briefcase' : 'fa-people-group'}"></i> إحصائيات ${esc(scopeName)}</h2>${exportBar('sessions')}</div>
+      ${trackFilter('sessTrack', cid, false)}${detail}</div>`;
+    return `${proxyPanel()}${body}
     ${bandsPanel()}
     ${extraAdminPanel()}
     ${sel ? mentorSessions(sel) : ''}`;
@@ -835,10 +839,11 @@ const Admin = (() => {
     const cid = ui.sessCohort !== 'all' && Data.cohort(ui.sessCohort) ? ui.sessCohort : cohorts[cohorts.length - 1].id;
     const c = Data.cohort(cid);
     const L = Bands.launch(cid);
-    const mentors = Data.members('mentor', cid);
+    const tid = ui.sessCohort !== 'all' ? sessTrack() : null;
+    const mentors = Data.members('mentor', cid).filter(m => tid === null || inTrack(m, cid, tid));
     const now = Date.now();
     const person = m => `<span class="bp">${avatar(m, 'sm')}<b>${esc(m.name)}</b></span>`;
-    const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
+    const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}${tid === null ? '' : ` · ${esc(tid ? Data.track(tid)?.name : 'الدفعة العامة')}`}</h2>
       ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span>${Bands.archivedAt(cid) ? '<span class="pill st-absent-mentee"><i class="fa-solid fa-box-archive"></i> مؤرشفة</span>' : ''}</div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
     const cst = Data.stats(Data.bookings({ cohort: cid }).filter(b => mentors.some(m => m.id === b.mentorId)));
@@ -982,7 +987,7 @@ const Admin = (() => {
 
   function extraAdminPanel() {
     const on = Data.extraOn(), cfg = Store.get('extraConfig') || {};
-    const mentors = Data.members('mentor').filter(m => inCohort('sessCohort', m));
+    const mentors = Data.members('mentor').filter(inSess);
     const ids = new Set(mentors.map(m => m.id));
     const bks = Data.bookings({ extra: true }).filter(b => ids.has(b.mentorId) && ['upcoming', 'done'].includes(b.status))
       .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
@@ -1060,13 +1065,14 @@ const Admin = (() => {
 
   /* =============== 4) التقييمات =============== */
   P.reviews = () => {
-    const mentors = Data.members('mentor').filter(m => inCohort('revCohort', m));
+    const mentors = Data.members('mentor').filter(inRev);
     const sel = mentors.find(m => m.id === ui.revMentor);
     const program = Data.reviews({ type: 'program' }).sort((a, b) => b.ts - a.ts);
     return `<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-star"></i> التقييمات المتبادلة</h2>${exportBar('reviews')}</div>
       <p class="muted small">تقييمات المرشد والمستفيد عن بعضهما تصل هنا أولاً، ولا تظهر للطرف الآخر إلا بعد اعتمادها.</p>
       ${cohortFilter('revCohort')}
+      ${ui.revCohort !== 'all' && Data.tracks(ui.revCohort).length ? trackFilter('revTrack', ui.revCohort, true) : ''}
       ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
         const mentees = Data.menteesOf(m.id);
         const pend = Data.reviews().filter(r => r.mentorId === m.id && r.status === 'pending' && r.type !== 'program').length;
@@ -1424,7 +1430,7 @@ const Admin = (() => {
       }
       case 'network': return { title: `الشبكة — ${Data.cohort(a)?.name}`, headers: ['رقم المرشد', 'المرشد', 'رقم المستفيد', 'المستفيد'], rows: Data.members('mentor', a).flatMap(m => { const xs = Data.menteesOf(m.id); return xs.length ? xs.map(x => [m.code, m.name, x.code, x.name]) : [[m.code, m.name, '', '']]; }) };
       case 'sessions': {
-        const ids = new Set(Data.members('mentor').filter(m => inCohort('sessCohort', m)).map(m => m.id));
+        const ids = new Set(Data.members('mentor').filter(inSess).map(m => m.id));
         return { title: 'الجلسات الإرشادية', headers: bookingHead, rows: Data.bookings().filter(x => ids.has(x.mentorId)).map(bookingRow) };
       }
       case 'mentor-sessions': return { title: `جلسات ${Data.member(a)?.name}`, headers: bookingHead, rows: Data.bookings({ mentorId: a }).map(bookingRow) };
@@ -1564,13 +1570,14 @@ const Admin = (() => {
         return toast('تم حفظ الشبكة');
       }
       // الجلسات والتقييمات
-      const fb = t.closest('[data-filter]'); if (fb) { ui[fb.dataset.filter] = fb.dataset.val; return render(root); }
+      const fb = t.closest('[data-filter]'); if (fb) { ui[fb.dataset.filter] = fb.dataset.val; if (fb.dataset.filter === 'sessCohort') { ui.sessTrack = ''; ui.sessStat = null; } if (fb.dataset.filter === 'revCohort') ui.revTrack = '*'; return render(root); }
       const st = t.closest('[data-stat]');
       if (st) { ui.sessStat = ui.sessStat === st.dataset.stat ? null : st.dataset.stat; render(root); return ui.sessStat && $('#stat-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
       const la = t.closest('[data-launch]'); if (la) return launchCohort(la.dataset.launch);
       const ir = t.closest('[data-int-role]'); if (ir) { ui.intRole = ir.dataset.intRole; return render(root); }
       const dint = t.closest('[data-del-interest]'); if (dint) return confirmDialog('حذف هذا التسجيل؟', { danger: true, ok: 'حذف' }).then(ok => ok && Store.remove(`interests/${dint.dataset.delInterest}`));
       if (t.closest('[data-goto-form]')) { ui.tab = 'content'; render(root); return $('[data-sortable-fields]')?.scrollIntoView({ behavior: 'smooth' }); }
+      const gst = t.closest('[data-goto-sess-track]'); if (gst) { ui.tab = 'sessions'; ui.sessCohort = ui.cohort; ui.sessTrack = gst.dataset.gotoSessTrack; ui.sessStat = null; return render(root); }
       const gc = t.closest('[data-goto-cohorts]'); if (gc) { ui.tab = 'cohorts'; ui.cohort = gc.dataset.gotoCohorts; ui.track = gc.dataset.gotoTrack || ''; ui.sub = ui.sub || 'mentor'; return render(root); }
       const ar = t.closest('[data-archive]');
       if (ar) {
