@@ -34,13 +34,14 @@ const Bands = (() => {
     const L = launchedAt(Store.get(`members/${mentorId}/cohort`));
     const at = x => (L && x.date && dateTimeOf(x.date, x.start) < new Date(L)) ? Math.min(x.ts || L, L) : (x.ts || 0);
     const times = Data.slots(mentorId).filter(s => s.session === n).map(at)
-      .concat(Data.bookings({ mentorId }).filter(b => b.session === n).map(at));
+      .concat(Data.bookings({ mentorId, cohort: Store.get(`members/${mentorId}/cohort`) }).filter(b => b.session === n).map(at));
     return times.length ? Math.min(...times) : null;
   }
 
   // موعد الانعقاد الفعلي لأول جلسة منجزة (صادق عليها الطرفان) للمرشد في هذه الجلسة، لا موعد إضافة المواعيد
   function heldAt(mentorId, n) {
-    const times = Data.bookings({ mentorId }).filter(b => b.session === n && b.status === 'done' && b.date)
+    // من دفعة المرشد الحالية فقط، كما تحسبها الإحصاءات العلوية (Data.bookings بفلتر الدفعة)
+    const times = Data.bookings({ mentorId, cohort: Store.get(`members/${mentorId}/cohort`) }).filter(b => b.session === n && b.status === 'done' && b.date)
       .map(b => dateTimeOf(b.date, b.start).getTime()).filter(t => !isNaN(t));
     return times.length ? Math.min(...times) : null;
   }

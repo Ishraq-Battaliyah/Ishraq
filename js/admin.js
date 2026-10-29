@@ -19,8 +19,8 @@ const Admin = (() => {
   const curTrack = () => (Data.track(ui.track)?.cohort === ui.cohort ? ui.track : '');
 
   // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
-  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: 'sessions', reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
-  const tabAllowed = id => (id === 'admins' ? Security.isOwner() : Security.can(TAB_PERM[id]));
+  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: ['sessions', 'proxy'], reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
+  const tabAllowed = id => (id === 'admins' ? Security.isOwner() : [].concat(TAB_PERM[id]).some(p => Security.can(p)));
 
   let lastRoot = null;
   function render(root) {
@@ -120,7 +120,8 @@ const Admin = (() => {
   }
 
   function kpis() {
-    const s = Data.stats(Data.bookings());
+    const mentorIds = new Set(Data.members('mentor').map(m => m.id));   // نفس أساس إحصاءات تبويب الجلسات («كل الدفعات»)
+    const s = Data.stats(Data.bookings().filter(b => mentorIds.has(b.mentorId)));
     const k = (v, l, i) => `<div class="kpi"><i class="fa-solid ${i}"></i><b>${v}</b><span>${l}</span></div>`;
     return k(Data.members('mentor').length, 'مرشد', 'fa-user-tie') + k(Data.members('mentee').length, 'مستفيد', 'fa-user-graduate')
       + k(s.done, 'جلسة منجزة', 'fa-circle-check') + k(s.hours, 'ساعة إرشادية', 'fa-clock');
@@ -722,11 +723,12 @@ const Admin = (() => {
   const inCohort = (key, m) => ui[key] === 'all' || m.cohort === ui[key];
 
   P.sessions = () => {
+    if (!Security.can('sessions')) return proxyPanel();   // مشرف يملك صلاحية الإضافة النيابية فقط
     const mentors = ui.sessCohort === 'all' ? Data.members('mentor') : Data.cohortMembers('mentor', ui.sessCohort);
     const ids = new Set(mentors.map(m => m.id));
     const all = Data.bookings().filter(b => ids.has(b.mentorId) && (ui.sessCohort === 'all' || !b.cohort || b.cohort === ui.sessCohort));
     const sel = mentors.find(m => m.id === ui.sessMentor);
-    return `<div class="panel">
+    return `${proxyPanel()}<div class="panel">
       <div class="panel-head"><h2><i class="fa-solid fa-chart-pie"></i> إحصائية عامة لجميع الجلسات</h2>${exportBar('sessions')}</div>
       ${cohortFilter('sessCohort')}
       ${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
@@ -744,6 +746,88 @@ const Admin = (() => {
     ${sel ? mentorSessions(sel) : ''}`;
   };
 
+  /* ===== إضافة جلسة منجزة نيابةً عن المرشد (بصلاحية يمنحها المشرف الرئيسي) ===== */
+  function proxyPanel() {
+    if (!Security.can('proxy')) return '';
+    const open = proxyOpen();
+    return `<div class="panel"><div class="panel-head"><h2><i class="fa-solid fa-user-pen"></i> إضافة جلسة منجزة نيابةً عن المرشد</h2>
+      <button class="btn primary" data-proxy-add><i class="fa-solid fa-plus"></i> إضافة جلسة منجزة</button></div>
+      <p class="muted small">عند تأخر المرشد في إضافة الجلسة أو تحديثها: اختر المرشد والمستفيد ورقم الجلسة وتاريخها، فتُسجَّل منجزة وتُحتسب للطرفين وفي الإحصاءات دون حاجة لمصادقة أي منهما.</p>
+      ${open.length ? `<h3 class="sub"><i class="fa-solid fa-hourglass-end"></i> جلسات مجدولة لم تُحدَّث <span class="count">${open.length}</span></h3>
+        <div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>المستفيد</th><th>الجلسة</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>
+        ${open.map(b => `<tr><td data-l="المرشد">${esc(Data.member(b.mentorId)?.name || '—')}</td><td data-l="المستفيد">${esc(Data.member(b.menteeId)?.name || '—')}</td><td data-l="الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الحالة">${bookingPill(b)}</td><td>${proxyDoneBtn(b)}</td></tr>`).join('')}
+        </tbody></table></div>` : ''}</div>`;
+  }
+
+  // الجلسات المجدولة (غير الإضافية) التي انقضى موعدها ولم تُحسم
+  const proxyOpen = () => Data.bookings().filter(b => b.status === 'upcoming' && b.date <= todayISO() && Data.member(b.mentorId))
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const proxyDoneBtn = b => (b.status === 'upcoming' ? `<button class="btn xs success" data-proxy-done="${esc(b.id)}"><i class="fa-solid fa-circle-check"></i> تحويل إلى منجزة</button>` : '');
+
+  async function proxyComplete(id) {
+    const b = Store.get(`bookings/${id}`);
+    if (!b || b.status !== 'upcoming') return toast('الجلسة لم تعد قادمة');
+    if (b.date > todayISO()) return toast('لا يمكن إنجاز جلسة موعدها في المستقبل');
+    const mentor = Data.member(b.mentorId), mentee = Data.member(b.menteeId);
+    if (!(await confirmDialog(`تحويل ${Data.bookingName(b)} (${mentor?.name || ''} و${mentee?.name || ''}) إلى منجزة دون تأكيد الطرفين؟`))) return;
+    const now = Date.now();
+    Store.update(`bookings/${id}`, { status: 'done', doneByMentor: now, doneByMentee: now, statusTs: now, statusBy: 'admin', proxyBy: Security.adminName(), proposal: null });
+    const txt = `حدّثت الإدارة ${Data.bookingName(b)} إلى منجزة بتاريخ ${fmtDate(b.date)} بين المرشد ${mentor?.name || ''} والمستفيد ${mentee?.name || ''}`;
+    mentor && Data.notify(mentor.id, txt, { icon: 'fa-circle-check' }); mentee && Data.notify(mentee.id, txt, { icon: 'fa-circle-check' });
+    Security.log('تحويل جلسة إلى منجزة نيابةً عن المرشد', mentor?.name || b.mentorId, `${Data.bookingName(b)} · ${b.date} · ${mentee?.name || ''}`);
+    toast('تم تحويل الجلسة إلى منجزة');
+    lastRoot && render(lastRoot);
+  }
+
+  function proxyDialog() {
+    const mentors = Data.members('mentor').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+    if (!mentors.length) return toast('لا يوجد مرشدون');
+    const menteeBoxes = mid => {
+      const xs = Data.menteesOf(mid);
+      return xs.length ? xs.map(x => `<label class="perm-item"><input type="checkbox" name="mentee_${esc(x.id)}" ${xs.length === 1 ? 'checked' : ''}> <span><b>${esc(x.name)}</b></span></label>`).join('')
+        : '<p class="muted small">لا يوجد مستفيد مرتبط بهذا المرشد في الشبكة.</p>';
+    };
+    openModal({
+      title: '<i class="fa-solid fa-user-pen"></i> إضافة جلسة منجزة نيابةً عن المرشد', size: 'md',
+      body: `<form class="form-grid one">
+        <div class="field"><label>المرشد</label><select name="mentor"><option value="">— اختر المرشد —</option>${mentors.map(m => `<option value="${esc(m.id)}">${esc(m.name)}${Data.cohort(m.cohort) ? ` — ${esc(Data.cohort(m.cohort).name)}` : ''}</option>`).join('')}</select></div>
+        <div class="field"><label>المستفيد</label><div class="perm-list" id="proxy-mentees"><p class="muted small">اختر المرشد أولاً.</p></div></div>
+        <div class="field"><label>رقم الجلسة</label><select name="session">${Bands.SESSIONS.map(n => `<option value="${n}">${sessionName(n)}</option>`).join('')}</select></div>
+        <div class="field"><label>تاريخ الجلسة</label><input type="date" name="date" max="${todayISO()}" value="${todayISO()}"></div>
+        <div class="field"><label>وقت البداية</label><input type="time" name="start" value="20:00"></div>
+        <div class="field"><label>وقت النهاية</label><input type="time" name="end" value="21:00"></div>
+        <p class="muted small">تُسجَّل الجلسة «منجزة» وتُحتسب في حساب المرشد والمستفيد وفي الإحصاءات، مع توثيق اسمك كمن أضافها. إن وُجد حجز قادم لنفس الجلسة يُحوَّل إلى منجز.</p>
+      </form>`,
+      onOpen: m => $('[name=mentor]', m.body).addEventListener('change', e => { $('#proxy-mentees', m.body).innerHTML = e.target.value ? menteeBoxes(e.target.value) : '<p class="muted small">اختر المرشد أولاً.</p>'; }),
+      actions: [{ label: 'تسجيل الجلسة منجزة', cls: 'primary', onClick: m => {
+        const v = readForm($('form', m.body));
+        const mentor = Data.member(v.mentor);
+        const mentees = Data.menteesOf(v.mentor).filter(x => v[`mentee_${x.id}`]);
+        if (!mentor) { toast('اختر المرشد'); return false; }
+        if (!mentees.length) { toast('اختر مستفيداً واحداً على الأقل'); return false; }
+        if (!v.date || v.date > todayISO()) { toast('تاريخ الجلسة المنجزة يجب ألا يكون في المستقبل'); return false; }
+        if (!v.start || !v.end || v.end <= v.start) { toast('تحقق من وقتي البداية والنهاية'); return false; }
+        const n = Number(v.session), by = Security.adminName(), now = Date.now(), added = [];
+        mentees.forEach(x => {
+          const cohort = x.cohort || mentor.cohort || null;
+          const cur = Data.bookings({ mentorId: mentor.id, menteeId: x.id, cohort }).find(b => b.session === n && ['upcoming', 'done'].includes(b.status));
+          if (cur?.status === 'done') { toast(`${x.name}: ${sessionName(n)} منجزة مسبقاً`); return; }
+          const done = { date: v.date, start: v.start, end: v.end, status: 'done', doneByMentor: now, doneByMentee: now, statusTs: now, statusBy: 'admin', proxyBy: by };
+          if (cur) Store.update(`bookings/${cur.id}`, { ...done, proposal: null });
+          else {
+            const id = `p_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+            Store.set(`bookings/${id}`, { id, mentorId: mentor.id, menteeId: x.id, ...(cohort ? { cohort } : {}), session: n, ts: now, ...done });
+          }
+          const txt = `سجّلت الإدارة ${sessionName(n)} منجزة بتاريخ ${fmtDate(v.date)} بين المرشد ${mentor.name} والمستفيد ${x.name}`;
+          Data.notify(mentor.id, txt, { icon: 'fa-circle-check' }); Data.notify(x.id, txt, { icon: 'fa-circle-check' });
+          added.push(x.name);
+        });
+        if (added.length) { Security.log('إضافة جلسة منجزة نيابةً عن المرشد', mentor.name, `${sessionName(n)} · ${v.date} · ${added.join('، ')}`); toast(`تمت إضافة ${sessionName(n)} منجزة (${added.length})`); lastRoot && render(lastRoot); }
+        return !!added.length;
+      } }, { label: 'إلغاء', cls: 'ghost' }]
+    });
+  }
+
   /* ===== إطلاق الدفعة ونطاقات متابعة التعثر ===== */
   function bandsPanel() {
     const cohorts = Data.cohorts();
@@ -757,7 +841,8 @@ const Admin = (() => {
     const head = `<div class="panel-head"><h2><i class="fa-solid fa-layer-group"></i> نطاقات متابعة الجلسات — ${esc(c.name)}</h2>
       ${L ? `<div class="head-actions"><span class="pill st-done"><i class="fa-solid fa-rocket"></i> أُطلقت ${fmtTs(L.ts)}</span>${Bands.archivedAt(cid) ? '<span class="pill st-absent-mentee"><i class="fa-solid fa-box-archive"></i> مؤرشفة</span>' : ''}</div>` : ''}</div>
       ${ui.sessCohort === 'all' && cohorts.length > 1 ? '<p class="muted small">تُعرض أحدث دفعة؛ اختر دفعة من الأعلى لعرض نطاقاتها.</p>' : ''}`;
-    const launchBox = L ? `<p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب موعد انعقاد الجلسة فعلياً (بعد مصادقة الطرفين على إتمامها) وليس موعد إضافة المواعيد، ومن لم تنعقد جلسته ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
+    const cst = Data.stats(Data.bookings({ cohort: cid }).filter(b => mentors.some(m => m.id === b.mentorId)));
+    const launchBox = L ? `<p class="small"><i class="fa-solid fa-circle-check"></i> الجلسات المنجزة في الدفعة: <b>${cst.done}</b> · ساعات: <b>${cst.hours}</b> <span class="muted">(تطابق إحصاءات الجلسات في الأعلى عند اختيار هذه الدفعة)</span></p><p class="muted small">الأسبوع الحالي منذ الإطلاق: <b>${Bands.weekOf(now, L.ts)}</b>. يُصنَّف المرشد حسب موعد انعقاد الجلسة فعلياً (بعد مصادقة الطرفين على إتمامها) وليس موعد إضافة المواعيد، ومن لم تنعقد جلسته ينتقل تلقائياً بين النطاقات مع مرور الأسابيع. اضغط على اسم المرشد لعرض حالته وإرسال تذكير.</p>`
       : `<div class="launch-box"><i class="fa-solid fa-rocket"></i><div><b>لم تُطلق هذه الدفعة بعد</b>
       <p>يبدأ حساب المدد بعد الضغط على «إطلاق الدفعة» من صفحة الدفعات (زر أخضر في شريط الدفعة): فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12.</p></div>
       <button class="btn primary" data-goto-cohorts="${esc(cid)}"><i class="fa-solid fa-people-group"></i> الانتقال لصفحة الدفعات</button></div>`;
@@ -786,8 +871,10 @@ const Admin = (() => {
           <ul>${inBand.map(({ m, st }) => `<li class="${st.held ? 'added' : 'waiting'}" data-band-mentor="${esc(m.id)}" data-session="${esc(n)}" title="${st.held ? 'انعقدت الجلسة' : 'لم تنعقد الجلسة بعد'}">${person(m)}</li>`).join('')}</ul></div>`;
       }).join('');
       const pending = sts.filter(x => x.st.notStarted).length;
+      const heldN = sts.filter(x => x.st.held).length;
       const early = sts.filter(x => !x.st.held && !x.st.notStarted && x.st.week < 3);   // لم يضيفوا بعد وما زالوا في الأسبوعين الأولين
       return `<div class="band-row"><h3 class="sub">${sessionName(n)} <small class="muted">الأسابيع ${(n - 1) * 4 + 1}-${n * 4}${start ? ` · تبدأ ${fmtDate(new Date(start).toISOString().slice(0, 10))}` : ''}</small>
+        ${L ? `<span class="chip" title="عدد المرشدين الذين لهم جلسة منجزة في هذه الجلسة (مرشد واحد قد يُنجز مع أكثر من مستفيد، فيُعد مرة واحدة)"><i class="fa-solid fa-circle-check"></i> انعقدت: ${heldN}/${mentors.length} مرشد</span>` : ''}
         ${start && now < start ? `<span class="chip">لم تبدأ فترتها بعد${pending ? ` · ${pending} بانتظار` : ''}</span>` : ''}
         ${early.length ? `<span class="chip" title="${esc(early.map(x => x.m.name).join('، '))}"><i class="fa-regular fa-hourglass-half"></i> ${early.length} لم تنعقد جلساتهم بعد (ما زالوا ضمن الأسبوعين الأولين)</span>` : ''}</h3>
         <div class="bands">${cols}</div></div>`;
@@ -964,8 +1051,8 @@ const Admin = (() => {
         ${slots.map(s => `<tr><td data-l="الجلسة">${sessionName(s.session)}</td><td data-l="التاريخ">${fmtDate(s.date)}</td><td data-l="الوقت">${tRange(s.start, s.end)}</td><td data-l="النوع">${MODES[s.mode] || ''}</td><td data-l="المحتوى">${esc(s.summary || '—')}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يعلن المرشد أي مواعيد بعد.</p>'}
       <h3 class="sub"><i class="fa-solid fa-list-check"></i> تحديثات الجلسات</h3>
-      ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th></tr></thead><tbody>
-        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}${multi ? `<br><small class="muted">${esc(Data.member(b.menteeId)?.name || '')}</small>` : ''}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
+      ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th>${Security.can('proxy') ? '<th></th>' : ''}</tr></thead><tbody>
+        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}${multi ? `<br><small class="muted">${esc(Data.member(b.menteeId)?.name || '')}</small>` : ''}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td>${Security.can('proxy') ? `<td>${proxyDoneBtn(b)}</td>` : ''}</tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يتم حجز أي جلسة بعد.</p>'}
       ${statsBoxes(Data.stats(bks), true)}
     </div>`;
@@ -1516,6 +1603,8 @@ const Admin = (() => {
           toast(turnOn ? 'تم تفعيل الجلسات الإضافية' : 'تم إيقاف الجلسات الإضافية');
         });
       }
+      if (t.closest('[data-proxy-add]')) return proxyDialog();
+      const pd = t.closest('[data-proxy-done]'); if (pd) return proxyComplete(pd.dataset.proxyDone);
       const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }
