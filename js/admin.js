@@ -675,9 +675,34 @@ const Admin = (() => {
   /* ===== إضافة جلسة منجزة نيابةً عن المرشد (بصلاحية يمنحها المشرف الرئيسي) ===== */
   function proxyPanel() {
     if (!Security.can('proxy')) return '';
+    const open = proxyOpen();
     return `<div class="panel"><div class="panel-head"><h2><i class="fa-solid fa-user-pen"></i> إضافة جلسة منجزة نيابةً عن المرشد</h2>
       <button class="btn primary" data-proxy-add><i class="fa-solid fa-plus"></i> إضافة جلسة منجزة</button></div>
-      <p class="muted small">عند تأخر المرشد في إضافة الجلسة أو تحديثها: اختر المرشد والمستفيد ورقم الجلسة وتاريخها، فتُسجَّل منجزة وتُحتسب للطرفين وفي الإحصاءات دون حاجة لمصادقة أي منهما.</p></div>`;
+      <p class="muted small">عند تأخر المرشد في إضافة الجلسة أو تحديثها: اختر المرشد والمستفيد ورقم الجلسة وتاريخها، فتُسجَّل منجزة وتُحتسب للطرفين وفي الإحصاءات دون حاجة لمصادقة أي منهما.</p>
+      ${open.length ? `<h3 class="sub"><i class="fa-solid fa-hourglass-end"></i> جلسات مجدولة لم تُحدَّث <span class="count">${open.length}</span></h3>
+        <div class="table-wrap"><table class="table rtable"><thead><tr><th>المرشد</th><th>المستفيد</th><th>الجلسة</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>
+        ${open.map(b => `<tr><td data-l="المرشد">${esc(Data.member(b.mentorId)?.name || '—')}</td><td data-l="المستفيد">${esc(Data.member(b.menteeId)?.name || '—')}</td><td data-l="الجلسة">${sessionName(b.session)}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الحالة">${bookingPill(b)}</td><td>${proxyDoneBtn(b)}</td></tr>`).join('')}
+        </tbody></table></div>` : ''}</div>`;
+  }
+
+  // الجلسات المجدولة (غير الإضافية) التي انقضى موعدها ولم تُحسم
+  const proxyOpen = () => Data.bookings().filter(b => b.status === 'upcoming' && b.date <= todayISO() && Data.member(b.mentorId))
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const proxyDoneBtn = b => (b.status === 'upcoming' ? `<button class="btn xs success" data-proxy-done="${esc(b.id)}"><i class="fa-solid fa-circle-check"></i> تحويل إلى منجزة</button>` : '');
+
+  async function proxyComplete(id) {
+    const b = Store.get(`bookings/${id}`);
+    if (!b || b.status !== 'upcoming') return toast('الجلسة لم تعد قادمة');
+    if (b.date > todayISO()) return toast('لا يمكن إنجاز جلسة موعدها في المستقبل');
+    const mentor = Data.member(b.mentorId), mentee = Data.member(b.menteeId);
+    if (!(await confirmDialog(`تحويل ${Data.bookingName(b)} (${mentor?.name || ''} و${mentee?.name || ''}) إلى منجزة دون تأكيد الطرفين؟`))) return;
+    const now = Date.now();
+    Store.update(`bookings/${id}`, { status: 'done', doneByMentor: now, doneByMentee: now, statusTs: now, statusBy: 'admin', proxyBy: Security.adminName(), proposal: null });
+    const txt = `حدّثت الإدارة ${Data.bookingName(b)} إلى منجزة بتاريخ ${fmtDate(b.date)} بين المرشد ${mentor?.name || ''} والمستفيد ${mentee?.name || ''}`;
+    mentor && Data.notify(mentor.id, txt, { icon: 'fa-circle-check' }); mentee && Data.notify(mentee.id, txt, { icon: 'fa-circle-check' });
+    Security.log('تحويل جلسة إلى منجزة نيابةً عن المرشد', mentor?.name || b.mentorId, `${Data.bookingName(b)} · ${b.date} · ${mentee?.name || ''}`);
+    toast('تم تحويل الجلسة إلى منجزة');
+    lastRoot && render(lastRoot);
   }
 
   function proxyDialog() {
@@ -952,8 +977,8 @@ const Admin = (() => {
         ${slots.map(s => `<tr><td data-l="الجلسة">${sessionName(s.session)}</td><td data-l="التاريخ">${fmtDate(s.date)}</td><td data-l="الوقت">${tRange(s.start, s.end)}</td><td data-l="النوع">${MODES[s.mode] || ''}</td><td data-l="المحتوى">${esc(s.summary || '—')}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يعلن المرشد أي مواعيد بعد.</p>'}
       <h3 class="sub"><i class="fa-solid fa-list-check"></i> تحديثات الجلسات</h3>
-      ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th></tr></thead><tbody>
-        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}${multi ? `<br><small class="muted">${esc(Data.member(b.menteeId)?.name || '')}</small>` : ''}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td></tr>`).join('')}
+      ${bks.length ? `<div class="table-wrap"><table class="table rtable"><thead><tr><th>رقم الجلسة</th><th>تاريخ الجلسة</th><th>الوقت</th><th>النوع</th><th>وضع الجلسة</th>${Security.can('proxy') ? '<th></th>' : ''}</tr></thead><tbody>
+        ${bks.map(b => `<tr><td data-l="رقم الجلسة">${sessionName(b.session)}${multi ? `<br><small class="muted">${esc(Data.member(b.menteeId)?.name || '')}</small>` : ''}</td><td data-l="التاريخ">${fmtDate(b.date)}</td><td data-l="الوقت">${tRange(b.start, b.end)}</td><td data-l="النوع">${MODES[b.mode] || ''}</td><td data-l="الحالة">${bookingPill(b)}</td>${Security.can('proxy') ? `<td>${proxyDoneBtn(b)}</td>` : ''}</tr>`).join('')}
       </tbody></table></div>` : '<p class="muted small">لم يتم حجز أي جلسة بعد.</p>'}
       ${statsBoxes(Data.stats(bks), true)}
     </div>`;
@@ -1486,6 +1511,7 @@ const Admin = (() => {
         });
       }
       if (t.closest('[data-proxy-add]')) return proxyDialog();
+      const pd = t.closest('[data-proxy-done]'); if (pd) return proxyComplete(pd.dataset.proxyDone);
       const rmd = t.closest('[data-remind]'); if (rmd) return remindDialog(rmd.dataset.remind, Number(rmd.dataset.session));
       const sm = t.closest('[data-sess-mentor]');
       if (sm) { ui.sessMentor = ui.sessMentor === sm.dataset.sessMentor ? null : sm.dataset.sessMentor; render(root); return $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }); }
