@@ -724,10 +724,15 @@ const Admin = (() => {
     const scopeName = tr ? tr.name : 'الدفعة العامة';
     // المرشدون وإحصاءاتهم للنطاق المفتوح (الدفعة العامة أو مسار)
     const people = () => `<h3 class="sub">المرشدون</h3>
-      ${mentors.length ? `<div class="icon-people">${mentors.map(m => {
-        const st = Data.stats(Data.bookings({ mentorId: m.id }));
-        return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/3 منجزة</small></button>`;
-      }).join('')}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}`;
+      ${mentors.length ? `<div class="icon-people">${(() => {
+        // مرشد له أكثر من مستفيد: المنجز والمتبقي يشملان كل مستفيديه (3 جلسات لكل مستفيد)
+        const card = m => {
+          const st = Data.stats(Data.bookings({ mentorId: m.id })), n = Math.max(1, Data.menteesOf(m.id).length);
+          return `<button class="person ${ui.sessMentor === m.id ? 'active' : ''}" data-sess-mentor="${esc(m.id)}">${avatar(m, 'lg')}<b>${esc(m.name)}</b><small>${st.done}/${3 * n} منجزة</small></button>`;
+        };
+        const multi = mentors.filter(m => Data.menteesOf(m.id).length > 1), single = mentors.filter(m => Data.menteesOf(m.id).length <= 1);
+        return single.map(card).join('') + (multi.length ? `<span class="people-sub-label">مرشدين بأكثر من مستفيد</span>${multi.map(card).join('')}` : '');
+      })()}</div>` : emptyState('لا يوجد مرشدون', 'fa-user-tie')}`;
     const detail = `${statsBoxes(Data.stats(all), true, { clickable: true, active: ui.sessStat })}
       <div class="extra-stat-wrap">${extraStatTile(ids)}</div>
       ${ui.extraStat ? extraStatTable(ids) : ''}
