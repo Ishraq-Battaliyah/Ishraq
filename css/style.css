@@ -1296,3 +1296,13 @@ a.tk-item { color: #fff; }
 .social-count .near { color: #B7791F; font-weight: 700; }
 .social-count .over { color: #C53030; font-weight: 700; }
 .panel-intro { margin-bottom: 14px; }
+.idea-list { display: grid; gap: 14px; margin-top: 14px; }
+.idea-card { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #fff; }
+.idea-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.idea-no { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--p-dd); color: #fff; font-size: .8rem; font-weight: 800; }
+.idea-tag, .idea-live { font-size: .78rem; font-weight: 700; padding: .2em .8em; border-radius: 999px; background: var(--p-l); color: var(--p-dd); }
+.idea-live { background: #FEF3C7; color: #92400E; }
+.idea-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.idea-plat { font-weight: 800; margin-bottom: 6px; color: var(--ink-2); }
+.idea-col textarea { width: 100%; resize: vertical; line-height: 1.7; font-family: inherit; }
+.idea-btns { display: inline-flex; gap: 6px; flex-wrap: wrap; }

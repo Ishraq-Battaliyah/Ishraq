@@ -8,7 +8,7 @@ const Social = (() => {
     x: { label: 'X (تويتر)', icon: 'fa-brands fa-x-twitter', intent: t => `https://twitter.com/intent/tweet?text=${encodeURIComponent(t)}` },
     linkedin: { label: 'لينكدإن', icon: 'fa-brands fa-linkedin-in', intent: t => `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(t)}` }
   };
-  const ui = { cohort: 'all' };
+  const ui = { cohort: 'all', idea: 'all' };
 
   const siteUrl = () => window.ISHRAQ_CONFIG.siteUrl || location.href.replace(/#.*$/, '');
   const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
@@ -78,10 +78,60 @@ const Social = (() => {
   }
 
   function panel() {
+    bind();
     const cohorts = Store.list('cohorts');
     return `<div class="panel-intro"><p class="muted small"><i class="fa-solid fa-circle-info"></i> اضغط أيقونة المنصة أمام أي اسم لتوليد منشور جاهز من نبذته التعريفية بما يناسب حد الحروف (تويتر ${LIMITS.x} حرفاً شاملةً الرابط)، مع صورة قريبة من بطاقته التعريفية لإرفاقها بالمنشور.</p>
       ${cohorts.length > 1 ? `<div class="chip-filter">${[{ id: 'all', name: 'كل الدفعات' }, ...cohorts.sort((a, b) => (a.year || 0) - (b.year || 0))].map(c => `<button class="${ui.cohort === c.id ? 'active' : ''}" data-social-cohort="${esc(c.id)}">${esc(c.name)}</button>`).join('')}</div>` : ''}</div>
-      ${table('mentor')}${table('mentee')}`;
+      ${ideas()}${table('mentor')}${table('mentee')}`;
+  }
+
+  /* ===== منشورات مقترحة عن إشراق نفسها ===== */
+  function counter(n, limit) {
+    return `<span class="${n > limit ? 'over' : n > limit * 0.92 ? 'near' : ''}">${n} / ${limit} حرفاً</span>`;
+  }
+
+  function ideaCard(p, i, s) {
+    const T = SocialIdeas.TYPES[p.type];
+    const cols = Object.entries(PLATFORMS).map(([k, pl]) => {
+      const text = SocialIdeas.resolve((k === 'x' ? p.x : p.li)(s), siteUrl());
+      return `<div class="idea-col ${k}"><div class="idea-plat"><i class="${pl.icon}"></i> ${pl.label}</div>
+        <textarea data-idea-text="${k}" rows="${k === 'x' ? 7 : 11}" aria-label="نص منشور ${esc(pl.label)}">${esc(text)}</textarea>
+        <div class="social-count"><span data-idea-count="${k}">${counter(weightedLen(text, k), LIMITS[k])}</span>
+          <span class="idea-btns"><button type="button" class="btn ghost sm" data-idea-copy="${k}"><i class="fa-regular fa-copy"></i> نسخ</button>
+          <button type="button" class="btn primary sm" data-idea-post="${k}"><i class="${pl.icon}"></i> نشر في المنصة</button></span></div></div>`;
+    }).join('');
+    return `<article class="idea-card" data-idea="${i}"><div class="idea-head"><span class="idea-no">${i + 1}</span><b>${esc(p.title)}</b>
+      <span class="idea-tag t-${esc(p.type)}"><i class="fa-solid ${T.icon}"></i> ${T.label}</span>${p.live ? '<span class="idea-live" title="الأرقام من بيانات المنصة الفعلية"><i class="fa-solid fa-bolt"></i> أرقام حيّة</span>' : ''}</div>
+      <div class="idea-cols">${cols}</div></article>`;
+  }
+
+  function ideas() {
+    const s = SocialIdeas.stats();
+    const types = [['all', 'الكل'], ...Object.entries(SocialIdeas.TYPES).map(([k, t]) => [k, t.label])];
+    const list = SocialIdeas.POSTS.map((p, i) => [p, i]).filter(([p]) => ui.idea === 'all' || p.type === ui.idea);
+    return `<div class="panel social-block"><div class="panel-head"><h2><i class="fa-solid fa-lightbulb"></i> منشورات مقترحة عن إشراق <span class="count">${list.length}</span></h2></div>
+      <p class="muted small"><i class="fa-solid fa-circle-info"></i> ${SocialIdeas.POSTS.length} فكرة لبناء السمعة والصورة الذهنية للمبادرة، لكل منها نسخة لتويتر وأخرى للينكدإن. النصوص قابلة للتعديل قبل النسخ أو النشر، والأرقام الحيّة تُسحب من بيانات المنصة وتتحول لصيغة عامة إن لم تتوفر.</p>
+      <div class="chip-filter">${types.map(([k, l]) => `<button class="${ui.idea === k ? 'active' : ''}" data-idea-type="${esc(k)}">${esc(l)}</button>`).join('')}</div>
+      <div class="idea-list">${list.map(([p, i]) => ideaCard(p, i, s)).join('')}</div></div>`;
+  }
+
+  // مستمعات عامة تُربط مرة واحدة (اللوحة تُعاد رسمها كاملة عند كل تحديث)
+  let bound = false;
+  function bind() {
+    if (bound) return; bound = true;
+    document.addEventListener('input', e => {
+      const ta = e.target.closest?.('[data-idea-text]'); if (!ta) return;
+      const k = ta.dataset.ideaText;
+      $(`[data-idea-count="${k}"]`, ta.closest('.idea-col')).innerHTML = counter(weightedLen(ta.value, k), LIMITS[k]);
+    });
+    document.addEventListener('click', async e => {
+      const cp = e.target.closest?.('[data-idea-copy]'), po = e.target.closest?.('[data-idea-post]');
+      if (!cp && !po) return;
+      const k = (cp || po).dataset.ideaCopy || (cp || po).dataset.ideaPost, text = $('textarea', (cp || po).closest('.idea-col')).value;
+      if (po && weightedLen(text, k) > LIMITS[k]) return toast(`المنشور أطول من حد ${PLATFORMS[k].label} (${LIMITS[k]} حرفاً)`, 'error');
+      try { await navigator.clipboard.writeText(text); if (cp) toast('تم نسخ نص المنشور'); } catch { if (cp) toast('تعذّر النسخ — حدد النص وانسخه يدوياً', 'error'); }
+      if (po) { window.open(PLATFORMS[k].intent(text), '_blank', 'noopener'); toast('فُتحت نافذة النشر، ونُسخ النص احتياطاً'); }
+    });
   }
 
   /* ===== نافذة المنشور ===== */
@@ -135,5 +185,5 @@ const Social = (() => {
     }
   }
 
-  return { panel, open, compose, weightedLen, setCohort: c => { ui.cohort = c; } };
+  return { panel, open, compose, weightedLen, setCohort: c => { ui.cohort = c; }, setIdeaType: t => { ui.idea = t; } };
 })();

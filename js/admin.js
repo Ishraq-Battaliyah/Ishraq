@@ -1492,6 +1492,7 @@ const Admin = (() => {
         }
       }
       const soc = t.closest('[data-social]'); if (soc) return Social.open(soc.dataset.social, soc.dataset.id);
+      const socI = t.closest('[data-idea-type]'); if (socI) { Social.setIdeaType(socI.dataset.ideaType); return render(root); }
       const socC = t.closest('[data-social-cohort]'); if (socC) { Social.setCohort(socC.dataset.socialCohort); return render(root); }
       if (t.closest('[data-add-section]')) return addSection();
       if (t.closest('[data-add-field]')) return editField();
