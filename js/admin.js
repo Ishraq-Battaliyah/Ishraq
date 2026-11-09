@@ -12,6 +12,7 @@ const Admin = (() => {
     { id: 'certificates', label: 'الشهادات', icon: 'fa-award' },
     { id: 'announce', label: 'إعلان دفعة جديدة', icon: 'fa-bullhorn' },
     { id: 'interests', label: 'المهتمون', icon: 'fa-user-plus' },
+    { id: 'social', label: 'النشر الاجتماعي', icon: 'fa-share-nodes' },
     { id: 'admins', label: 'المشرفون', icon: 'fa-user-shield' }
   ];
   const ui = { tab: 'content', cohort: null, sub: null, sessMentor: null, sessCohort: 'all', sessStat: null, revMentor: null, revCohort: 'all', sessTrack: '', revTrack: '*', intRole: 'all', netDraft: {}, netCohort: null, track: '' };
@@ -19,7 +20,7 @@ const Admin = (() => {
   const curTrack = () => (Data.track(ui.track)?.cohort === ui.cohort ? ui.track : '');
 
   // كل تبويب مرتبط بصلاحية؛ تبويب «المشرفون» للحسابات الرئيسية فقط
-  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: ['sessions', 'proxy'], reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests' };
+  const TAB_PERM = { content: 'content', cohorts: 'cohorts', sessions: ['sessions', 'proxy'], reviews: 'reviews', messages: 'messages', support: 'messages', certificates: 'certificates', events: 'events', announce: 'announce', interests: 'interests', social: 'cohorts' };
   const tabAllowed = id => (id === 'admins' ? Security.isOwner() : [].concat(TAB_PERM[id]).some(p => Security.can(p)));
 
   let lastRoot = null;
@@ -1391,6 +1392,8 @@ const Admin = (() => {
     });
   }
 
+  P.social = () => Social.panel();
+
   P.interests = () => {
     const { fields, list } = interestRows();
     const all = Store.list('interests');
@@ -1488,6 +1491,8 @@ const Admin = (() => {
           return reorder('content/sections', ids);
         }
       }
+      const soc = t.closest('[data-social]'); if (soc) return Social.open(soc.dataset.social, soc.dataset.id);
+      const socC = t.closest('[data-social-cohort]'); if (socC) { Social.setCohort(socC.dataset.socialCohort); return render(root); }
       if (t.closest('[data-add-section]')) return addSection();
       if (t.closest('[data-add-field]')) return editField();
       const fl = t.closest('[data-sortable-fields] li[data-id]');

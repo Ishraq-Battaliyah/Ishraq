@@ -1284,3 +1284,15 @@ a.tk-item { color: #fff; }
 .track-head h3 { margin: 0 0 4px; }
 .enroll-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .track-regs { margin-top: 18px; }
+
+/* النشر الاجتماعي */
+.social-table .social-col { width: 1%; white-space: nowrap; text-align: center; }
+.social-btns { display: inline-flex; gap: 8px; }
+.social-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink-2); cursor: pointer; transition: .2s; }
+.social-btn:hover { transform: translateY(-1px); color: #fff; border-color: transparent; }
+.social-btn.x:hover { background: #111; }
+.social-btn.linkedin:hover { background: #0A66C2; }
+.social-count { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: .85rem; color: var(--muted); }
+.social-count .near { color: #B7791F; font-weight: 700; }
+.social-count .over { color: #C53030; font-weight: 700; }
+.panel-intro { margin-bottom: 14px; }
