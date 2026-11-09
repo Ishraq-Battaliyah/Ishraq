@@ -245,5 +245,5 @@ const CardImage = (() => {
     return { blob, photoFailed };
   }
 
-  return { render, download, toBlob };
+  return { render, download, toBlob, loadImage, corsPhoto, roundRect, wrap, ensureFonts, fonts: { HEAD_FONT, UI_FONT, BODY_FONT } };
 })();

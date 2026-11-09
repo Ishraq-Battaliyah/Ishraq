@@ -1292,6 +1292,8 @@ a.tk-item { color: #fff; }
 .social-btn:hover { transform: translateY(-1px); color: #fff; border-color: transparent; }
 .social-btn.x:hover { background: #111; }
 .social-btn.linkedin:hover { background: #0A66C2; }
+.social-btn.instagram:hover { background: linear-gradient(45deg, #F9A03F, #DD2A7B 55%, #8134AF); }
+.social-modal .cred-preview img { max-height: 60vh; width: auto; max-width: 100%; }
 .social-count { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: .85rem; color: var(--muted); }
 .social-count .near { color: #B7791F; font-weight: 700; }
 .social-count .over { color: #C53030; font-weight: 700; }
