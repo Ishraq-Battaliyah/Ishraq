@@ -58,6 +58,42 @@ const Portal = (() => {
       </main>
     </div>`;
     wire(root, kind, me, other);
+    if (cstate === 'live') setTimeout(() => askConfirmations(kind, me), 500);
+  }
+
+  /* نافذة تأكيد الطرف الثاني: سجّل الطرف الآخر جلسة منجزة وينتظر تأكيدك */
+  const askedConfirm = new Set();
+  function pendingConfirm(kind, me, b) {
+    const mine = kind === 'mentor' ? b.doneByMentor : b.doneByMentee, theirs = kind === 'mentor' ? b.doneByMentee : b.doneByMentor;
+    if (mine || !theirs || b.proposal) return false;
+    return b.status === 'upcoming' || (b.status === 'done' && b.retro === true);
+  }
+  function askConfirmations(kind, me) {
+    if ($('.modal-wrap')) return;
+    const bk = Data.bookings({ ...(kind === 'mentor' ? { mentorId: me.id } : { menteeId: me.id }), cohort: me.cohort }).find(b => !askedConfirm.has(b.id) && pendingConfirm(kind, me, b));
+    if (!bk) return;
+    askedConfirm.add(bk.id);
+    const other = Data.member(kind === 'mentor' ? bk.menteeId : bk.mentorId);
+    openModal({
+      title: '<i class="fa-solid fa-circle-check"></i> تأكيد إنجاز جلسة', size: 'sm',
+      body: `<p class="confirm-msg">قام ${kind === 'mentor' ? 'المستفيد' : 'المرشد'} <b>${esc(other?.name || '')}</b> بتسجيل <b>${esc(Data.bookingName(bk))}</b> (${fmtDate(bk.date)}) كجلسة منجزة، نرجو تأكيدك.</p>`,
+      actions: [
+        {
+          label: 'تأكيد', cls: 'primary', onClick: () => {
+            const cur = Store.get(`bookings/${bk.id}`) || bk;
+            const upd = { [kind === 'mentor' ? 'doneByMentor' : 'doneByMentee']: Date.now() };
+            if (cur.status === 'upcoming') Object.assign(upd, { status: 'done', statusTs: Date.now(), statusBy: 'both' });
+            Store.update(`bookings/${bk.id}`, upd);
+            const txt = `أكّد ${kind === 'mentor' ? 'المرشد' : 'المستفيد'} ${me.name} إنجاز ${Data.bookingName(bk)}`;
+            Data.notify('admin', txt, { icon: 'fa-circle-check' });
+            other && Data.notify(other.id, txt, { icon: 'fa-circle-check' });
+            toast('تم تأكيد إنجاز الجلسة');
+            setTimeout(() => askConfirmations(kind, me), 400);
+          }
+        },
+        { label: 'لاحقاً', cls: 'ghost', onClick: () => setTimeout(() => askConfirmations(kind, me), 400) }
+      ]
+    });
   }
 
   // حالة دفعة العضو: قبل الإطلاق أو بعد الأرشفة يبقى الدخول وقراءة البيانات وتعديل البطاقة فقط
@@ -244,8 +280,8 @@ const Portal = (() => {
             const bk = {
               mentorId: slot.mentorId, menteeId: me.id, cohort: me.cohort, slotId: slot.id, ...(slot.extra ? { extra: true } : { session: slot.session }),
               date: slot.date, start: slot.start, end: slot.end, mode, summary: slot.summary || '', status: 'upcoming', ts: Date.now(),
-              // موعد سابق: تُحتسب الجلسة منجزة مباشرة بموافقة الطرفين (المرشد بإضافته والمستفيد بحجزه)
-              ...(retro ? { status: 'done', retro: true, doneByMentor: Date.now(), doneByMentee: Date.now(), statusTs: Date.now(), statusBy: 'both' } : {})
+              // موعد سابق: تُحتسب الجلسة منجزة مباشرة بتسجيل المستفيد، ويؤكدها المرشد عند دخوله
+              ...(retro ? { status: 'done', retro: true, doneByMentee: Date.now(), statusTs: Date.now(), statusBy: 'mentee' } : {})
             };
             // الجلسة الإضافية برقم ثابت من رقم الموعد: لا يستطيع مستفيدان حجز الموعد نفسه
             if (slot.extra) {
