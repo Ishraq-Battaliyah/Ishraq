@@ -75,6 +75,7 @@ const Events = (() => {
         <input type="hidden" name="interest" value="">
         <div class="ev-choices">${choice('mentor')}${choice('mentee')}</div></div>
       <button class="btn primary lg ev-submit" type="submit"><i class="fa-solid fa-paper-plane"></i> سجّل اهتمامي</button>
+      ${eventId === 'general' ? '' : `<button class="btn outline-light ev-cal" type="button" data-ev-cal="${esc(eventId)}"><i class="fa-regular fa-calendar-plus"></i> أضف إلى تقويمك</button>`}
       <div class="ev-done" hidden><i class="fa-solid fa-circle-check"></i> تم تسجيلك بنجاح، شكراً لاهتمامك!</div>
     </form>`;
   }
@@ -201,6 +202,7 @@ const Events = (() => {
                 </div>
                 ${attendField(true)}
                 <button class="btn primary lg ev-submit" type="submit"><i class="fa-solid fa-paper-plane"></i> سجّل حضوري</button>
+                <button class="btn outline-light ev-cal" type="button" data-ev-cal="${esc(e.id)}"><i class="fa-regular fa-calendar-plus"></i> أضف إلى تقويمك</button>
               </form>`}
         </div>
       </article>`;
@@ -443,6 +445,14 @@ const Events = (() => {
     }
     toast('تم نسخ الرابط');
   }
+  document.addEventListener('click', e => {
+    const c = e.target.closest('[data-ev-cal]');
+    if (!c) return;
+    const ev = Store.get(`events/${c.dataset.evCal}`);
+    if (!ev) return;
+    Cal.saveEvent(ev, endTime(ev), shareUrl(ev.id));
+    toast('تم تنزيل ملف التقويم');
+  });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-ev-share]');
     if (b) share(b.dataset.evShare);

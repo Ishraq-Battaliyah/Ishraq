@@ -22,7 +22,7 @@ const Cal = (() => {
     return `https://calendar.google.com/calendar/render?${q}`;
   }
 
-  const esc_ = t => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const esc_ = t => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
   // طي الأسطر الطويلة حسب معيار iCalendar (75 بايت)
   function fold(line) {
     const enc = new TextEncoder(), out = []; let cur = '', bytes = 0;
@@ -35,20 +35,30 @@ const Cal = (() => {
     return out.join('\r\n');
   }
 
-  function ics(b, kind) {
-    const i = info(b, kind);
+  function ics(b, kind) { return build(info(b, kind), `${b.id}@ishraq`, (b.history || []).length); }
+
+  function build(i, uid, seq) {
     const rows = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ishraq//Mentoring//AR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-      `UID:${b.id}@ishraq`, `DTSTAMP:${stamp(new Date())}`, `SEQUENCE:${(b.history || []).length}`,
+      `UID:${uid}`, `DTSTAMP:${stamp(new Date())}`, `SEQUENCE:${seq}`,
       `DTSTART:${stamp(i.start)}`, `DTEND:${stamp(i.end)}`, `SUMMARY:${esc_(i.title)}`, `DESCRIPTION:${esc_(i.details)}`,
       ...(i.location ? [`LOCATION:${esc_(i.location)}`] : []),
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc_(i.title)}`, 'TRIGGER:-PT60M', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'];
     return rows.map(fold).join('\r\n') + '\r\n';
   }
 
-  function saveIcs(b, kind) {
-    const blob = new Blob([ics(b, kind)], { type: 'text/calendar;charset=utf-8' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ishraq-session.ics';
+  function saveText(text, name) {
+    const blob = new Blob([text], { type: 'text/calendar;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  const saveIcs = (b, kind) => saveText(ics(b, kind), 'ishraq-session.ics');
+
+  /* فعالية: ملف .ics بالعنوان والوصف والموقع ورابط الفعالية. end بصيغة HH:MM */
+  function saveEvent(e, end, url) {
+    const details = [e.about || '', e.locationUrl ? `رابط الموقع/الاجتماع: ${e.locationUrl}` : '', url ? `رابط الفعالية: ${url}` : ''].filter(Boolean).join('\n\n');
+    const endDate = end <= String(e.start) ? new Date(toUtc(e.date, end).getTime() + 86400000) : toUtc(e.date, end);
+    const i = { title: `${e.title} — إشراق`, details, location: e.location || '', start: toUtc(e.date, e.start), end: endDate };
+    saveText(build(i, `event-${e.id}@ishraq`, 0), 'ishraq-event.ics');
   }
 
   function open(bookingId, kind) {
@@ -64,5 +74,5 @@ const Cal = (() => {
     });
   }
 
-  return { open, googleUrl, ics };
+  return { open, googleUrl, ics, saveEvent };
 })();
