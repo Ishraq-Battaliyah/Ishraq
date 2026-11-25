@@ -354,6 +354,8 @@ input, textarea { font-family: var(--f-body); }
 .ev-choice:hover { background: rgba(255,255,255,.18); }
 .ev-choice.on { background: #fff; color: var(--p-d); border-color: #fff; box-shadow: 0 10px 24px -10px rgba(0,0,0,.4); }
 .ev-choice.on small { color: var(--ink-2); opacity: 1; }
+.ev-cal { justify-self: stretch; margin-top: 10px; background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.55); }
+.ev-cal:hover { background: rgba(255,255,255,.16); }
 .ev-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ev-share { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--p-d); cursor: pointer; transition: .2s; }
 .ev-share:hover { background: var(--grad); color: #fff; transform: translateY(-2px); }
