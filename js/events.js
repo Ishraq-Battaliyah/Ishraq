@@ -7,6 +7,13 @@ const Events = (() => {
     mentor: { label: 'مرشد', icon: 'fa-user-tie', desc: 'من ذوي الخبرة المهنية أو الأكاديمية، ويرغب بمشاركة خبرته وتوجيه الطلاب والخريجين عبر جلسات إرشادية فردية.' },
     mentee: { label: 'مستفيد', icon: 'fa-user-graduate', desc: 'طالب جامعي أو خريج أو مبتعث، يبحث عن توجيه أكاديمي ومهني يساعده على بناء مساره وتطوير مهاراته.' }
   };
+  const ATTEND = { onsite: { label: 'حضوري', icon: 'fa-building-user' }, remote: { label: 'عن بعد', icon: 'fa-video' } };
+  const attendLabel = k => ATTEND[k]?.label || '';
+  function attendField(required) {
+    return `<div class="ev-q ev-attend"><p>نمط الحضور المفضل ${required ? '<em>*</em>' : '<small>(اختياري)</small>'}</p>
+      <div class="ev-choices">${Object.entries(ATTEND).map(([k, a], i) => `<label class="ev-choice ev-radio"><input type="radio" name="attend" value="${k}" ${required && i === 0 ? 'required' : ''}><i class="fa-solid ${a.icon}"></i><b>${a.label}</b></label>`).join('')}</div></div>`;
+  }
+  const shareUrl = id => `${location.origin}${location.pathname}#/?event=${encodeURIComponent(id)}`;
   const ui = { open: new Set(), openGeneral: false };
 
   const pad2 = n => String(n).padStart(2, '0');
@@ -63,6 +70,7 @@ const Events = (() => {
         ${fieldInput({ k: 'phone', label: 'الجوال', type: 'tel', required: true })}
         ${fieldInput({ k: 'email', label: 'الإيميل', type: 'email', required: true })}
       </div>
+      ${eventId === 'general' ? '' : attendField(true)}
       <div class="ev-q"><p>هل أنت مهتم بالمشاركة في الدفعات القادمة من إشراق؟ <small>(اختياري)</small></p>
         <input type="hidden" name="interest" value="">
         <div class="ev-choices">${choice('mentor')}${choice('mentee')}</div></div>
@@ -74,9 +82,10 @@ const Events = (() => {
   function eventCard(e) {
     const sp = speakerOf(e);
     const locUrl = String(e.locationUrl || '').trim();
-    return `<article class="ev-card reveal">
+    return `<article class="ev-card reveal" id="event-${esc(e.id)}">
       <div class="ev-info">
-        <span class="ev-badge"><i class="fa-solid fa-person-chalkboard"></i> ${esc(e.kind || 'ورشة عمل')}</span>
+        <div class="ev-top"><span class="ev-badge"><i class="fa-solid fa-person-chalkboard"></i> ${esc(e.kind || 'ورشة عمل')}</span>
+          <button type="button" class="ev-share" data-ev-share="${esc(e.id)}" title="مشاركة الفعالية" aria-label="مشاركة الفعالية"><i class="fa-solid fa-share-nodes"></i></button></div>
         <h3 class="ev-title">${esc(e.title)}</h3>
         ${e.about ? `<p class="ev-about">${nl2br(e.about)}</p>` : ''}
         <ul class="ev-meta">
@@ -118,12 +127,12 @@ const Events = (() => {
     const member = form.dataset.member ? Data.member(form.dataset.member) : null;
     if (member) {
       if (Store.get(`myRegs/${member.id}/${eventId}`)) return toast('أنت مسجّل في هذه الفعالية مسبقاً');
-      const regId = Store.push('eventRegs', { eventId, memberId: member.id, role: member.role, code: member.code, name: v.name, phone: v.phone, email: v.email, interest: '', ts: Date.now() });
+      const regId = Store.push('eventRegs', { eventId, memberId: member.id, role: member.role, code: member.code, name: v.name, phone: v.phone, email: v.email, interest: '', ...(v.attend ? { attend: v.attend } : {}), ts: Date.now() });
       Store.set(`myRegs/${member.id}/${eventId}`, { regId, ts: Date.now() });
       Data.notify('admin', `تسجيل جديد في فعالية «${ev.title}»: ${member.role === 'mentor' ? 'المرشد' : 'المستفيد'} ${v.name}`, { icon: 'fa-ticket' });
       return toast('تم تسجيل حضورك في الفعالية');
     }
-    Store.push('eventRegs', { eventId, name: v.name, phone: v.phone, email: v.email, interest: v.interest || '', ts: Date.now() });
+    Store.push('eventRegs', { eventId, name: v.name, phone: v.phone, email: v.email, interest: v.interest || '', ...(v.attend ? { attend: v.attend } : {}), ts: Date.now() });
     // المهتمون بالانضمام يُضافون إلى تبويب «المهتمون»
     if (v.interest === 'mentor' || v.interest === 'mentee') {
       Store.push('interests', {
@@ -190,6 +199,7 @@ const Events = (() => {
                   ${fieldInput({ k: 'phone', label: 'الجوال', type: 'tel', required: true }, me.whatsapp || '')}
                   ${fieldInput({ k: 'email', label: 'الإيميل', type: 'email', required: true }, me.email || '')}
                 </div>
+                ${attendField(true)}
                 <button class="btn primary lg ev-submit" type="submit"><i class="fa-solid fa-paper-plane"></i> سجّل حضوري</button>
               </form>`}
         </div>
@@ -222,11 +232,12 @@ const Events = (() => {
 
   function regsTable(list, key) {
     if (!list.length) return emptyState('لا توجد تسجيلات بعد', 'fa-ticket');
-    return `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الاسم</th><th>الجوال</th><th>الإيميل</th><th>الصفة / الاهتمام</th><th>تاريخ التسجيل</th><th></th></tr></thead><tbody>
+    return `<div class="table-wrap"><table class="table rtable"><thead><tr><th>الاسم</th><th>الجوال</th><th>الإيميل</th><th>الصفة / الاهتمام</th><th>نمط الحضور</th><th>تاريخ التسجيل</th><th></th></tr></thead><tbody>
       ${list.map(r => `<tr class="${r.seen ? '' : 'new'}"><td data-l="الاسم"><b>${esc(r.name)}</b></td>
         <td data-l="الجوال"><a href="${esc(waLink(r.phone))}" target="_blank" rel="noopener" dir="ltr"><i class="fa-brands fa-whatsapp"></i> ${esc(r.phone)}</a></td>
         <td data-l="الإيميل"><a href="mailto:${esc(r.email)}" dir="ltr">${esc(r.email)}</a></td>
         <td data-l="الصفة / الاهتمام">${r.memberId ? `<span class="chip ${esc(r.role)}">${r.role === 'mentor' ? 'مرشد' : 'مستفيد'} · <span class="num">${esc(r.code || '')}</span></span>` : r.interest ? `<span class="chip ${esc(r.interest)}">مهتم: ${(INTEREST[r.interest]?.label ?? esc(r.interest))}</span>` : '—'}</td>
+        <td data-l="نمط الحضور">${r.attend ? `<span class="chip">${esc(attendLabel(r.attend) || r.attend)}</span>` : '—'}</td>
         <td data-l="تاريخ التسجيل"><small>${fmtTs(r.ts)}</small></td>
         <td><button class="icon-btn danger" data-ev-delreg="${esc(r.id)}" title="حذف"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}
     </tbody></table></div>`;
@@ -401,8 +412,8 @@ const Events = (() => {
 
   function exportData(key) {
     const [, id] = key.split(':');
-    const headers = ['الاسم', 'الجوال', 'الإيميل', 'الصفة / الاهتمام', 'رقم العضوية', 'تاريخ التسجيل'];
-    const rows = list => list.map(r => [r.name, r.phone, r.email, r.memberId ? (r.role === 'mentor' ? 'مرشد' : 'مستفيد') : r.interest ? `مهتم: ${(INTEREST[r.interest]?.label ?? esc(r.interest))}` : '', r.code || '', fmtTs(r.ts)]);
+    const headers = ['الاسم', 'الجوال', 'الإيميل', 'الصفة / الاهتمام', 'نمط الحضور', 'رقم العضوية', 'تاريخ التسجيل'];
+    const rows = list => list.map(r => [r.name, r.phone, r.email, r.memberId ? (r.role === 'mentor' ? 'مرشد' : 'مستفيد') : r.interest ? `مهتم: ${(INTEREST[r.interest]?.label ?? esc(r.interest))}` : '', attendLabel(r.attend), r.code || '', fmtTs(r.ts)]);
     if (key === 'events') {
       return {
         title: 'الفعاليات وورش العمل',
@@ -418,5 +429,37 @@ const Events = (() => {
 
   const unseen = () => Store.list('eventRegs').filter(r => !r.seen).length;
 
-  return { section, panel, portalSection, exportData, unseen };
+  async function share(id) {
+    const e = Store.get(`events/${id}`);
+    const url = shareUrl(id);
+    if (navigator.share) {
+      try { await navigator.share({ title: e?.title || 'فعالية إشراق', text: e?.title ? `سجّل اهتمامك بفعالية «${e.title}» من إشراق` : '', url }); return; }
+      catch (err) { if (err?.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); }
+    catch {
+      const t = document.createElement('textarea'); t.value = url; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); } catch {} t.remove();
+    }
+    toast('تم نسخ الرابط');
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-ev-share]');
+    if (b) share(b.dataset.evShare);
+  });
+
+  /* الرابط المباشر للفعالية: #/?event={id} يفتح الصفحة الرئيسية عند الفعالية */
+  function focusFromUrl() {
+    const id = new URLSearchParams((location.hash.split('?')[1] || '')).get('event');
+    if (!id) return;
+    let tries = 0;
+    const go = () => {
+      const el = document.getElementById(`event-${id}`);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('ev-hl'); setTimeout(() => el.classList.remove('ev-hl'), 3000); }
+      else if (++tries < 10) setTimeout(go, 300);
+    };
+    setTimeout(go, 400);
+  }
+
+  return { section, panel, portalSection, exportData, unseen, focusFromUrl };
 })();

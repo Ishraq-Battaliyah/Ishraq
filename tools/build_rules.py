@@ -147,7 +147,7 @@ TRACK_REG = fields({"id": ID, "kind": one_of('track'), "role": one_of('mentor', 
 EVENT_REG = fields({"id": ID, "eventId": ID, "memberId": ID, "role": one_of('mentor', 'mentee'), "code": s(20),
                     "name": s(120), "phone": s(30), "email": s(120),
                     "interest": {".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'mentor' || newData.val() === 'mentee')"},
-                    "ts": NUM, "seen": BOOL}, required=('eventId',))
+                    "attend": one_of('onsite', 'remote'), "ts": NUM, "seen": BOOL}, required=('eventId',))
 
 INBOX = fields({"id": ID, "fromId": ID, "fromName": s(120), "role": one_of('mentor', 'mentee'), "body": s(3000), "ts": NUM},
                required=('fromId', 'body'))

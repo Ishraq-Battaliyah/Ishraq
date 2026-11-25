@@ -354,6 +354,16 @@ input, textarea { font-family: var(--f-body); }
 .ev-choice:hover { background: rgba(255,255,255,.18); }
 .ev-choice.on { background: #fff; color: var(--p-d); border-color: #fff; box-shadow: 0 10px 24px -10px rgba(0,0,0,.4); }
 .ev-choice.on small { color: var(--ink-2); opacity: 1; }
+.ev-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ev-share { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--p-d); cursor: pointer; transition: .2s; }
+.ev-share:hover { background: var(--grad); color: #fff; transform: translateY(-2px); }
+.ev-hl { animation: evhl 3s ease; }
+@keyframes evhl { 0%, 60% { box-shadow: 0 0 0 4px var(--p), var(--sh-lg); } 100% { box-shadow: var(--sh-lg); } }
+.ev-radio { position: relative; grid-template-columns: auto 1fr; align-items: center; justify-items: start; column-gap: 10px; }
+.ev-radio input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.ev-radio:has(input:checked) { background: #fff; color: var(--p-d); border-color: #fff; box-shadow: 0 10px 24px -10px rgba(0,0,0,.4); }
+.ev-radio:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+.ev-attend em { color: #fff; }
 .ev-submit { background: #fff !important; color: var(--p-d) !important; justify-self: stretch; }
 .ev-done { background: rgba(255,255,255,.95); color: var(--ok); padding: 12px 14px; border-radius: 14px; font-weight: 700; display: flex; gap: .5em; align-items: center; }
 .ev-empty .ev-teaser { display: grid; align-content: center; justify-items: start; }
