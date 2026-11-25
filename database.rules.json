@@ -1122,6 +1122,9 @@
           "interest": {
             ".validate": "newData.isString() && (newData.val() === '' || newData.val() === 'mentor' || newData.val() === 'mentee')"
           },
+          "attend": {
+            ".validate": "newData.isString() && (newData.val() === 'onsite' || newData.val() === 'remote')"
+          },
           "ts": {
             ".validate": "newData.isNumber()"
           },

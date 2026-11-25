@@ -58,6 +58,7 @@
       if (fromData && same && playing) return;
       Home.render(root, fromData);
       if (!fromData) setTimeout(Home.maybeAnnouncement, 700);
+      if (!fromData) Events.focusFromUrl();
     }
     if (snap) { restore(snap); window.scrollTo(0, snap.y); }
     else if (!same) window.scrollTo(0, 0);
