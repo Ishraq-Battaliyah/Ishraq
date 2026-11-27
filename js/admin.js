@@ -858,19 +858,25 @@ const Admin = (() => {
       <p>يبدأ حساب المدد بعد الضغط على «إطلاق الدفعة» من صفحة الدفعات (زر أخضر في شريط الدفعة): فترة الجلسة الأولى الأسابيع 1-4، والثانية 5-8، والثالثة 9-12.</p></div>
       <button class="btn primary" data-goto-cohorts="${esc(cid)}"><i class="fa-solid fa-people-group"></i> الانتقال لصفحة الدفعات</button></div>`;
 
-    // إحصائية إضافة المواعيد
-    const addedFor = n => mentors.filter(m => Bands.addedAt(m.id, n) != null);
-    const none = mentors.filter(m => Bands.SESSIONS.every(n => Bands.addedAt(m.id, n) == null));
+    // تصنيف المرشدين حسب إنجاز الجلسة (الجلسة المنجزة = صادق عليها الطرفان، كما في Bands.heldAt) مع التذكير لمن لم ينجز
+    const doneFor = n => mentors.filter(m => Bands.heldAt(m.id, n) != null);
+    const undoneFor = n => mentors.filter(m => Bands.heldAt(m.id, n) == null);
+    const none = mentors.filter(m => Bands.SESSIONS.every(n => Bands.heldAt(m.id, n) == null));
     const boxes = [
-      ...Bands.SESSIONS.map(n => ({ k: 's' + n, label: `أضافوا مواعيد ${sessionName(n)}`, icon: 'fa-calendar-check', yes: addedFor(n), no: mentors.filter(m => Bands.addedAt(m.id, n) == null), noLabel: `لم يضيفوا ${sessionName(n)}` })),
-      { k: 'none', label: 'لم يضيفوا أي موعد', icon: 'fa-calendar-xmark', yes: none, no: [], warn: true }
+      ...Bands.SESSIONS.map(n => ({ k: 's' + n, n, label: `أنجزوا ${sessionName(n)}`, icon: 'fa-circle-check', yes: doneFor(n), no: undoneFor(n), noLabel: `لم ينجزوا ${sessionName(n)}` })),
+      { k: 'none', label: 'لم ينجزوا أي جلسة', icon: 'fa-circle-xmark', yes: none, no: [], warn: true }
     ];
     const open = boxes.find(x => x.k === ui.bandStat);
+    const noRow = (m, n) => `<span class="bp-act">${person(m)}${m.whatsapp
+      ? `<a class="btn xs wa" href="${esc(waLink(m.whatsapp, remindBody(m, n)))}" target="_blank" rel="noopener" title="تذكير ${esc(m.name)} عبر واتساب"><i class="fa-brands fa-whatsapp"></i> واتساب</a>`
+      : '<button class="btn xs wa" disabled title="لا يوجد رقم واتساب"><i class="fa-brands fa-whatsapp"></i> واتساب</button>'}</span>`;
     const stats = `<div class="add-stats">${boxes.map(x => `<button class="add-stat ${x.warn ? 'warn' : ''} ${ui.bandStat === x.k ? 'active' : ''}" data-band-stat="${esc(x.k)}">
         <i class="fa-solid ${x.icon}"></i><b>${x.yes.length}<small>/${mentors.length}</small></b><span>${x.label}</span><i class="fa-solid fa-chevron-down arrow"></i></button>`).join('')}</div>
       ${open ? `<div class="add-stat-list"><h4>${open.label} <span class="count">${open.yes.length}</span></h4>
         ${open.yes.length ? `<div class="bp-list">${open.yes.map(person).join('')}</div>` : '<p class="muted small">لا أحد</p>'}
-        ${open.no.length ? `<hr><h4 class="muted">${open.noLabel} <span class="count">${open.no.length}</span></h4><div class="bp-list faded">${open.no.map(person).join('')}</div>` : ''}</div>` : ''}`;
+        ${open.no.length ? `<hr><h4 class="muted">${open.noLabel} <span class="count">${open.no.length}</span>
+          <button class="btn xs primary" data-remind-all="${esc(open.n)}" data-ids="${esc(open.no.map(m => m.id).join(','))}"><i class="fa-regular fa-envelope"></i> تذكير الجميع بالبريد</button></h4>
+          <div class="bp-list">${open.no.map(m => noRow(m, open.n)).join('')}</div>` : ''}</div>` : ''}`;
 
     const rows = Bands.SESSIONS.map(n => {
       const start = L ? Bands.windowStart(L.ts, n) : null;
@@ -891,7 +897,7 @@ const Admin = (() => {
         <div class="bands">${cols}</div></div>`;
     }).join('');
     return `<div class="panel bands-panel">${head}${launchBox}
-      <h3 class="sub"><i class="fa-solid fa-chart-simple"></i> إضافة المرشدين للمواعيد</h3>
+      <h3 class="sub"><i class="fa-solid fa-chart-simple"></i> إنجاز المرشدين للجلسات</h3>
       ${mentors.length ? stats : emptyState('لا يوجد مرشدون في هذه الدفعة', 'fa-user-tie')}
       ${rows}
       <details class="band-legend"><summary><i class="fa-solid fa-circle-info"></i> مصفوفة المتابعة والإجراء المتبع</summary>
@@ -950,6 +956,53 @@ const Admin = (() => {
         { label: '<i class="fa-solid fa-calendar-days"></i> جلسات المرشد', cls: 'ghost', onClick: () => { ui.sessMentor = mid; lastRoot && render(lastRoot); setTimeout(() => $('#mentor-sessions')?.scrollIntoView({ behavior: 'smooth' }), 300); } },
         { label: 'إغلاق', cls: 'ghost' }
       ]
+    });
+  }
+
+  // نص تذكير المرشد الذي لم ينجز الجلسة (نفس نص التذكير المعتمد حسب نطاقه، ونص عام قبل بدء الفترة)
+  function remindBody(m, n) {
+    const st = Bands.matrix(m, n);
+    if (st && st.level) return Bands.reminderText(m, st);
+    return `أهلاً ${m.name}،\nنذكّرك بإنجاز ${sessionName(n)} مع المستفيد وتسجيلها في المنصة.\n\nمع التحية، برنامج إشراق`;
+  }
+
+  // تذكير بالبريد لكل من لم ينجز الجلسة في خطوة واحدة (رسالة مستقلة لكل مرشد)
+  function remindAllDialog(ids, n) {
+    const mentors = ids.map(id => Data.member(id)).filter(m => m && Bands.heldAt(m.id, n) == null);
+    if (!mentors.length) return toast('أنجز الجميع هذه الجلسة');
+    const isMail = e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || '').trim());
+    const withMail = mentors.filter(m => isMail(m.email)), without = mentors.filter(m => !withMail.includes(m));
+    if (!withMail.length) return toast('لا يوجد بريد مسجل لأي منهم', 'error');
+    const mailer = Enroll.mailer() || loginMailer();
+    const subject = `تذكير — ${sessionName(n)} | برنامج إشراق`;
+    openModal({
+      title: `<i class="fa-regular fa-envelope"></i> تذكير من لم ينجز ${sessionName(n)}`, size: 'lg',
+      body: `<div class="mail-rcpt">${withMail.map(m => `<span class="chip">${esc(m.name)} <small dir="ltr">${esc(m.email)}</small></span>`).join('')}</div>
+        ${without.length ? `<p class="warn-note small">بلا بريد مسجل ولن تصلهم الرسالة: ${without.map(m => esc(m.name)).join('، ')}</p>` : ''}
+        ${mailer ? '' : '<p class="warn-note small">لم يُعدّ سكربت البريد المباشر، فسيُفتح تطبيق البريد برسالة واحدة لكل المرشدين (نسخة مخفية BCC).</p>'}
+        <p class="muted small">تُرسل لكل مرشد رسالة مستقلة بنص التذكير المناسب لنطاقه، ويصله أيضاً تنبيه في صفحته.</p><div class="mail-progress muted small"></div>`,
+      actions: [{
+        label: `<i class="fa-solid fa-paper-plane"></i> إرسال إلى ${withMail.length}`, cls: 'primary', onClick: async mm => {
+          const prog = $('.mail-progress', mm.body), btn = $('[data-act="0"]', mm.el);
+          const note = m => { const st = Bands.matrix(m, n); Data.notify(m.id, remindBody(m, n), { icon: 'fa-bell', kind: 'reminder', session: n, ...(st?.level ? { band: st.level.k, week: st.week } : {}) }); };
+          if (!mailer) {
+            const body = `السلام عليكم،\nنذكّركم بإنجاز ${sessionName(n)} مع المستفيد وتسجيلها في المنصة.\n\nمع التحية، برنامج إشراق`;
+            window.open(`mailto:?bcc=${encodeURIComponent(withMail.map(m => m.email.trim()).join(','))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank', 'noopener');
+            withMail.forEach(note); Security.log('تذكير بالبريد لمن لم ينجز الجلسة', sessionName(n), `${withMail.length} مرشد`);
+            return;
+          }
+          btn.disabled = true; let ok = 0; const fail = [];
+          prog.textContent = 'جارٍ اختبار الاتصال بسكربت البريد...';
+          try { await Enroll.ping(mailer); } catch (e) { prog.innerHTML = `<span class="err-hint">${esc(e.message)}</span>`; btn.disabled = false; return false; }
+          for (const [i, m] of withMail.entries()) {
+            prog.textContent = `جارٍ الإرسال ${i + 1} من ${withMail.length}...`;
+            try { await Enroll.sendDirect(m.email.trim(), subject, remindBody(m, n), mailer); note(m); ok++; } catch (e) { fail.push(`${m.name}: ${e.message || e}`); }
+          }
+          Security.log('تذكير بالبريد لمن لم ينجز الجلسة', sessionName(n), `${ok} مرشد`);
+          if (fail.length) { prog.innerHTML = `<span class="err-hint">أُرسلت ${ok}، وتعذّر ${fail.length}:<br>${fail.map(esc).join('<br>')}</span>`; toast(`أُرسلت ${ok} وتعذّر ${fail.length}`, 'error'); btn.disabled = false; return false; }
+          toast(`أُرسل التذكير إلى ${ok} مرشد`);
+        }
+      }, { label: 'إغلاق', cls: 'ghost' }]
     });
   }
 
@@ -1604,6 +1657,7 @@ const Admin = (() => {
       const ul = t.closest('[data-unlaunch]');
       if (ul) return confirmDialog('إلغاء إطلاق الدفعة؟ ستُغلق إضافة المواعيد للمرشدين ويُعاد الحساب من جديد عند الإطلاق مرة أخرى.', { danger: true, ok: 'إلغاء الإطلاق', cancel: 'رجوع' }).then(ok => ok && Bands.undoLaunch(ul.dataset.unlaunch));
       const bs = t.closest('[data-band-stat]'); if (bs) { ui.bandStat = ui.bandStat === bs.dataset.bandStat ? null : bs.dataset.bandStat; return render(root); }
+      const ra = t.closest('[data-remind-all]'); if (ra) return remindAllDialog(String(ra.dataset.ids || '').split(',').filter(Boolean), Number(ra.dataset.remindAll));
       const bmn = t.closest('[data-band-mentor]'); if (bmn) return bandMentorDialog(bmn.dataset.bandMentor, Number(bmn.dataset.session));
       if (t.closest('[data-extra-stat]')) { ui.extraStat = !ui.extraStat; return render(root); }
       const xt = t.closest('[data-extra-toggle-admin]');
