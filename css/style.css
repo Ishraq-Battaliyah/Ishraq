@@ -1320,3 +1320,5 @@ a.tk-item { color: #fff; }
 .idea-plat { font-weight: 800; margin-bottom: 6px; color: var(--ink-2); }
 .idea-col textarea { width: 100%; resize: vertical; line-height: 1.7; font-family: inherit; }
 .idea-btns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.bp-act { display: inline-flex; align-items: center; gap: 8px; }
+.add-stat-list h4 .btn { margin-inline-start: auto; }
